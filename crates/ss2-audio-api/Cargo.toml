@@ -1,0 +1,15 @@
+[package]
+name = "ss2-audio-api"
+description = "device-free audio contract: sound ids, voices, 3D emitters, music, buses (tracks T00/T06)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }

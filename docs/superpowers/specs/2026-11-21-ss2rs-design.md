@@ -109,6 +109,7 @@ ss2-platform    window, input, lifecycle, Android/iOS glue, paths
 ss2-render-api  GPU-free renderer front-end: RenderWorld extract, camera, resource ids, Renderer trait
 ss2-render      wgpu renderer (frame graph, materials, world, particles, post)
 ss2-shaderxlat  D3D9 asm → naga/WGSL (or handwritten replacements, per spike T05-006)
+ss2-audio-api   device-free audio contract: sound ids, voices, 3D emitters, music, buses
 ss2-audio       mixer, 3D audio, music, video-audio sync
 ss2-video       Theora cutscene playback
 ss2-physics     collision, queries, character controller, rigid bodies
