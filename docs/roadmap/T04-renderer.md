@@ -51,5 +51,5 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-034** · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
 
 ## Menu slice (PC, placeholder skin)
-- [ ] **T04-035** · wgpu context (windowed + offscreen), 2D quad batch and `glyphon` text with an embedded OFL font; partial T04-001/T04-017 · `L` · `P1` · Deps: T10-032
+- [~] **T04-035** [INPRG @Ihor-Ihorevych/agent · branch `menu-slice` · 2026-11-21] · wgpu context (windowed + offscreen), 2D quad batch and `glyphon` text with an embedded OFL font; partial T04-001/T04-017 · `L` · `P1` · Deps: T10-032
 - [ ] **T04-036** · Offscreen render to RGBA image, image diff, golden menu tests (skip without GPU adapter); seed of T04-021 · `M` · `P1` · Deps: T04-035
