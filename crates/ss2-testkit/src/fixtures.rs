@@ -8,9 +8,10 @@
 //! - [`ZipBuilder`] / [`write_minimal_zip`]: a minimal ZIP (stored entries only) writer, written
 //!   from the public ZIP file format description. The `.gro` archives are standard ZIP files.
 //! - [`testdata_dir`] / [`testdata_path`]: locate the committed `testdata/` folder.
-//!
-//! A CTSEMETA writer is intentionally **not** here yet: it must follow the container spec from
-//! the RE track (`docs/re/ctsemeta-container.md`, roadmap T01-004/T01-005), see T00-033.
+//! - [`ctsemeta::MetaBuilder`]: a writer for synthetic CTSEMETA (format 8) files, built from the
+//!   clean-room specs in `docs/re/`, with a ready-made [`ctsemeta::MetaBuilder::sample`].
+
+pub mod ctsemeta;
 
 use std::collections::BTreeSet;
 use std::io;
