@@ -2450,6 +2450,9 @@ version = "0.0.0"
 dependencies = [
  "gilrs",
  "ss2-core",
+ "ss2-platform-api",
+ "thiserror 2.0.21",
+ "tracing",
  "winit",
 ]
 

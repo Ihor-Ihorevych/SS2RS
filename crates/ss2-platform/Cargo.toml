@@ -13,5 +13,8 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+ss2-platform-api = { path = "../ss2-platform-api" }
+thiserror.workspace = true
+tracing.workspace = true
 winit.workspace = true
 gilrs.workspace = true

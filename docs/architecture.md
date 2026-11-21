@@ -45,7 +45,7 @@ implementation is a roadmap task; **stub** = empty crate reserving the name.
 | `ss2-render-api` | per-tick `RenderWorld` extract, camera, resource ids, `Renderer` trait | contract ([RFC 0002](rfcs/0002-render-frontend-api.md)) |
 | `ss2-render` | wgpu renderer | partial: 2D quads and text, offscreen render and golden-image tests |
 | `ss2-platform-api` | platform events, input actions, lifecycle, paths, `AppHandler` | contract ([RFC 0003](rfcs/0003-platform-api.md)) |
-| `ss2-platform` | window, input devices (`winit`, `gilrs`) | partial: menu navigation mapping only |
+| `ss2-platform` | window, input devices (`winit`, `gilrs`) | partial: window and lifecycle loop (`window::run`, T03-001), menu navigation mapping; keyboard, mouse and gamepad events are T03-002/003 |
 | `ss2-audio-api` | `Audio` trait, sound ids, voices, buses, music | contract ([RFC 0004](rfcs/0004-audio-api.md)) |
 | `ss2-audio` | mixer (`cpal`), decoders | stub |
 | `ss2-ui` | UI framework, headless draw lists, placeholder menu | partial: menu slice |

@@ -71,6 +71,7 @@ Not in the contract: window creation, cursor capture, display modes (T03-017), t
 ## Compatibility and migration
 
 - New crate only; no existing code changes. `ss2-platform` (T03) will depend on it and translate `winit`/`gilrs` into these types; `ss2-core::input::NavInput` and `ss2-core::settings::default_path` stay until T03 migrates them (T03-012/T03-014 own that).
+- **Window handoff (T03-001).** A renderer needs the real window to create its surface, which this windowing-free crate cannot carry. It lives in `ss2-platform`: `window::run(config, &mut dyn PlatformApp)`, where `PlatformApp: AppHandler` adds `window_ready(&PlatformWindow)` (called between `Resumed` and `SurfaceReady`) and `window_lost()` (called before the window goes away). `AppHandler` itself is unchanged, so headless code and tests keep using only this crate.
 - After merge the signatures are frozen; compatible additions (new enum variants, new methods) need owner approval, anything else a new RFC. The design doc crate map gains `ss2-platform-api`.
 
 ## Open questions
