@@ -67,6 +67,8 @@ Design: [`../superpowers/specs/2026-11-21-ss2rs-design.md`](../superpowers/specs
    Everyone runs `grep -rn INPRG docs/roadmap/` before picking work. Full protocol, race handling and
    stale-claim rule: [`AGENTS.md`](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/AGENTS.md) §1.
 
+10. **Merge your own PR when it is green.** All checks passed -> merge it yourself with a merge commit (no squash), without asking. Never merge red, pending or conflicting PRs, nor PRs opened by others. See `AGENTS.md` §1b in the repository root.
+
 ## 4. Definition of Done (every task)
 
 - Code compiles on Win/Linux/macOS CI; the non-blocking Android `cargo check` job shows no *new* desktop-only assumptions in portable crates.

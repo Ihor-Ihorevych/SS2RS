@@ -42,6 +42,16 @@ will start.** Before writing any code or spec for a roadmap task (`docs/roadmap/
 Rules of thumb: **fetch before every new task, and again before opening a PR** (merge or rebase `origin/main` into your branch so you build on the latest claims, contracts and specs); one claim at a time per agent unless the tasks are tiny and adjacent; never claim what you do
 not intend to start today; never mark `[x]` without a merged PR.
 
+## 1b. Merge your own PR as soon as it is green (standing permission)
+
+When **all** checks on your pull request have passed (skipped checks are fine), **merge it yourself, without asking**:
+
+1. `git fetch origin`, then confirm the PR is mergeable (no conflicts) and no check is failing or still running.
+2. Merge with a **merge commit** (`gh pr merge <n> --merge`), never squash or rebase: every signed-off commit must survive.
+3. Then `git switch main && git pull --ff-only origin main`.
+
+Limits: never merge while a check is red or pending, never merge a PR with conflicts (merge `origin/main` into your branch, push, wait again), never merge a PR somebody else opened unless the owner asked you to, and never use admin overrides to get around a failing check. If a failure is not yours (for example another PR broke `main`), say so and stop instead of merging.
+
 ## 2. Hard rules (violations get the PR rejected)
 
 - **Clean room** (`CLEANROOM.md`): spec writers (T01) analyse binaries and write prose specs in `docs/re/`;
