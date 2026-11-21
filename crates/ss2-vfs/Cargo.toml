@@ -13,3 +13,8 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+zip.workspace = true
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+tempfile.workspace = true
