@@ -32,7 +32,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
 
 ## Contracts (RFC → merged `v0` stub crate with mocks)
 Each contract task yields: RFC, public trait/struct stub, a mock implementation, a doc example. Consumers may start the moment the stub merges.
-- [ ] **T00-014** · Contract: `Vfs` + `AssetLoader` + `AssetManager` API · `M` · `P0` · Deps: T00-001, T00-013
+- [~] **T00-014** [INPRG @lxstyo · branch `T00-014-vfs-contract` · 2026-11-21] · Contract: `Vfs` + `AssetLoader` + `AssetManager` API · `M` · `P0` · Deps: T00-001, T00-013
 - [ ] **T00-015** · Contract: Renderer front-end (`RenderWorld` extract, `Renderable`, `Camera`, material handles, 2D/UI draw list) · `M` · `P0`
 - [ ] **T00-016** · Contract: Platform events, input actions, app lifecycle (suspend/resume, surface lost), file-system locations · `M` · `P0`
 - [ ] **T00-017** · Contract: Sim — entity model, component/property reflection, tick API, replication attributes, event bus · `L` · `P0` · Deps: T08-001
