@@ -16,6 +16,11 @@ An open-source, clean-room rewrite in **Rust** of the engine that runs *Serious 
 ```
 cargo run -p ss2-app                                       # interactive window
 cargo run -p ss2-app -- --screenshot options out.png       # render a screen to a PNG
+
+# look inside your Serious Sam 2 install (set SS2_DATA_DIR or pass --data):
+cargo run -p gro-tool -- stats
+cargo run -p gro-tool -- find "*.ep"
+cargo run -p gro-tool -- cat content/serioussam2/menus/cmainmenu.rsc | head -c 64
 ```
 
 ## Where to look

@@ -1,0 +1,27 @@
+[package]
+name = "gro-tool"
+description = "List, search, print and extract files from a Serious Sam 2 install (.gro archives), honoring patch overrides"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "gro-tool"
+path = "src/main.rs"
+
+[dependencies]
+ss2-core = { path = "../../crates/ss2-core" }
+ss2-vfs = { path = "../../crates/ss2-vfs" }
+anyhow.workspace = true
+clap = { workspace = true, features = ["env"] }
+regex.workspace = true
+
+[dev-dependencies]
+ss2-testkit = { path = "../../crates/ss2-testkit" }
+tempfile.workspace = true

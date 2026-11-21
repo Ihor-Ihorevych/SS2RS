@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "xtask"]
+members = ["crates/*", "xtask", "tools/gro-tool"]
 
 [workspace.package]
 version = "0.0.0"
@@ -27,6 +27,7 @@ glyphon = "0.12"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "1"
 png = "0.18"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 glam = "0.34"
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 

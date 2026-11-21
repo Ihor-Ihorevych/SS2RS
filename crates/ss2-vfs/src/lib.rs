@@ -21,6 +21,9 @@
 //! assert_eq!(names, ["wall.tex"]);
 //! ```
 
+mod archive;
+mod install;
+mod layered;
 mod memory;
 mod path;
 
@@ -28,6 +31,9 @@ use std::io::{Read, Seek};
 
 use ss2_core::{Error, Result};
 
+pub use archive::ArchiveVfs;
+pub use install::{archive_load_order, mount_install};
+pub use layered::LayeredVfs;
 pub use memory::MemoryVfs;
 pub use path::VfsPath;
 
