@@ -9,7 +9,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   `LICENSE` (Apache-2.0, already in the repo), `NOTICE`, `license = "Apache-2.0"` in every crate, `deny.toml` (allow-list MIT/Apache/BSD/ISC/Zlib/MPL; deny GPL/AGPL unless owner approves), DCO bot config. Done when: `cargo deny check` is in CI.
 - [~] **T00-003** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · CI: build/test/lint · `M` · `P0`
   GitHub Actions: Win/Linux/macOS, `fmt`, `clippy -D warnings`, `test`, cache, nightly scheduled job. Done when: required checks block merges.
-- [ ] **T00-004** · CI: portability guard (non-blocking) · `S` · `P2`
+- [~] **T00-004** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · CI: portability guard (non-blocking) · `S` · `P2`
   Optional job: `cargo check` for `aarch64-linux-android` on portable crates only, so PC code doesn't accumulate desktop-only assumptions before the Phase 2 port. Failures are warnings, not merge blockers, until M8. Done when: job runs nightly.
 - [ ] **T00-005** · Clean-room & provenance policy · `S` · `P0`
   `CLEANROOM.md`: roles (spec author vs implementer), what may be read (specs, public docs, own measurements; SS1 for concepts only), what must never be committed. PR template checkbox + provenance field; `docs/re/` CODEOWNERS requiring RE-team review. Done when: policy merged and linked from CONTRIBUTING.
