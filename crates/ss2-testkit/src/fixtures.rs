@@ -10,7 +10,7 @@
 //! - [`testdata_dir`] / [`testdata_path`]: locate the committed `testdata/` folder.
 //!
 //! A CTSEMETA writer is intentionally **not** here yet: it must follow the container spec from
-//! the RE track (`docs/re/ctsemeta-container.md`, roadmap T01-004/T01-005), see T00-032.
+//! the RE track (`docs/re/ctsemeta-container.md`, roadmap T01-004/T01-005), see T00-033.
 
 use std::collections::BTreeSet;
 use std::io;
