@@ -6,21 +6,26 @@
 //! the windowing-free contract cannot carry is the window itself, which a renderer needs to create
 //! its surface: that is the extra hook of [`PlatformApp`].
 //!
-//! Input events (keyboard, mouse, gamepad) are T03-002 and T03-003; this module delivers the
-//! lifecycle and the frame loop they will plug into.
+//! Keyboard and mouse input arrive as [`InputEvent`]s (T03-002): physical keys with auto-repeat,
+//! typed text, raw mouse motion for aiming, absolute cursor position for menus, buttons and
+//! scrolling. Losing focus releases every held key and button, as the contract promises. Gamepads
+//! are T03-003.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use ss2_platform_api::{
-    AppControl, AppHandler, FrameInfo, LifecycleEvent, PlatformEvent, SurfaceInfo,
+    AppControl, AppHandler, FrameInfo, InputEvent, LifecycleEvent, PlatformEvent, SurfaceInfo,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::WindowEvent;
+use winit::event::{DeviceEvent, DeviceId, ElementState, Ime, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHandle};
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::keyboard::PhysicalKey;
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
+use crate::input::{self, HeldInputs};
 use crate::translate::{self, Observed, ResizeFilter};
 
 /// Largest logical window size we accept (a typo guard, not a real limit).
@@ -89,6 +94,9 @@ impl WindowConfig {
 pub struct PlatformWindow {
     window: Arc<Window>,
     display: OwnedDisplayHandle,
+    /// Shared with the loop, which must know whether the cursor is captured (to stop reporting
+    /// absolute positions) and releases the capture when the window loses focus.
+    captured: Arc<AtomicBool>,
 }
 
 impl PlatformWindow {
@@ -122,6 +130,43 @@ impl PlatformWindow {
     /// Change the title bar text.
     pub fn set_title(&self, title: &str) {
         self.window.set_title(title);
+    }
+
+    /// Capture the cursor for mouse-look: hide it and keep it from leaving the window, so
+    /// [`InputEvent::MouseMotion`] keeps flowing and no absolute [`InputEvent::CursorMoved`] is
+    /// sent meanwhile. Tries a true lock first and falls back to confining the cursor to the window
+    /// (Windows only offers the latter). `false` releases it and shows the cursor again.
+    ///
+    /// **Losing focus releases the capture** (the OS drops the grab anyway); capture again from
+    /// the `FocusChanged(true)` event if the game wants it back.
+    ///
+    /// # Errors
+    /// The OS refused both grab modes; the cursor is left as it was.
+    pub fn set_cursor_captured(&self, captured: bool) -> Result<(), String> {
+        if captured {
+            self.window
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined))
+                .map_err(|e| format!("cannot capture the cursor: {e}"))?;
+            self.window.set_cursor_visible(false);
+        } else {
+            // Releasing cannot meaningfully fail; the cursor must come back regardless.
+            let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+            self.window.set_cursor_visible(true);
+        }
+        self.captured.store(captured, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Whether the cursor is currently captured.
+    pub fn is_cursor_captured(&self) -> bool {
+        self.captured.load(Ordering::Relaxed)
+    }
+
+    /// Allow input-method (IME) composition for the console and chat. Plain typing produces
+    /// [`InputEvent::Text`] either way; this is for text that needs composing (CJK, accents).
+    pub fn set_text_input(&self, enabled: bool) {
+        self.window.set_ime_allowed(enabled);
     }
 }
 
@@ -166,6 +211,8 @@ pub fn run(config: &WindowConfig, app: &mut dyn PlatformApp) -> Result<(), Platf
         window: None,
         main_window: None,
         resizes: ResizeFilter::default(),
+        held: HeldInputs::default(),
+        focused: false,
         frame_index: 0,
         last_frame: None,
         failure: None,
@@ -185,6 +232,8 @@ struct Driver<'a> {
     window: Option<PlatformWindow>,
     main_window: Option<WindowId>,
     resizes: ResizeFilter,
+    held: HeldInputs,
+    focused: bool,
     frame_index: u64,
     last_frame: Option<Instant>,
     failure: Option<PlatformError>,
@@ -199,6 +248,64 @@ impl Driver<'_> {
                 return;
             }
         }
+    }
+
+    /// Deliver input from the OS in order, remembering what is held. A release of something the
+    /// app never saw pressed (a key pressed in another window, a release that follows our own
+    /// focus-loss release) is dropped so the app's view stays consistent. Stops at the first `Exit`.
+    fn deliver_input(&mut self, event_loop: &ActiveEventLoop, events: Vec<InputEvent>) {
+        let accepted: Vec<InputEvent> = events
+            .into_iter()
+            .filter(|event| self.held.accept(event))
+            .collect();
+        self.deliver_input_unfiltered(event_loop, accepted);
+    }
+
+    /// Deliver input exactly as given (the releases the platform synthesizes itself).
+    fn deliver_input_unfiltered(&mut self, event_loop: &ActiveEventLoop, events: Vec<InputEvent>) {
+        for event in events {
+            if self.app.event(PlatformEvent::Input(event)) == AppControl::Exit {
+                event_loop.exit();
+                return;
+            }
+        }
+    }
+
+    fn cursor_is_captured(&self) -> bool {
+        self.window
+            .as_ref()
+            .is_some_and(PlatformWindow::is_cursor_captured)
+    }
+
+    /// Focus changed. Losing it releases every held key and button first (the OS will not send the
+    /// key-ups) and gives the cursor back, then the app hears `FocusChanged`.
+    fn focus_changed(&mut self, event_loop: &ActiveEventLoop, focused: bool) {
+        self.focused = focused;
+        if !focused {
+            let releases = self.held.release_all();
+            self.deliver_input_unfiltered(event_loop, releases);
+            if let Some(window) = &self.window
+                && window.is_cursor_captured()
+            {
+                let _ = window.set_cursor_captured(false);
+            }
+        }
+        self.deliver(event_loop, vec![LifecycleEvent::FocusChanged(focused)]);
+    }
+
+    fn keyboard(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
+        let mut out = Vec::new();
+        if let PhysicalKey::Code(code) = event.physical_key
+            && let Some(key) = input::key_event(code, event.state, event.repeat)
+        {
+            out.push(key);
+        }
+        if event.state == ElementState::Pressed
+            && let Some(text) = event.text.as_deref().and_then(input::printable_text)
+        {
+            out.push(InputEvent::Text(text));
+        }
+        self.deliver_input(event_loop, out);
     }
 
     fn fail(&mut self, event_loop: &ActiveEventLoop, failure: PlatformError) {
@@ -233,6 +340,7 @@ impl Driver<'_> {
         self.window = Some(PlatformWindow {
             window: Arc::new(window),
             display: event_loop.owned_display_handle(),
+            captured: Arc::new(AtomicBool::new(false)),
         });
         Ok(())
     }
@@ -307,7 +415,49 @@ impl ApplicationHandler for Driver<'_> {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 Observed::ScaleFactor(scale_factor)
             }
-            WindowEvent::Focused(focused) => Observed::Focused(focused),
+            WindowEvent::Focused(focused) => {
+                self.focus_changed(event_loop, focused);
+                return;
+            }
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic,
+                ..
+            } => {
+                // `winit` replays held keys as "synthetic" presses when the window gains focus
+                // and releases when it loses it. We track held keys ourselves, so these would
+                // only duplicate (or invent) events.
+                if !is_synthetic {
+                    self.keyboard(event_loop, &event);
+                }
+                return;
+            }
+            WindowEvent::Ime(Ime::Commit(text)) => {
+                if let Some(text) = input::printable_text(&text) {
+                    self.deliver_input(event_loop, vec![InputEvent::Text(text)]);
+                }
+                return;
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                // While captured the position is meaningless; the app uses raw motion.
+                if !self.cursor_is_captured() {
+                    let event = InputEvent::CursorMoved {
+                        x: position.x as f32,
+                        y: position.y as f32,
+                    };
+                    self.deliver_input(event_loop, vec![event]);
+                }
+                return;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let event = input::mouse_button_event(button, state);
+                self.deliver_input(event_loop, vec![event]);
+                return;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.deliver_input(event_loop, vec![input::scroll_event(delta)]);
+                return;
+            }
             WindowEvent::CloseRequested => Observed::CloseRequested,
             WindowEvent::Destroyed => Observed::Destroyed,
             WindowEvent::RedrawRequested => {
@@ -317,6 +467,20 @@ impl ApplicationHandler for Driver<'_> {
             _ => return,
         };
         self.deliver(event_loop, translate::lifecycle_events(observed));
+    }
+
+    fn device_event(&mut self, event_loop: &ActiveEventLoop, _id: DeviceId, event: DeviceEvent) {
+        // Raw, unaccelerated relative motion, the thing mouse-look wants. Only while the window
+        // has focus: other applications' mouse movement must not turn the camera.
+        if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event
+            && self.focused
+        {
+            let motion = InputEvent::MouseMotion {
+                dx: dx as f32,
+                dy: dy as f32,
+            };
+            self.deliver_input(event_loop, vec![motion]);
+        }
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
