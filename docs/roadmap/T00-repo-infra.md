@@ -21,7 +21,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
 - [x] **T00-009** · `ss2-testkit` data-gated tests · `S` · `P0`
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
-- [ ] **T00-010** · Synthetic fixtures policy & generators · `S` · `P1`
+- [~] **T00-010** [INPRG @lxstyo · branch `T00-010-fixtures` · 2026-11-21] · Synthetic fixtures policy & generators · `S` · `P1`
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
 - [x] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
@@ -32,7 +32,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
 
 ## Contracts (RFC → merged `v0` stub crate with mocks)
 Each contract task yields: RFC, public trait/struct stub, a mock implementation, a doc example. Consumers may start the moment the stub merges.
-- [ ] **T00-014** · Contract: `Vfs` + `AssetLoader` + `AssetManager` API · `M` · `P0` · Deps: T00-001, T00-013
+- [~] **T00-014** [INPRG @lxstyo · branch `T00-014-vfs-contract` · 2026-11-21] · Contract: `Vfs` + `AssetLoader` + `AssetManager` API · `M` · `P0` · Deps: T00-001, T00-013
 - [ ] **T00-015** · Contract: Renderer front-end (`RenderWorld` extract, `Renderable`, `Camera`, material handles, 2D/UI draw list) · `M` · `P0`
 - [ ] **T00-016** · Contract: Platform events, input actions, app lifecycle (suspend/resume, surface lost), file-system locations · `M` · `P0`
 - [ ] **T00-017** · Contract: Sim — entity model, component/property reflection, tick API, replication attributes, event bus · `L` · `P0` · Deps: T08-001
