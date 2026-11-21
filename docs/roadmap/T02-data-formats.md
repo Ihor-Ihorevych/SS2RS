@@ -34,7 +34,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-017** · `.mdl` model loader (links mesh/skeleton/materials/LOD/collision) · `L` · `P0` · Deps: T01-008, T02-014/015
 - [ ] **T02-018** · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011
 - [ ] **T02-019** · `.mat` physical material loader, `.scs` sound collection loader · `S` · `P1` · Deps: T01-013
-- [ ] **T02-020** · `.wld` world loader — split: **a** geometry, **b** lighting/lightmaps, **c** visibility/sectors, **d** entity records, **e** navigation data · `XL` · `P0` · Deps: T01-012a-e
+- [ ] **T02-020** · `.wld` world loader — split: **a** geometry, **b** lighting/lightmaps, **c** visibility/sectors, **d** entity records, **e** navigation data · `XL` · `P0` · Deps: T01-012a-f (f = the world root, the others hang off it)
 - [ ] **T02-021** · World streaming/lazy resource resolution (avoid loading 100+ MB at once; matters most on low-RAM PCs and later mobile) · `M` · `P1`
 - [ ] **T02-022** · `.ep` entity params → typed `EntityParams` (inheritance merge) · `M` · `P0` · Deps: T01-014
 - [ ] **T02-023** · `.rsc` databases and `.ctl` loaders · `S` · `P1`
