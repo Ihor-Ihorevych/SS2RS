@@ -17,7 +17,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-004** · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001 · *Delivered in `docs/re/ctsemeta-container.md` (validated on 9,269 files); leftovers split into T01-051.*
 - [x] **T01-005** · SPEC CTSEMETA type system: how types/fields/enums/arrays/references/embedded resources are encoded; is it self-describing? how external references (`RFIL`) resolve · `L` · `P0` · Deps: T01-004 · *Delivered: type-table framing, member lists, shared type-id space, self-describing conclusion (`docs/re/ctsemeta-types.md`); the rest is T01-050 and T01-052.*
 - [x] **T01-006** · SPEC `.tex` textures: pixel formats, mips, cube/volume, flags, sRGB, sampler state, animation (if any) · `M` · `P0` · Deps: T01-005
-- [ ] **T01-007** · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
+- [~] **T01-007** [INPRG @Ihor-Ihorevych/agent · branch `re-bmf` · 2026-11-21] · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
 - [ ] **T01-008** · SPEC `.mdl` models: meshes, material bindings, LODs, attachments, collision/hit volumes, references to `.skl/.ans/.mtr` · `L` · `P0`
 - [ ] **T01-009** · SPEC `.skl` skeletons: bone hierarchy, bind pose, bone flags · `M` · `P0`
 - [ ] **T01-010** · SPEC `.ans` animation sets: tracks, keyframe/compression format, events/notifies, root motion, blending hints · `L` · `P0`
