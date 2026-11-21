@@ -61,7 +61,7 @@ gameplay → full campaign → polish/mods (all on PC) → **then** Android and 
 
 ## 6. What recon found (facts, 2026-11-21)
 
-- `.gro` archives are standard **ZIP** (12,342 entries across 17 archives). Patch archives layer
+- `.gro` archives are standard **ZIP** (12,288 file entries across 14 archives; 10,933 distinct paths after patch overrides). Patch archives layer
   on top of `All_PC_*`.
 - By count: `.mdl` 3827, `.tex` 3281, `.wav` 1874, `.pfx` 612, `.ep` 394, `.ogg` 392, `.rsc` 391,
   `.dsc` 209, `.bmf` 123, `.wld` 107 (1.06 GB), `.mtr` 102, `.ans` 101, `.ogv` 99 (1.3 GB),

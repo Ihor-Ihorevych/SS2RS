@@ -11,11 +11,11 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 ## Setup
 - [ ] **T01-001** · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
 - [ ] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
-- [~] **T01-003** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
+- [x] **T01-003** · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
 ## Container & data formats
-- [~] **T01-004** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001
-- [~] **T01-005** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · SPEC CTSEMETA type system: how types/fields/enums/arrays/references/embedded resources are encoded; is it self-describing? how external references (`RFIL`) resolve · `L` · `P0` · Deps: T01-004
+- [x] **T01-004** · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001 · *Delivered in `docs/re/ctsemeta-container.md` (validated on 9,269 files); leftovers split into T01-051.*
+- [x] **T01-005** · SPEC CTSEMETA type system: how types/fields/enums/arrays/references/embedded resources are encoded; is it self-describing? how external references (`RFIL`) resolve · `L` · `P0` · Deps: T01-004 · *Delivered: type-table framing, member lists, shared type-id space, self-describing conclusion (`docs/re/ctsemeta-types.md`); the rest is T01-050 and T01-052.*
 - [ ] **T01-006** · SPEC `.tex` textures: pixel formats, mips, cube/volume, flags, sRGB, sampler state, animation (if any) · `M` · `P0` · Deps: T01-005
 - [ ] **T01-007** · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
 - [ ] **T01-008** · SPEC `.mdl` models: meshes, material bindings, LODs, attachments, collision/hit volumes, references to `.skl/.ans/.mtr` · `L` · `P0`
@@ -62,3 +62,6 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
 - [ ] **T01-048** · SPEC boss fights (per boss) · `L` each · `P2`
 - [ ] **T01-049** · Review & QA of specs: independent re-read, cross-check test vectors against `meta-dump` output · rolling · `P0`
+- [ ] **T01-050** · SPEC CTSEMETA object data: layout of `OBJS`, the `DCON`/`STAR`/`SSAR`/`BOOL`/`UUUU` markers, how each member type selects its value encoding (primitives, containers, references to `IDNT`/`RFIL`/objects), with test vectors; start with the small `.ep` and `.rsc` files · `XL` → split by type family · `P0` · Deps: T01-005 · **this unblocks every loader**
+- [ ] **T01-051** · SPEC CTSEMETA leftovers: format versions 4–7 (155 old `.tex` files), the extra payload after `EDOB` in 179 files (all `.wld`, plus some `.mdl/.bmf/.fnt/.ans/.skl`), the `EDTY` pairs, `INFO[0]`, `RFIL.flags` (`0x40000`), `EXOB.flags` (1, 1000, 1010, 1020) · `L` · `P1` · Deps: T01-004
+- [ ] **T01-052** · SPEC `DTTY` `kind` codes and `flags`: what the 30-odd kind values mean, how they relate to the game's entity/class categories, and the 2-/3-word forms of primitives, aliases and containers · `M` · `P1` · Deps: T01-005

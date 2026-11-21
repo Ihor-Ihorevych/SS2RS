@@ -7,7 +7,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 
 ## Virtual file system (does **not** need RE — ZIP is standard) — Wave 0
 - [ ] **T02-001** · `ss2-vfs`: open `.gro` (ZIP) archives, central-directory index, stored+deflate reads, big-file safe (>2 GB offsets, ZIP64) · `M` · `P0` · Deps: T00-014
-  Done: lists all 12,342 entries across the 17 archives of a real install in <1 s (data-gated).
+  Done: lists all 12,288 file entries across the 14 archives of a real install (10,933 distinct paths after overrides) in <1 s (data-gated).
 - [ ] **T02-002** · Mount stack & override semantics: `Patch_*` over `All_PC_*`, ordering by name/version, later wins, case-insensitive normalized paths (`/` and `\`), directory listing merge · `M` · `P0`
 - [ ] **T02-003** · Loose-directory mount (dev, mods, cooked cache) with same API · `S` · `P1` · 🟢
 - [ ] **T02-004** · `.mod`/`.nfo`/`DefaultMod.txt` descriptor parsing and mod mount ordering · `S` · `P1` · 🟢 · Deps: T01-040
