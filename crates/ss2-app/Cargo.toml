@@ -10,3 +10,13 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-ui = { path = "../ss2-ui" }
+ss2-render = { path = "../ss2-render" }
+ss2-platform = { path = "../ss2-platform" }
+winit.workspace = true
+gilrs.workspace = true
+png.workspace = true
+tracing.workspace = true

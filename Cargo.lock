@@ -2077,6 +2077,16 @@ dependencies = [
 [[package]]
 name = "ss2-app"
 version = "0.0.0"
+dependencies = [
+ "gilrs",
+ "png",
+ "ss2-core",
+ "ss2-platform",
+ "ss2-render",
+ "ss2-ui",
+ "tracing",
+ "winit",
+]
 
 [[package]]
 name = "ss2-assets"
