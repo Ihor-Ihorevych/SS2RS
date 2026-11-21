@@ -24,6 +24,7 @@
 - PC first: CI covers Windows, Linux, macOS. The Android `cargo check` job is **non-blocking** (portability guard only).
 - Data-gated tests read `SS2_DATA_DIR` and must skip cleanly when it is absent; plain CI never has game data.
 - Work on branch `m0-foundation`; `main` is protected only by CI after Task 8.
+- **Claim protocol (`AGENTS.md` §1):** before starting each task, claim the matching roadmap line(s) by hand — set `- [~]`, add `[INPRG @handle · branch `m0-foundation` · date]`, commit `T00-nnn: [INPRG] claim (@handle)` and push to `main` — and remove the tag when the task's work lands. (Task 6's parser and the later T00-028 automation take over once they exist.) Claim commits are the only direct pushes to `main`.
 
 ## Review Focus
 
@@ -155,13 +156,13 @@
 
 **Interfaces:**
 - Produces (`xtask::roadmap`):
-  - `pub struct RoadmapTask { pub id: String, pub title: String, pub size: Option<String>, pub prio: Option<String>, pub phase2: bool, pub good_first: bool, pub spike: bool, pub spec: bool, pub deps: Vec<String>, pub body: String, pub source: String }`.
-  - `pub fn parse_roadmap(text: &str, source_file: &str) -> Vec<RoadmapTask>` — an item starts at a line matching `^- \[[ x]\] \*\*(T\d\d-\d{3}[a-z]?)\*\*`; its body is that line plus following lines that start with two spaces. `title` is the first non-empty ` · `-separated segment after the ID with markdown bold/backticks removed; `size` is the first backticked token matching `^(S|M|L|XL)$`; `prio` the first matching `^P[0-3]$`; `phase2` when a `PHASE 2` token exists; `good_first` when the line contains 🟢; `spike`/`spec` when it contains `SPIKE`/`SPEC`; `deps` are IDs after `Deps:`.
-  - `impl RoadmapTask { pub fn issue_title(&self) -> String /* "T02-006: <title>" */; pub fn labels(&self) -> Vec<String> /* track:T02, size:M, prio:P0 | phase-2, good-first, spike, spec */ }`.
+  - `pub struct RoadmapTask { pub id: String, pub title: String, pub size: Option<String>, pub prio: Option<String>, pub phase2: bool, pub good_first: bool, pub spike: bool, pub spec: bool, pub in_progress: bool, pub deps: Vec<String>, pub body: String, pub source: String }`.
+  - `pub fn parse_roadmap(text: &str, source_file: &str) -> Vec<RoadmapTask>` — an item starts at a line matching `^- \[[ x~]\] \*\*(T\d\d-\d{3}[a-z]?)\*\*`; its body is that line plus following lines that start with two spaces. `title` is the first non-empty ` · `-separated segment after the ID with markdown bold/backticks removed; `size` is the first backticked token matching `^(S|M|L|XL)$`; `prio` the first matching `^P[0-3]$`; `phase2` when a `PHASE 2` token exists; `good_first` when the line contains 🟢; `spike`/`spec` when it contains `SPIKE`/`SPEC`; `in_progress` when the box is `[~]` or the line contains `[INPRG` (the `[INPRG …]` tag sits right after the ID and must not leak into `title`); `deps` are IDs after `Deps:`.
+  - `impl RoadmapTask { pub fn issue_title(&self) -> String /* "T02-006: <title>" */; pub fn labels(&self) -> Vec<String> /* track:T02, size:M, prio:P0 | phase-2, good-first, spike, spec, in-progress */ }`.
   - `pub fn tasks_to_create<'a>(tasks: &'a [RoadmapTask], existing_issue_titles: &[String]) -> Vec<&'a RoadmapTask>` — excludes tasks whose ID prefix (`"<id>:"`) already starts an existing title.
 - CLI: `cargo xtask roadmap-sync [--apply]`. Default is **dry run** (prints counts per track and the first 5 titles). `--apply` runs `gh label create` for missing labels and `gh issue create --title … --body … --label …` per missing task, reading existing issues from `gh issue list --state all --limit 2000 --json title`.
 
-- [ ] **Step 1: Write failing tests:** `parses_single_line_item` (T02-006 style line → id/title/size `M`/prio `P0`/deps `T01-004`); `parses_item_with_indented_description` (T00-001 style: description on next line goes into `body`, title still `Workspace skeleton`); `phase2_has_no_prio_label` (labels contain `phase-2`, none starting `prio:`); `lettered_sub_ids_are_parsed` (line mentioning `T09-015a…` inside text does not create a task, only `**T09-015**` does); `issue_title_and_labels`; `second_run_creates_nothing` (feed `tasks_to_create` the titles of everything it returned first → empty); `parses_all_real_roadmap_files` (reads every `docs/roadmap/T*.md` relative to `CARGO_MANIFEST_DIR/..`, asserts ≥ 370 tasks and all IDs unique).
+- [ ] **Step 1: Write failing tests:** `parses_single_line_item` (T02-006 style line → id/title/size `M`/prio `P0`/deps `T01-004`); `parses_item_with_indented_description` (T00-001 style: description on next line goes into `body`, title still `Workspace skeleton`); `phase2_has_no_prio_label` (labels contain `phase-2`, none starting `prio:`); `lettered_sub_ids_are_parsed` (line mentioning `T09-015a…` inside text does not create a task, only `**T09-015**` does); `issue_title_and_labels`; `claimed_item_is_in_progress` (a `- [~] **T02-006** [INPRG @a · branch `x` · 2026-11-22] · CTSEMETA reader · `M` · `P0`` line → `in_progress`, title `CTSEMETA reader`, label `in-progress`); `second_run_creates_nothing` (feed `tasks_to_create` the titles of everything it returned first → empty); `parses_all_real_roadmap_files` (reads every `docs/roadmap/T*.md` relative to `CARGO_MANIFEST_DIR/..`, asserts ≥ 370 tasks and all IDs unique).
 - [ ] **Step 2: Run** `cargo test -p xtask roadmap` → Expected: FAIL.
 - [ ] **Step 3: Implement** parser, label/title helpers, `tasks_to_create`, and the `gh`-driven CLI (`std::process::Command`, no extra crates beyond `regex`/`anyhow`).
 - [ ] **Step 4: Run** tests → PASS; then `cargo xtask roadmap-sync` (dry run) → Expected: prints 370 tasks and 0 existing; **do not run `--apply` here** — creating ~370 issues in the user's repo needs their explicit go-ahead (ask at Task 8).
@@ -172,7 +173,7 @@
 ### Task 7: Policy and contributor documents (T00-005, 007, 012 doc, 013, 022, 023)
 
 **Files (all new):**
-`README.md`, `CLEANROOM.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/task.md`, `bug.md`, `parity.md`, `docs/rfcs/0000-template.md`, `docs/CODING_STANDARDS.md`, `docs/re/README.md`
+`README.md`, `CLEANROOM.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md` (includes: "claim commit `[INPRG]` is on `main`; this PR ticks `[x]` and removes the tag"), `.github/ISSUE_TEMPLATE/task.md`, `bug.md`, `parity.md`, `docs/rfcs/0000-template.md`, `docs/CODING_STANDARDS.md`, `docs/re/README.md`
 (`docs/DEV_TOOLS.md` already exists — T00-026, written with the roadmap update; this task only links to it.)
 
 **Interfaces / required content (the implementer writes the prose):**
@@ -210,7 +211,7 @@
 - [ ] **Step 2: Local pre-flight:** `cargo test --workspace --locked`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo deny check`, `cargo xtask guard` → Expected: all exit 0.
 - [ ] **Step 3: Push the branch** `git push -u origin m0-foundation`, open a PR with `gh pr create --base main --title "M0: repo foundation (T00-001…013)" --body "…"` and watch `gh pr checks --watch` → Expected: all required jobs green on three OSes. Fix failures in follow-up commits (each signed off).
 - [ ] **Step 4: DCO negative test (throwaway branch `dco-test`):** commit without `-s`, open a draft PR, confirm the `dco` job fails, then close the PR and delete the branch.
-- [ ] **Step 5: Ask the user** whether to run `cargo xtask roadmap-sync --apply` (creates ~370 issues + labels in `Ihor-Ihorevych/SS2RS`) and whether to enable branch protection requiring `test`, `lint`, `deny`, `guard`, `dco`. Do neither without a yes.
+- [ ] **Step 5: Ask the user** whether to run `cargo xtask roadmap-sync --apply` (creates ~370 issues + labels in `Ihor-Ihorevych/SS2RS`) and whether to enable branch protection requiring `test`, `lint`, `deny`, `guard`, `dco`. Warn that the `[INPRG]` claim protocol needs direct pushes of one-line roadmap edits to `main`, so protection must allow those (ruleset bypass for maintainers/agent accounts) or claims must move to a different mechanism. Do none of this without a yes.
 - [ ] **Step 6: Tick the completed T00 boxes** (001–003, 005–009, 011–013, 022, 023 and the deny part of 002; leave 004 as "nightly job exists") in `docs/roadmap/T00-repo-infra.md`, commit `T00: tick M0 tasks`, push, and after green CI merge the PR (squash disabled: keep sign-offs; use merge commit).
 - [ ] **Step 7: M0 exit check:** on `main`, `cargo build --workspace --locked`, `cargo test --workspace --locked` pass and the latest `ci` run on `main` is green → report to the user that M0 minus contracts is done and the next plan is the contracts (T00-014…018).
 
