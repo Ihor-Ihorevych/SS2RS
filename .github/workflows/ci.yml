@@ -3,6 +3,14 @@ name: ci
 on:
   push:
     branches: [main]
+    # Docs-only pushes (for example [INPRG] claim commits, which only edit docs/roadmap/*.md) need
+    # no build. Pull requests are NOT filtered, so docs-only PRs still run dco/guard/secrets.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - "LICENSE"
+      - "NOTICE"
   pull_request:
   workflow_dispatch:
 
