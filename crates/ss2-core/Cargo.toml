@@ -10,3 +10,8 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
