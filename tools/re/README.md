@@ -9,3 +9,11 @@ python -I tools/re/inventory.py "C:\path\to\Serious Sam 2" inventory.md   # rege
 ```
 
 They never write game content. Scripts that analyze the original *binaries* do not belong here (CLEANROOM.md).
+
+Texture evidence (docs/re/tex.md):
+
+```
+python -I tools/re/tex_verify.py "C:\path	o\Serious Sam 2"       # size checks for every .tex, flag/wrap/dimension statistics
+```
+
+`ctse_values.py` is the value decoder these scripts share (objects -> Python values).
