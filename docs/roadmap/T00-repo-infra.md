@@ -36,7 +36,7 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [x] **T00-015** · Contract: Renderer front-end (`RenderWorld` extract, `Renderable`, `Camera`, material handles, 2D/UI draw list) · `M` · `P0`
 - [x] **T00-016** · Contract: Platform events, input actions, app lifecycle (suspend/resume, surface lost), file-system locations · `M` · `P0`
 - [ ] **T00-017** · Contract: Sim — entity model, component/property reflection, tick API, replication attributes, event bus · `L` · `P0` · Deps: T08-001
-- [ ] **T00-018** · Contract: Audio API (sound handles, 3D emitters, music, buses) · `S` · `P1`
+- [~] **T00-018** [INPRG @lxstyo · branch `T00-018-audio-contract` · 2026-11-21] · Contract: Audio API (sound handles, 3D emitters, music, buses) · `S` · `P1`
 - [ ] **T00-019** · Benchmark harness & perf budgets doc (criterion, per-platform budgets) · `M` · `P1`
 - [ ] **T00-020** · Docs site (mdBook + rustdoc deploy), architecture overview page · `M` · `P1` · 🟢
 - [ ] **T00-021** · Release engineering: semver policy, changelog, `cargo-release`, artifacts naming · `M` · `P2`
