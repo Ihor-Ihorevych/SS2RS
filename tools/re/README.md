@@ -48,3 +48,11 @@ Material evidence (docs/re/mtr.md):
 ```
 python -I tools/re/mtr_verify.py "C:\path\to\Serious Sam 2"    # preset structure, shader class codes, texture slots, modifiers (about 5 minutes)
 ```
+
+World evidence (docs/re/ctsemeta-objects.md, "CMetaHandle" and "The EDOB section"):
+
+```
+python -I tools/re/wld_verify.py "C:\path\to\Serious Sam 2"    # all 59 worlds: objects, extra records, CMetaHandle values (about 20 minutes)
+```
+
+`walk_objects.py` now reports 9,269 of 9,269 file entries decoding (about 11 minutes).
