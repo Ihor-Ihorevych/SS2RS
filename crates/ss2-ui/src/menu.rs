@@ -5,8 +5,8 @@ use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 
 /// Volume slider step and number of steps across `0.0..=1.0`.
-const STEP: f32 = 0.05;
-const MAX_STEPS: i32 = 20;
+pub(crate) const STEP: f32 = 0.05;
+pub(crate) const MAX_STEPS: i32 = 20;
 
 /// Which menu screen is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +87,14 @@ pub(crate) enum Item {
     Spacer,
 }
 
+pub(crate) fn title(screen: ScreenId) -> &'static str {
+    match screen {
+        ScreenId::Main => "SS2RS",
+        ScreenId::Options => "Options",
+        ScreenId::Pause => "Paused",
+    }
+}
+
 pub(crate) fn items(screen: ScreenId) -> &'static [Item] {
     use Action::*;
     match screen {
@@ -160,7 +168,7 @@ pub(crate) fn slider_value(s: &Settings, which: SliderSetting) -> f32 {
     }
 }
 
-fn set_slider(s: &mut Settings, which: SliderSetting, v: f32) {
+pub(crate) fn set_slider(s: &mut Settings, which: SliderSetting, v: f32) {
     match which {
         SliderSetting::Master => s.master_volume = v,
         SliderSetting::Music => s.music_volume = v,
@@ -174,6 +182,7 @@ pub struct Menu {
     pub(crate) stack: Vec<ScreenId>,
     pub(crate) focus: usize,
     pub(crate) settings: Settings,
+    pub(crate) pressed: Option<usize>,
 }
 
 impl Menu {
@@ -183,6 +192,7 @@ impl Menu {
             stack: vec![ScreenId::Main],
             focus: 0,
             settings: settings.clamped(),
+            pressed: None,
         };
         m.reset_focus();
         m
@@ -223,12 +233,13 @@ impl Menu {
         match input {
             UiInput::Nav(n) => self.handle_nav(n),
             UiInput::PointerMoved(_) | UiInput::PointerPressed(_) | UiInput::PointerReleased(_) => {
-                Vec::new()
+                self.handle_pointer(input)
             }
         }
     }
 
     fn reset_focus(&mut self) {
+        self.pressed = None;
         self.focus = items(self.screen()).iter().position(focusable).unwrap_or(0);
     }
 
@@ -271,7 +282,7 @@ impl Menu {
         vec![MenuCommand::SettingsChanged(self.settings.clone())]
     }
 
-    fn activate(&mut self) -> Vec<MenuCommand> {
+    pub(crate) fn activate(&mut self) -> Vec<MenuCommand> {
         match items(self.screen()).get(self.focus).copied() {
             Some(Item::Button { action, .. }) => self.perform(action),
             Some(Item::Toggle { setting, .. }) => {
