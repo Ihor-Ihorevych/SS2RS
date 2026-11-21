@@ -1,0 +1,82 @@
+name: docs
+
+# Builds the mdBook (docs/) and the rustdoc API docs, checks the book's internal links, and keeps
+# the result as a downloadable artifact. Nothing is published unless the repository owner opts in:
+# see the "deploy" job at the bottom.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "docs/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/scripts/check_book_links.py"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux system libraries (gamepad support needs libudev)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+      - name: Build the book
+        run: mdbook build docs
+      - name: Check the book's internal links
+        run: python3 .github/scripts/check_book_links.py target/book
+      - name: Build the API docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+      - name: Assemble the site (book at /, API docs at /api/)
+        run: |
+          mkdir -p site
+          cp -r target/book/. site/
+          cp -r target/doc site/api
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+          retention-days: 14
+      # Only used when publishing is enabled (see "deploy").
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && vars.PUBLISH_DOCS == 'true'
+        with:
+          path: site
+
+  # Publishing is OFF by default. The repository is private and GitHub Pages is not enabled.
+  # To publish: the owner enables Settings > Pages > Source: "GitHub Actions" and sets the
+  # repository variable PUBLISH_DOCS to "true". Until then this job is skipped.
+  deploy:
+    name: deploy docs
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.PUBLISH_DOCS == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -65,7 +65,7 @@ Design: [`../superpowers/specs/2026-11-21-ss2rs-design.md`](../superpowers/specs
 9. **Fetch, then claim (`[INPRG]`).** Always `git fetch origin` before every new task. Before working on a task, mark it `- [~] **ID** [INPRG @handle · branch
    `…` · date]` in its track file and **commit + push that one-line change to `main`** (`ID: [INPRG] claim`).
    Everyone runs `grep -rn INPRG docs/roadmap/` before picking work. Full protocol, race handling and
-   stale-claim rule: [`AGENTS.md`](../../AGENTS.md) §1.
+   stale-claim rule: [`AGENTS.md`](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/AGENTS.md) §1.
 
 ## 4. Definition of Done (every task)
 

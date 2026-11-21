@@ -1,0 +1,45 @@
+# Summary
+
+[Introduction](introduction.md)
+
+- [Architecture overview](architecture.md)
+- [Design](superpowers/specs/2026-11-21-ss2rs-design.md)
+
+# Contributing
+
+- [Coding standards](CODING_STANDARDS.md)
+- [Developer tools](DEV_TOOLS.md)
+- [Performance budgets and benchmarks](PERF_BUDGETS.md)
+
+# Roadmap
+
+- [Index and rules of engagement](roadmap/README.md)
+  - [T00 Repo, infrastructure, contracts](roadmap/T00-repo-infra.md)
+  - [T01 Reverse engineering and specs](roadmap/T01-reverse-engineering.md)
+  - [T02 Data formats](roadmap/T02-data-formats.md)
+  - [T03 Platform](roadmap/T03-platform.md)
+  - [T04 Renderer](roadmap/T04-renderer.md)
+  - [T05 Shaders](roadmap/T05-shaders.md)
+  - [T06 Audio and video](roadmap/T06-audio-video.md)
+  - [T07 World and physics](roadmap/T07-world-physics.md)
+  - [T08 Simulation and netcode](roadmap/T08-sim-netcode.md)
+  - [T09 Gameplay](roadmap/T09-gameplay.md)
+  - [T10 UI](roadmap/T10-ui.md)
+  - [T11 Tools](roadmap/T11-tools.md)
+  - [T12 QA and release](roadmap/T12-qa-release.md)
+  - [T13 Mods](roadmap/T13-mods.md)
+
+# RFCs
+
+- [RFC template](rfcs/0000-template.md)
+- [0001 Vfs and asset API](rfcs/0001-vfs-and-asset-api.md)
+- [0002 Renderer front-end API](rfcs/0002-render-frontend-api.md)
+- [0003 Platform API](rfcs/0003-platform-api.md)
+- [0004 Audio API](rfcs/0004-audio-api.md)
+
+# Reverse-engineering specs
+
+- [Overview and template](re/README.md)
+- [Install inventory](re/inventory.md)
+- [CTSEMETA container](re/ctsemeta-container.md)
+- [CTSEMETA type tables](re/ctsemeta-types.md)
