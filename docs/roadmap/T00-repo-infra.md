@@ -23,7 +23,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
 - [ ] **T00-010** · Synthetic fixtures policy & generators · `S` · `P1`
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
-- [ ] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
+- [~] **T00-011** [INPRG @Ihor-Ihorevych/agent · branch `m0-foundation` · 2026-11-21] · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
 - [ ] **T00-012** · Coding standards & sim-safe rules · `S` · `P0`
   `unsafe` policy, naming, module layout, determinism rules for sim-path crates (+ clippy `disallowed_types` for `HashMap`/`Instant` in them).
