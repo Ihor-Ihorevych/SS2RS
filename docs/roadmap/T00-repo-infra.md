@@ -40,7 +40,7 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-019** · Benchmark harness & perf budgets doc (criterion, per-platform budgets) · `M` · `P1`
 - [ ] **T00-020** · Docs site (mdBook + rustdoc deploy), architecture overview page · `M` · `P1` · 🟢
 - [ ] **T00-021** · Release engineering: semver policy, changelog, `cargo-release`, artifacts naming · `M` · `P2`
-- [ ] **T00-022** · Code of conduct, security policy, community channels (chat, forum) · `S` · `P1` · 🟢
+- [~] **T00-022** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Code of conduct, security policy, community channels (chat, forum) · `S` · `P1` · 🟢
 - [ ] **T00-023** · Naming/branding & trademark disclaimer ("not affiliated with Croteam/Devolver"), logo-free repo · `S` · `P1`
 - [ ] **T00-024** · Dependency update bot & vulnerability alerts (Dependabot/renovate, `cargo audit`) · `S` · `P2` · 🟢
 - [ ] **T00-026** · Developer tools list `docs/DEV_TOOLS.md` (required/recommended/by-track: Git+gh, rustup, MSVC/C toolchain, cargo-deny, Ghidra+JDK, ImHex, cargo-fuzz, RenderDoc, naga-cli, FFmpeg, mdbook, nextest, llvm-cov, …) linked from CONTRIBUTING and README · `S` · `P0` · 🟢
