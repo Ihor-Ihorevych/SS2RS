@@ -41,7 +41,7 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-020** · Docs site (mdBook + rustdoc deploy), architecture overview page · `M` · `P1` · 🟢
 - [ ] **T00-021** · Release engineering: semver policy, changelog, `cargo-release`, artifacts naming · `M` · `P2`
 - [~] **T00-022** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Code of conduct, security policy, community channels (chat, forum) · `S` · `P1` · 🟢
-- [ ] **T00-023** · Naming/branding & trademark disclaimer ("not affiliated with Croteam/Devolver"), logo-free repo · `S` · `P1`
+- [~] **T00-023** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Naming/branding & trademark disclaimer ("not affiliated with Croteam/Devolver"), logo-free repo · `S` · `P1`
 - [ ] **T00-024** · Dependency update bot & vulnerability alerts (Dependabot/renovate, `cargo audit`) · `S` · `P2` · 🟢
 - [ ] **T00-026** · Developer tools list `docs/DEV_TOOLS.md` (required/recommended/by-track: Git+gh, rustup, MSVC/C toolchain, cargo-deny, Ghidra+JDK, ImHex, cargo-fuzz, RenderDoc, naga-cli, FFmpeg, mdbook, nextest, llvm-cov, …) linked from CONTRIBUTING and README · `S` · `P0` · 🟢
 - [ ] **T00-027** · `cargo xtask doctor`: checks the contributor's machine against `docs/DEV_TOOLS.md` (required vs role tools, versions, `SS2_DATA_DIR`, `core.hooksPath`), prints install hints, exit 1 only for missing *required* tools · `M` · `P1` · Deps: T00-026
