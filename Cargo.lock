@@ -250,6 +250,9 @@ dependencies = [
 [[package]]
 name = "ss2-ui"
 version = "0.0.0"
+dependencies = [
+ "ss2-core",
+]
 
 [[package]]
 name = "ss2-vfs"
