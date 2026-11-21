@@ -31,6 +31,10 @@ Work comes from the roadmap files in `docs/roadmap/`. **Claim before you start**
 
 The workflow rules and the **Definition of Done** are in the [roadmap README](docs/roadmap/README.md) (§3, §4). In short: contracts before code, spec → implement → verify, stay inside your crate (`CODEOWNERS`), tests included, `cargo fmt`, `cargo clippy -D warnings`, `cargo deny`, and docs updated. Coding rules: [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md). Cross-crate API changes need an RFC ([`docs/rfcs/`](docs/rfcs/0000-template.md)).
 
+## Dependencies
+
+Adding or updating a dependency (licenses, `[workspace.dependencies]`, Dependabot PRs, advisories): [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
+
 ## Releases
 
 Versioning, the changelog and how a release is cut are in [`docs/RELEASING.md`](docs/RELEASING.md). If your change is user-visible, add one line under **Unreleased** in [`CHANGELOG.md`](CHANGELOG.md) in the same PR.

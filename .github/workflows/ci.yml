@@ -71,7 +71,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
+          # Dependabot cannot sign off. Exempt only PRs *opened by* the real bot account; matching
+          # the commit author name instead would let anyone bypass this check by spoofing it.
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot pull request: a maintainer takes responsibility by merging it."
+            exit 0
+          fi
           fail=0
           for sha in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
             if ! git show -s --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+>'; then

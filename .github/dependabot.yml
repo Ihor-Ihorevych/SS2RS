@@ -1,0 +1,32 @@
+# Dependency update PRs (docs/DEPENDENCIES.md). Quiet on purpose: weekly, few at a time.
+# Patch updates are grouped into one PR; minor and major updates (which are breaking for 0.x
+# crates such as wgpu and winit) each get their own PR so they can be read and tested alone.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "T00-024: deps"
+    groups:
+      rust-patch-updates:
+        update-types: ["patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "T00-024: deps"
+    groups:
+      actions-updates:
+        update-types: ["minor", "patch"]

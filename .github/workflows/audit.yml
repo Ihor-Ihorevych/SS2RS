@@ -1,0 +1,23 @@
+name: audit
+
+# Weekly vulnerability check. The `deny` job in ci.yml already checks advisories on every pull
+# request, but an idle repository would never learn about a new advisory for a dependency it
+# already uses. This run does, and a failure notifies the repository owner through GitHub.
+# Same policy file as CI (deny.toml), so there is one place that decides what is acceptable.
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

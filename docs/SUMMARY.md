@@ -11,6 +11,7 @@
 - [Developer tools](DEV_TOOLS.md)
 - [Performance budgets and benchmarks](PERF_BUDGETS.md)
 - [Releasing](RELEASING.md)
+- [Dependencies and advisories](DEPENDENCIES.md)
 
 # Roadmap
 
