@@ -127,7 +127,7 @@ Tail of the same file: `45 44 4f 42 00 00 00 00 4d 45 54 41 45 4e 44 20` = `EDOB
 
 ## Open questions
 
-- Encoding of **object data** inside `OBJS` (`DCON`, `STAR`, `SSAR`, `BOOL`, `UUUU` … markers occur there) → T01-050.
-- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; the payload blobs after `EDOB` in 179 files → T01-051.
+- Encoding of **object data** inside `OBJS`: **specified in `ctsemeta-objects.md`** (9,162 of 9,269 files decode to the byte; 107 worlds still open, T01-053).
+- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; the data after `EDOB` in 72 non-world files (the `u32` after `EDOB` is non-zero there) and in the 107 worlds → T01-051/T01-053.
 - Formats 4–7 (old `.tex` only) → T01-051.
 - Whether `IDNT` ids are referenced from object data and how.

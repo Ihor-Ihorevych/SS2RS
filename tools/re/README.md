@@ -4,6 +4,7 @@ Plain Python 3 scripts (standard library only) that read an install's `.gro` arc
 
 ```
 python -I tools/re/validate_ctsemeta.py "C:\path\to\Serious Sam 2"        # frame validation counts
+python -I tools/re/walk_objects.py "C:\path	o\Serious Sam 2"             # object-data decode: how many files decode to EDOB
 python -I tools/re/inventory.py "C:\path\to\Serious Sam 2" inventory.md   # regenerate docs/re/inventory.md
 ```
 

@@ -50,9 +50,26 @@ count × { u32 nameLen, nameLen bytes name, u32 typeId }
 
 The member name is often a decimal number written as text (`"1"`, `"2"`, `"5"`): members are identified by number and only some carry a real name (`rf_crsShared`, `rf_crsExposed`). The `typeId` refers into the shared type-id space.
 
-### `kind` codes observed (counts are blocks over the whole install)
+### Short forms (no member list)
 
-`0` containers · `1` primitives/aliases and many classes · `2…21` classes (2: 20,658 · 3: 13,179 · 4: 12,754 · 6: 9,326 · 12: 3,813 · 18: 3,066 …) · `25, 27, 28, 29, 31` · `41, 63, 72, 73, 99` (single-digit counts) · `1000` (82). The code does **not** follow a simple "struct vs. primitive" split (kind 1 occurs for classes with member lists too) and its meaning is **not yet understood**; it may be an engine-specific class/category id.
+Verified by the object-data decoder (`ctsemeta-objects.md`):
+
+| `kind` | words after `kind` | Meaning |
+|---|---|---|
+| 1 | `0, size, align` | primitive of `size` bytes (`FLOAT`, `SLONG`, `ULONG`, `IDENT`, `UBYTE`, `UWORD`, `SQUAD`, `CString` …) |
+| 1 | `13, targetTypeId` | alias of another type (`INDEX`, `BOOL`, `COLOR`, `PIX`); the target id is per file |
+| 0 | `1, size` | enumeration stored in `size` bytes |
+| 0 | `2, X` | raw pointer `X*` |
+| 0 | `4, elementTypeId` | fixed array `X[N]`; **N is in the type name**, not in the words |
+| 0 | `6, T` | `CStaticArray<T>` |
+| 0 | `7, T` | `CStaticStackArray<T>` |
+| 0 | `8, T` | `CDynamicContainer<T>` |
+| 0 | `11, X` | `Ptr<X>` |
+| 0 | `12, X` | `Handle<X>` |
+
+### `kind` codes of struct/class blocks
+
+Observed values (block counts over the install): `1` (60,854 with members, e.g. `CFont`) · `2` (20,658) · `3` (13,179) · `4` (12,754) · `6` (9,326) · `12` (3,813) · `18` (3,066) · further values up to `99`, and `1000`. The code does **not** separate structs from primitives and its meaning is **not understood** (it may be an engine-specific class category id); object decoding does not need it.
 
 ## Worked example (measured, abridged)
 
@@ -67,8 +84,7 @@ The member name is often a decimal number written as text (`"1"`, `"2"`, `"5"`):
 
 ## Open questions
 
-- Meaning of `kind`, of `flags` (observed 5 in all examples read) and of the primitive words.
-- The second word of short forms for kind 0 (8 in the example) — likely a size/flags value.
-- What `ADIM` dimensions attach to which array type (the dimension block sits right after the `n[4]`-style block).
-- How object values are laid out and how member types select their encoding → **T01-050**.
+- Meaning of the struct `kind` codes and of `flags` (observed 5 in all examples read) → T01-052.
+- What the `ADIM` blocks are for: fixed-array counts are taken from the type name, and decoding needed nothing else.
+- Object value layout: **specified in `ctsemeta-objects.md`** (T01-050a/b/c).
 - How `kind` and member order relate to the original game classes (`Sam2Game.dll` entity classes) → T01-021/T01-026.
