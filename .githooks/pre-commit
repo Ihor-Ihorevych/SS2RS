@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks commits that stage proprietary game content. Enable once per clone:
+#   git config core.hooksPath .githooks
+exec cargo xtask guard --staged

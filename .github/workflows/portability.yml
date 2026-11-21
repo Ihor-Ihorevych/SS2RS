@@ -1,0 +1,25 @@
+name: portability
+
+# Non-blocking guard for the later Android port: portable crates must keep compiling for an
+# Android target. Failures here are warnings for the maintainers, never merge blockers.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-linux-android
+      - run: >
+          cargo check --target aarch64-linux-android
+          -p ss2-core -p ss2-vfs -p ss2-meta -p ss2-assets -p ss2-sim -p ss2-net

@@ -1,0 +1,9 @@
+# Sim-safe rules (docs/CODING_STANDARDS.md#sim-safe): simulation, physics and netcode code must
+# behave identically on every machine and every run. Keep this file identical in
+# ss2-sim, ss2-physics and ss2-net.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "sim-safe: iteration order is not deterministic; use BTreeMap or a Vec (docs/CODING_STANDARDS.md#sim-safe)" },
+    { path = "std::collections::HashSet", reason = "sim-safe: iteration order is not deterministic; use BTreeSet or a Vec (docs/CODING_STANDARDS.md#sim-safe)" },
+    { path = "std::time::Instant", reason = "sim-safe: no wall-clock time in the simulation; use the tick counter (docs/CODING_STANDARDS.md#sim-safe)" },
+    { path = "std::time::SystemTime", reason = "sim-safe: no wall-clock time in the simulation; use the tick counter (docs/CODING_STANDARDS.md#sim-safe)" },
+]
