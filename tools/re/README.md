@@ -25,8 +25,14 @@ python -I tools/re/bmf_verify.py "C:\path	o\Serious Sam 2"    # per-surface layo
 python -I tools/re/edob_verify.py "C:\path	o\Serious Sam 2"   # the EDOB extra-record rule for every non-world file
 ```
 
+Skeleton evidence (docs/re/skl.md):
+
+```
+python -I tools/re/skl_verify.py "C:\path	o\Serious Sam 2"    # hierarchy rules and the local-transform / inverse-bind check
+```
+
 Model evidence (docs/re/mdl.md):
 
 ```
-python -I tools/re/mdl_verify.py "C:\path\to\Serious Sam 2"    # structure, embedded meshes, palettes, children, references (about 5 minutes)
+python -I tools/re/mdl_verify.py "C:\path	o\Serious Sam 2"    # structure, embedded meshes, palettes, children, references (about 5 minutes)
 ```
