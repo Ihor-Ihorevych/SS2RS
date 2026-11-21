@@ -38,7 +38,7 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-017** · Contract: Sim — entity model, component/property reflection, tick API, replication attributes, event bus · `L` · `P0` · Deps: T08-001
 - [x] **T00-018** · Contract: Audio API (sound handles, 3D emitters, music, buses) · `S` · `P1`
 - [x] **T00-019** · Benchmark harness & perf budgets doc (criterion, per-platform budgets) · `M` · `P1`
-- [ ] **T00-020** · Docs site (mdBook + rustdoc deploy), architecture overview page · `M` · `P1` · 🟢
+- [~] **T00-020** [INPRG @lxstyo · branch `T00-020-docs-site` · 2026-11-21] · Docs site (mdBook + rustdoc deploy), architecture overview page · `M` · `P1` · 🟢
 - [ ] **T00-021** · Release engineering: semver policy, changelog, `cargo-release`, artifacts naming · `M` · `P2`
 - [x] **T00-022** · Code of conduct, security policy, community channels (chat, forum) · `S` · `P1` · 🟢
 - [x] **T00-023** · Naming/branding & trademark disclaimer ("not affiliated with Croteam/Devolver"), logo-free repo · `S` · `P1`
