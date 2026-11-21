@@ -1,0 +1,29 @@
+name: claims
+
+# Weekly report of active roadmap claims and how long each branch has been quiet (AGENTS.md
+# section 1, rule 8): stale after 7 days without a push (may be pinged), releasable 48 hours later.
+# The report goes to the run's summary page. It never edits the roadmap, files issues or pings
+# anyone: a person decides what to do with a stale claim.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Consistency of the claims
+        run: cargo xtask check-claims
+      - name: Stale-claim report
+        run: cargo xtask claims | tee -a "$GITHUB_STEP_SUMMARY"

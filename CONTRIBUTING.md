@@ -53,5 +53,7 @@ cargo deny check
 cargo xtask guard                 # proprietary-content check
 cargo xtask doctor                # check your machine against docs/DEV_TOOLS.md
 cargo xtask claim T02-006         # claim a roadmap task (see AGENTS.md section 3)
+cargo xtask check-claims          # are the roadmap claims consistent? (CI runs it)
+cargo xtask claims                # active claims, idle time, stale ones
 cargo xtask roadmap-sync          # dry run: roadmap -> GitHub issues
 ```

@@ -4,6 +4,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use xtask::claim;
+use xtask::claim_check;
 use xtask::doctor;
 use xtask::guard::{self, Mode};
 use xtask::roadmap;
@@ -56,6 +57,17 @@ enum Command {
         /// Show what would change, change nothing.
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Fail if a roadmap claim is contradictory or malformed ([x] with a tag, [~] without one, ...).
+    CheckClaims,
+    /// Report active claims, their age and the last push to their branch; flags stale ones.
+    Claims {
+        /// Days without a push before a claim counts as stale (AGENTS.md rule 8).
+        #[arg(long, default_value_t = 7)]
+        stale_days: i64,
+        /// Do not ask GitHub for branch activity (idle time = age of the claim).
+        #[arg(long)]
+        offline: bool,
     },
     /// Check this machine against docs/DEV_TOOLS.md; exits 1 only if a required tool is missing.
     Doctor {
@@ -131,6 +143,59 @@ fn main() -> ExitCode {
                 },
             )
         }),
+        Command::CheckClaims => {
+            let result = guard::repo_root()
+                .and_then(|root| claim_check::read_roadmap(std::path::Path::new(&root)));
+            match result {
+                Ok(files) => {
+                    let scan = claim_check::scan(&files, &claim::today_utc());
+                    let github = std::env::var_os("GITHUB_ACTIONS").is_some();
+                    print!("{}", claim_check::render_findings(&scan.findings, github));
+                    if scan.has_errors() {
+                        eprintln!("check-claims: fix the errors above (AGENTS.md section 1)");
+                        ExitCode::from(1)
+                    } else {
+                        println!(
+                            "check-claims: ok ({} claim(s), {} warning(s))",
+                            scan.claims.len(),
+                            scan.findings.len()
+                        );
+                        ExitCode::SUCCESS
+                    }
+                }
+                Err(e) => {
+                    eprintln!("check-claims: {e:#}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Command::Claims {
+            stale_days,
+            offline,
+        } => {
+            let result = guard::repo_root()
+                .and_then(|root| claim_check::read_roadmap(std::path::Path::new(&root)));
+            match result {
+                Ok(files) => {
+                    let today = claim::today_utc();
+                    let scan = claim_check::scan(&files, &today);
+                    let lookup: &dyn claim_check::LastPush = if offline {
+                        &claim_check::NoLastPush
+                    } else {
+                        &claim_check::GhLastPush
+                    };
+                    print!(
+                        "{}",
+                        claim_check::report(&scan.claims, &today, stale_days, lookup)
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("claims: {e:#}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         Command::Doctor { roles } => {
             let result = guard::repo_root().map(|root| {
                 doctor::run_checks(&doctor::SystemProbe, std::path::Path::new(&root), &roles)
