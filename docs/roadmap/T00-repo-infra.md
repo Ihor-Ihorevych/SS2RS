@@ -21,7 +21,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
 - [x] **T00-009** · `ss2-testkit` data-gated tests · `S` · `P0`
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
-- [~] **T00-010** [INPRG @lxstyo · branch `T00-010-fixtures` · 2026-11-21] · Synthetic fixtures policy & generators · `S` · `P1`
+- [x] **T00-010** · Synthetic fixtures policy & generators · `S` · `P1`
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
 - [x] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
@@ -50,3 +50,4 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-025** · Crate publishing policy (which crates are libraries on crates.io, name reservation) · `S` · `P3`
 - [ ] **T00-030** · Community channels: set up a chat server/forum, link it from README and CONTRIBUTING (split from T00-022, which delivered the code of conduct and security policy) · `S` · `P1` · 🟢
 - [ ] **T00-031** · Final project name decision (SS2RS is a working title) and rename of crates/docs if it changes; trademark review of the name (split from T00-023, which delivered the affiliation disclaimers in README and NOTICE) · `S` · `P1`
+- [ ] **T00-032** · Minimal CTSEMETA writer for fixtures in `ss2_testkit::fixtures` (split from T00-010, which delivered the ZIP builder and fixture policy) · `S` · `P1` · Deps: T01-004, T01-005
