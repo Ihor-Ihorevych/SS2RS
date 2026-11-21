@@ -104,6 +104,7 @@ ss2-vfs         .gro/ZIP + loose dirs + mod layering, case-insensitive paths
 ss2-meta        CTSEMETA container + reflection reader
 ss2-assets      AssetManager, loaders registry, cooked cache
 ss2-format-*    tex, mesh(bmf), skeleton, anim, model, material, world, params(ep/rsc), pfx, font, sound
+ss2-platform-api windowing-free platform contract: events, input actions, lifecycle, paths
 ss2-platform    window, input, lifecycle, Android/iOS glue, paths
 ss2-render-api  GPU-free renderer front-end: RenderWorld extract, camera, resource ids, Renderer trait
 ss2-render      wgpu renderer (frame graph, materials, world, particles, post)

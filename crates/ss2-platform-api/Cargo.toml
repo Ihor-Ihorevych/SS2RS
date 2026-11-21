@@ -1,0 +1,20 @@
+[package]
+name = "ss2-platform-api"
+description = "windowing-free platform contract: events, input actions, lifecycle, paths (tracks T00/T03)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+toml.workspace = true

@@ -2279,6 +2279,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-platform-api"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "ss2-core",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "ss2-render"
 version = "0.0.0"
 dependencies = [
