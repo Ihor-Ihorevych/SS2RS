@@ -26,8 +26,9 @@ def buffer_bytes(objs, holder):
     return None if ref.oid == NULL else g(objs[ref.oid], "GFXHANDLE.2")
 
 
-def check_mesh(name, d, r, objs, stats, covered):
-    mesh = next(o for o in objs.values() if isinstance(o, Obj) and o.type == "CRenderMesh")
+def check_mesh(name, d, r, objs, stats, covered, mesh=None):
+    """Checks one CRenderMesh (default: the first in `objs`); `.mdl` files embed the same structure."""
+    if mesh is None: mesh = next(o for o in objs.values() if isinstance(o, Obj) and o.type == "CRenderMesh")
     index_bufs = [buffer_bytes(objs, h) for h in g(mesh, "CRenderMesh.12")]
     vertex_bufs = [buffer_bytes(objs, h) for h in g(mesh, "CRenderMesh.13")]
     lods = g(mesh, "CRenderMesh.5")
