@@ -6,7 +6,7 @@ Until then only cheap guard rails apply: portable crates reach files/paths throu
 handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions.
 
 ## Core platform (Wave 0)
-- [~] **T03-001** [INPRG @lxstyo · branch `T03-001-window-loop` · 2026-11-21] · Window + event loop on `winit`, `ApplicationHandler`-style lifecycle; contract from T00-016 (suspend/resume/surface-lost/DPI change) · `M` · `P0`
+- [x] **T03-001** · Window + event loop on `winit`, `ApplicationHandler`-style lifecycle; contract from T00-016 (suspend/resume/surface-lost/DPI change) · `M` · `P0`
 - [ ] **T03-002** · Keyboard/mouse input: raw motion, cursor capture/release, key repeat, text input events for console/chat · `M` · `P0` · 🟢
 - [ ] **T03-003** · Gamepad via `gilrs` (+ Android native pads): mapping DB, dead zones, triggers, rumble · `M` · `P1` · 🟢
 - [ ] **T03-004** · Touch input layer: multi-touch tracking, gesture primitives, per-finger ownership (look vs move) · `M` · `PHASE 2`
@@ -46,3 +46,4 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-030** · Settings persistence: `Settings` (vsync, fullscreen, volumes) load/save as TOML in the platform config dir, atomic write, clamped, corrupt/missing file → defaults · `M` · `P1` · Deps: T10-031
 - [x] **T03-031** · Navigation input mapping: keyboard (arrows/WASD/Enter/Esc) and gamepad (D-pad, buttons, stick with dead zone + repeat) → `NavInput` · `M` · `P1` · Deps: T10-030
 - [x] **T03-032** · `ss2-app` window loop and menu wiring (winit 0.30): CLI (`--screenshot`, `--smoke-frames`), scenes (menu/placeholder game), live vsync/fullscreen, minimize-safe · `M` · `P1` · Deps: T04-036, T03-031, T03-030
+- [ ] **T03-033** · Move `ss2-app` onto `ss2_platform::window::run`: the app implements `PlatformApp` (renderer created in `window_ready`, dropped in `window_lost`) and reads input as `PlatformEvent`s instead of raw `winit`/`gilrs` calls (split from T03-001, which delivered the loop and lifecycle; the input events are T03-002/T03-003) · `M` · `P1` · Deps: T03-001, T03-002, T03-003
