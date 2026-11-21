@@ -1,0 +1,12 @@
+[package]
+name = "ss2-audio"
+description = "audio mixer, 3D sound and music (track T06)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

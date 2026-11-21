@@ -1,0 +1,12 @@
+[package]
+name = "ss2-shaderxlat"
+description = "D3D9 shader assembly translation and material shaders (track T05)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

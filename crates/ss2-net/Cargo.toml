@@ -1,0 +1,12 @@
+[package]
+name = "ss2-net"
+description = "transport, sessions, snapshots and prediction (track T08)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
