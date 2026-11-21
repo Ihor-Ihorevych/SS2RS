@@ -43,6 +43,6 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [ ] **T03-029** · Web (wasm) feasibility note only (no work) · `S` · `PHASE 2` · 🟢
 
 ## Menu slice (PC, placeholder skin) — see `docs/superpowers/plans/2026-11-21-menu-slice-placeholder-skin.md`
-- [ ] **T03-030** · Settings persistence: `Settings` (vsync, fullscreen, volumes) load/save as TOML in the platform config dir, atomic write, clamped, corrupt/missing file → defaults · `M` · `P1` · Deps: T10-031
+- [~] **T03-030** [INPRG @Ihor-Ihorevych/agent · branch `menu-slice` · 2026-11-21] · Settings persistence: `Settings` (vsync, fullscreen, volumes) load/save as TOML in the platform config dir, atomic write, clamped, corrupt/missing file → defaults · `M` · `P1` · Deps: T10-031
 - [ ] **T03-031** · Navigation input mapping: keyboard (arrows/WASD/Enter/Esc) and gamepad (D-pad, buttons, stick with dead zone + repeat) → `NavInput` · `M` · `P1` · Deps: T10-030
 - [ ] **T03-032** · `ss2-app` window loop and menu wiring (winit 0.30): CLI (`--screenshot`, `--smoke-frames`), scenes (menu/placeholder game), live vsync/fullscreen, minimize-safe · `M` · `P1` · Deps: T04-036, T03-031, T03-030
