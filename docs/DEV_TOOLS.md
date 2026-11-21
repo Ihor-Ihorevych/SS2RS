@@ -11,7 +11,7 @@ track's work · **Optional** = nice to have.
 
 | Tool | Why | Notes |
 |---|---|---|
-| **Git** + **GitHub CLI (`gh`)** | version control, PRs, roadmap-sync | `git config core.hooksPath .githooks` once per clone (proprietary-content guard) |
+| **Git** + **GitHub CLI (`gh`)** | version control, PRs, roadmap-sync | `git config core.hooksPath .githooks` once per clone (proprietary-content guard). `gh auth login` once; pushing anything under `.github/workflows/` additionally needs the `workflow` scope: `gh auth refresh -h github.com -s workflow` |
 | **Rust via `rustup`** | build | `rust-toolchain.toml` pins the version (currently 1.99.1) and installs `rustfmt`+`clippy` automatically |
 | **C toolchain / linker** | Rust linking | Windows: Visual Studio Build Tools (MSVC, "Desktop development with C++"); Linux: `build-essential`; macOS: Xcode Command Line Tools |
 | **`cargo-deny`** | license/advisory checks (CI runs it) | `cargo install --locked cargo-deny` |
@@ -27,7 +27,8 @@ track's work · **Optional** = nice to have.
 | `cargo-machete` / `cargo-udeps` | unused dependencies (`udeps` needs nightly) | `cargo install --locked cargo-machete cargo-udeps` |
 | `cargo-semver-checks` | API breaks in published-style crates | `cargo install --locked cargo-semver-checks` |
 | `cargo-expand`, `cargo-bloat` | macro/size debugging | `cargo install --locked cargo-expand cargo-bloat` |
-| Python 3.12+ | helper scripts, Ghidra scripting glue | python.org / package manager |
+| `cargo-release` | version bump and changelog roll-forward when cutting a release ([releasing](RELEASING.md)); maintainers only | `cargo install --locked cargo-release` |
+| Python 3.12+ | helper scripts (`.github/scripts/`), Ghidra scripting glue | python.org / package manager |
 
 ## 3. By track
 
