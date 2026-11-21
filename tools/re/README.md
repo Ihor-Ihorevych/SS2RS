@@ -24,3 +24,9 @@ Mesh and extra-record evidence (docs/re/bmf.md, ctsemeta-objects.md):
 python -I tools/re/bmf_verify.py "C:\path	o\Serious Sam 2"    # per-surface layout checks for every .bmf
 python -I tools/re/edob_verify.py "C:\path	o\Serious Sam 2"   # the EDOB extra-record rule for every non-world file
 ```
+
+Skeleton evidence (docs/re/skl.md):
+
+```
+python -I tools/re/skl_verify.py "C:\path\to\Serious Sam 2"    # hierarchy rules and the local-transform / inverse-bind check
+```
