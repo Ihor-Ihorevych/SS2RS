@@ -15,7 +15,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   `CLEANROOM.md`: roles (spec author vs implementer), what may be read (specs, public docs, own measurements; SS1 for concepts only), what must never be committed. PR template checkbox + provenance field; `docs/re/` CODEOWNERS requiring RE-team review. Done when: policy merged and linked from CONTRIBUTING.
 - [~] **T00-006** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Proprietary-content guard · `S` · `P0` · 🟢
   `.gitignore` for `Serious Sam 2/`, `*.gro`, `*.dll`, `*.exe`, Ghidra projects; CI script rejecting added files with proprietary extensions or >5 MB blobs; secrets scan. Done when: negative test PR is rejected.
-- [ ] **T00-007** · CONTRIBUTING & labels · `S` · `P0` · 🟢
+- [~] **T00-007** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · CONTRIBUTING & labels · `S` · `P0` · 🟢
   Workflow from roadmap §3/§10, commit style, DCO how-to, label set (`track:T04`, `size:M`, `prio:P0`, `spike`, `spec`, `good-first`).
 - [~] **T00-008** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Roadmap → GitHub issues sync · `M` · `P1`
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
