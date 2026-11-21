@@ -1,0 +1,49 @@
+# T08 — Simulation Core & Co-op Netcode (`ss2-sim`, `ss2-net`)
+
+**Co-op is first-class.** Architecture: server-authoritative fixed-step simulation; clients send
+input commands; server sends snapshots/deltas; remote entities are interpolated; the local player is
+predicted and reconciled; hitscan uses server-side lag compensation. Single-player = a local
+server + one client over an in-process loopback transport (same code path = co-op bugs surface early).
+Not goals: original protocol compatibility, lockstep determinism.
+
+## Sim core
+- [ ] **T08-001** · **SPIKE** ECS choice: custom minimal ECS vs `hecs`/`legion`-style crate; requirements: stable entity IDs w/ generations, per-component replication flags, reflection hooks, cheap snapshot of state; RFC · `M` · `P0`
+- [ ] **T08-002** · Entity/class model: class registry, property reflection compatible with `.ep`/`.wld` records, spawn-from-record, lifecycle (spawn/init/tick/destroy), parenting · `L` · `P0` · Deps: T08-001, T01-014/026
+- [ ] **T08-003** · Fixed-timestep sim loop: tick rate from T01-022, pause, time scale, slow-mo, deterministic ordering of systems, phases (input→AI→move→physics→damage→cleanup→replicate) · `M` · `P0`
+- [ ] **T08-004** · Server/client split: `ServerSim`, `ClientSim`, shared game code, loopback transport for SP, listen server (host plays) and dedicated server · `L` · `P0`
+- [ ] **T08-028** · Event bus (gameplay events, triggers I/O) with replication-aware events · `M` · `P1`
+
+## Transport & sessions
+- [ ] **T08-005** · **SPIKE** transport: QUIC (`quinn`) vs custom UDP (renet/laminar-style) vs WebRTC-ish; need: unreliable + reliable-ordered channels, MTU/fragmentation, encryption, NAT-friendliness, small overhead, and nothing that blocks a later Android build; RFC · `M` · `P0`
+- [ ] **T08-006** · Connection lifecycle: handshake, protocol/version/mod-hash check, session password, auth token, timeouts, graceful disconnect, kick/ban · `L` · `P0`
+- [ ] **T08-019** · Session discovery: LAN broadcast, direct IP, invite code via lightweight relay/rendezvous (optional master server later), NAT traversal/hole punching · `L` · `P1`
+- [ ] **T08-020** · Dedicated server binary: headless, config file, console/RCON-lite, log rotation, metrics endpoint, Docker image · `M` · `P1`
+- [ ] **T08-027** · Encryption/auth if transport lacks it (DTLS/noise), replay protection · `M` · `P2`
+
+## Replication & prediction
+- [ ] **T08-007** · Replication framework: per-component/field replication attributes, delta compression vs last-acked snapshot, quantization (positions, angles), relevancy/interest management, priority & bandwidth budget (hordes!) · `XL` → split · `P0`
+- [ ] **T08-008** · Snapshot buffer + interpolation/extrapolation for remote entities; adaptive interp delay; teleport/despawn handling · `L` · `P0`
+- [ ] **T08-011** · Input command stream: tick-stamped, batched with redundancy, server-side validation/rate limiting, input buffering on server · `M` · `P0`
+- [ ] **T08-009** · Client-side prediction + reconciliation of the local player using T07-005 controller; smooth error correction; misprediction metrics · `XL` → split · `P0` · Deps: T07-005, T08-011
+- [ ] **T08-010** · Server-side lag compensation for hitscan/melee (history of hitboxes, max rewind window, fairness limits) · `L` · `P1`
+- [ ] **T08-012** · Reliable events/RPC: explosions, pickups, chat, audio events, with dedupe across redundant snapshots, late-join suppression · `L` · `P0`
+- [ ] **T08-015** · Authority for physics objects/projectiles/AI: server simulates, clients interpolate; client-side effect prediction for local weapon fire (muzzle flash, tracer) · `L` · `P1`
+- [ ] **T08-016** · Time sync: clock offset/RTT estimation, tick alignment, jitter buffer · `M` · `P0`
+- [ ] **T08-013** · Join-in-progress: full-state snapshot streaming, level-load sync, spawn rules, late-joiner event suppression · `L` · `P0`
+- [ ] **T08-014** · Reconnect & drop-in/out handling; (optional later) host migration · `L` · `P2`
+
+## Co-op game-layer rules (with T09)
+- [ ] **T08-023** · Co-op rules: respawn/checkpoint sync, shared level progress, enemy scaling by player count, friendly fire option, player ghosting at transitions, level-transition sync · `L` · `P1` · Deps: T01-037
+- [ ] **T08-024** · Spectator/follow-cam for dead players · `M` · `P2`
+- [ ] **T08-022** · Save/load as serialization of sim state (own format) + co-op saves, checkpoints, quick-save rules · `L` · `P1`
+
+## Tooling, tests, ops
+- [ ] **T08-017** · Network simulator (latency, jitter, loss, reorder, bandwidth cap) usable in-process and at socket level; scenario runner · `M` · `P0`
+- [ ] **T08-029** · Headless bot clients for soak tests (N bots × M minutes); assertions on desync/divergence/bandwidth · `L` · `P1`
+- [ ] **T08-018** · Net profiling: bytes/tick per component, RTT/loss graph, prediction error HUD (`net_graph`), Tracy spans · `M` · `P1`
+- [ ] **T08-021** · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
+- [ ] **T08-025** · Replay recording (inputs + snapshots) and playback for bug reports · `L` · `P2`
+- [ ] **T08-026** · Prediction error test across x86_64/aarch64 clients vs server (T07-026) · `M` · `P1`
+- [ ] **T08-030** · Protocol versioning & compatibility policy, schema hash, changelog for wire format · `S` · `P1` · 🟢
+- [ ] **T08-031** · Mobile networking: Wi-Fi↔cellular handoff, background/suspend reconnect, battery-aware tick/snapshot rate for clients · `M` · `PHASE 2`
+- [ ] **T08-032** · Documentation: netcode architecture guide (for gameplay devs: what to mark replicated, how to write predicted code) · `M` · `P1`

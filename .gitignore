@@ -1,0 +1,31 @@
+# --- Proprietary game content: NEVER commit (see docs/roadmap/T00-repo-infra.md, T00-006) ---
+/Serious Sam 2/
+*.gro
+*.dll
+*.exe
+*.wld
+*.tex
+*.mdl
+*.bmf
+*.ogv
+*.xmv
+*.chm
+
+# Reverse-engineering workspaces (notes go in docs/re/, never decompiler output)
+*.gpr
+*.rep/
+ghidra_projects/
+decompiled/
+
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Local / editor
+.vs/
+.idea/
+.vscode/
+.claude/
+*.log
+.codegraph/
