@@ -1,0 +1,15 @@
+# cargo-release configuration (docs/RELEASING.md). Applies to the whole workspace.
+#
+# We use cargo-release only for the mechanical edits (`cargo release version`, `cargo release
+# replace`). The commit and the tag are made by hand so they carry the DCO sign-off, so nothing
+# here commits, tags, pushes or publishes.
+
+# Every crate inherits [workspace.package] version, so they all move together.
+shared-version = true
+tag-name = "v{{version}}"
+
+# Never publish to crates.io (all crates are `publish = false`; policy: T00-025).
+publish = false
+push = false
+sign-commit = false
+sign-tag = false
