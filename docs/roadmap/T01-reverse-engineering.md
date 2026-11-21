@@ -14,7 +14,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [~] **T01-003** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
 ## Container & data formats
-- [ ] **T01-004** · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001
+- [~] **T01-004** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001
 - [ ] **T01-005** · SPEC CTSEMETA type system: how types/fields/enums/arrays/references/embedded resources are encoded; is it self-describing? how external references (`RFIL`) resolve · `L` · `P0` · Deps: T01-004
 - [ ] **T01-006** · SPEC `.tex` textures: pixel formats, mips, cube/volume, flags, sRGB, sampler state, animation (if any) · `M` · `P0` · Deps: T01-005
 - [ ] **T01-007** · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
