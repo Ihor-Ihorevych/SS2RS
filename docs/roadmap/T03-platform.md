@@ -7,7 +7,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 
 ## Core platform (Wave 0)
 - [x] **T03-001** · Window + event loop on `winit`, `ApplicationHandler`-style lifecycle; contract from T00-016 (suspend/resume/surface-lost/DPI change) · `M` · `P0`
-- [~] **T03-002** [INPRG @lxstyo · branch `T03-002-keyboard-mouse` · 2026-11-21] · Keyboard/mouse input: raw motion, cursor capture/release, key repeat, text input events for console/chat · `M` · `P0` · 🟢
+- [x] **T03-002** · Keyboard/mouse input: raw motion, cursor capture/release, key repeat, text input events for console/chat · `M` · `P0` · 🟢
 - [ ] **T03-003** · Gamepad via `gilrs` (+ Android native pads): mapping DB, dead zones, triggers, rumble · `M` · `P1` · 🟢
 - [ ] **T03-004** · Touch input layer: multi-touch tracking, gesture primitives, per-finger ownership (look vs move) · `M` · `PHASE 2`
 - [ ] **T03-005** · Input action system: data-driven action maps, contexts (menu/game/console), rebinding, serialization · `M` · `P0`
