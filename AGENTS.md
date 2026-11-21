@@ -20,10 +20,10 @@ will start.** Before writing any code or spec for a roadmap task (`docs/roadmap/
    ```
    Use your GitHub handle (or `<handle>/agent` for an agent working for that person). **No emails or other
    personal data.**
-4. **Commit and push that single-line change straight to `main`** (it is the only thing allowed to skip a PR):
+4. **Commit and push that single-line change straight to `main`** (it is the only thing allowed to skip a PR). Put `[skip ci]` at the end of the message: a claim changes no code, and every push to `main` would otherwise run the whole build matrix:
 
    ```
-   git commit -s -m "T02-006: [INPRG] claim (@your-github-handle)"
+   git commit -s -m "T02-006: [INPRG] claim (@your-github-handle) [skip ci]"
    git push origin main
    ```
 5. **If the push is rejected**, someone pushed first: `git pull --rebase origin main`. If your task line is now

@@ -162,7 +162,7 @@ T13 mods ◄─ T09 stable entity API
 1. **Always `git fetch origin` before every new task** (then `git pull --rebase origin main`), and again before opening a PR; then `grep -rn INPRG docs/roadmap/` to see what is taken.
 2. Pick an unchecked `- [ ]` task whose deps are ✅ (or whose deps have merged stubs/mocks), not `XL`, not `PHASE 2`.
 3. **Claim it:** change to `- [~] **T02-006** [INPRG @handle · branch `T02-006-meta-reader` · YYYY-MM-DD]`, then
-   `git commit -s -m "T02-006: [INPRG] claim (@handle)"` and `git push origin main`.
+   `git commit -s -m "T02-006: [INPRG] claim (@handle) [skip ci]"` and `git push origin main`.
    Push rejected + the line is now claimed by someone else → you lost the race: reset and pick another task.
 4. Work on branch `T02-006-meta-reader`, open a draft PR early (`T02-006: …`), tick `[x]` and remove the tag in the same PR.
 5. Giving up: `T02-006: [RELEASED] unclaim (reason)` restores `- [ ]`. Stale claims (7 days without pushes) may be released after a ping + 48 h.
