@@ -1,0 +1,153 @@
+name: release
+
+# Builds and packages the binaries (docs/RELEASING.md).
+#  - push of a tag `vX.Y.Z`: builds every platform and creates a DRAFT GitHub release.
+#  - pull request touching this workflow or the build profile: builds + packages on Linux and
+#    Windows only, so packaging is exercised before it matters. Creates nothing.
+#  - manual run: builds + packages every platform and keeps the archives as workflow artifacts.
+# A release is only ever published by a human, from the draft.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "release.toml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package:
+    name: package (${{ matrix.os }})
+    # macOS minutes are billed at 10x on private repos: macOS only for tags and manual runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","windows-latest","macos-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux system libraries (gamepad support needs libudev)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Work out the version and target
+        id: meta
+        run: |
+          workspace_version=$(cargo metadata --no-deps --format-version 1 --locked \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['packages'][0]['version'])")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [ "${version}" != "${workspace_version}" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match the workspace version ${workspace_version}"
+              exit 1
+            fi
+          else
+            version="${workspace_version}-dev.${GITHUB_SHA::7}"
+          fi
+          target=$(rustc -vV | sed -n 's/^host: //p')
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          echo "name=ss2rs-${version}-${target}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build
+        run: cargo build --profile dist --locked -p ss2-app -p ss2-server
+
+      - name: Stage exactly the files that ship (a fixed list, never a directory)
+        run: |
+          name="${{ steps.meta.outputs.name }}"
+          exe=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then exe=".exe"; fi
+          mkdir -p "dist/${name}"
+          cp "target/dist/ss2-app${exe}" "target/dist/ss2-server${exe}" "dist/${name}/"
+          cp LICENSE NOTICE README.md "dist/${name}/"
+          ls -l "dist/${name}"
+
+      - name: Smoke-test the packaged binary
+        run: |
+          name="${{ steps.meta.outputs.name }}"
+          exe=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then exe=".exe"; fi
+          "dist/${name}/ss2-server${exe}"
+          # The windowed app needs a display; only check that it starts and prints usage on bad flags.
+          # (It exits non-zero on a bad flag, and Actions runs bash with pipefail, so capture first.)
+          output=$("dist/${name}/ss2-app${exe}" --definitely-not-a-flag 2>&1 || true)
+          echo "${output}"
+          echo "${output}" | grep -qi usage
+
+      - name: Archive (tar.gz on Linux/macOS)
+        if: runner.os != 'Windows'
+        working-directory: dist
+        run: tar -czf "${{ steps.meta.outputs.name }}.tar.gz" "${{ steps.meta.outputs.name }}"
+
+      - name: Archive (zip on Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: dist
+        run: Compress-Archive -Path "${{ steps.meta.outputs.name }}" -DestinationPath "${{ steps.meta.outputs.name }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # Only for tag pushes. Creates a DRAFT release; publishing it is a manual decision.
+  draft-release:
+    name: draft release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum ss2rs-* > SHA256SUMS && cat SHA256SUMS
+      - name: Release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="${version}" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "No CHANGELOG.md section for ${version}; see the commit history." > notes.md
+          fi
+          printf '\nBinaries are unsigned until 1.0, so your OS may warn. No game data is included: point the app at your own install (SS2_DATA_DIR).\n' >> notes.md
+          cat notes.md
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "${GITHUB_REF_NAME}" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "${GITHUB_REF_NAME}" assets/* \
+            --draft ${prerelease} \
+            --title "SS2RS ${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md

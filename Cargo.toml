@@ -35,3 +35,10 @@ unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Profile for release archives (docs/RELEASING.md). Separate from `release` so everyday builds stay fast.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
