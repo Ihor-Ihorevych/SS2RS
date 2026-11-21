@@ -22,6 +22,11 @@ toml = "1"
 directories = "6"
 winit = "0.30"
 gilrs = "0.11"
+wgpu = "30"
+glyphon = "0.12"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "1"
+png = "0.18"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

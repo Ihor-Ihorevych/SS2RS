@@ -10,3 +10,16 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-ui = { path = "../ss2-ui" }
+wgpu.workspace = true
+glyphon.workspace = true
+bytemuck.workspace = true
+pollster.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ss2-core = { path = "../ss2-core" }
+png.workspace = true
