@@ -5,7 +5,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
 ## Repository & tooling
 - [x] **T00-001** · Workspace skeleton · `S` · `P0`
   Cargo workspace with empty crates from the design's crate map, `rust-toolchain.toml` (pinned stable), edition, `[workspace.dependencies]`, `[workspace.lints]`, MSRV policy. Done when: `cargo build --workspace` passes; every crate has `README` + doc comment owner.
-- [ ] **T00-002** · License & dependency policy · `S` · `P0` · 🟢
+- [~] **T00-002** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · License & dependency policy · `S` · `P0` · 🟢
   `LICENSE` (Apache-2.0, already in the repo), `NOTICE`, `license = "Apache-2.0"` in every crate, `deny.toml` (allow-list MIT/Apache/BSD/ISC/Zlib/MPL; deny GPL/AGPL unless owner approves), DCO bot config. Done when: `cargo deny check` is in CI.
 - [~] **T00-003** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · CI: build/test/lint · `M` · `P0`
   GitHub Actions: Win/Linux/macOS, `fmt`, `clippy -D warnings`, `test`, cache, nightly scheduled job. Done when: required checks block merges.
