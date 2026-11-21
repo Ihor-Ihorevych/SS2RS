@@ -40,3 +40,9 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [ ] **T10-024** · Android data-import wizard (SAF picker, progress, resume) — pairs with T03-007 · `M` · `PHASE 2`
 - [ ] **T10-025** · Safe-area/notch handling, portrait warning, minimum touch-target sizes · `M` · `PHASE 2`
 - [ ] **T10-022** · IME / on-screen keyboard for chat and names on Android · `M` · `PHASE 2`
+
+## Menu slice (PC, placeholder skin) — partial T10-001/T10-004/T10-005/T10-017 only; original-data skin remains T10-004/T10-033
+- [ ] **T10-030** · `NavInput`, UI geometry, `DrawList`, 1920×1080 virtual canvas fit (letterbox, 0×0-safe) · `M` · `P1`
+- [ ] **T10-031** · Menu model (Main/Options/Pause), focus navigation, settings toggles/sliders, command output · `M` · `P1` · Deps: T10-030
+- [ ] **T10-032** · Placeholder-skin layout, draw list and pointer input (hover/press/release rules) · `M` · `P1` · Deps: T10-031
+- [ ] **T10-033** · Menu skin and flow from original `.rsc`/`.tex`/`.fnt` data, replacing the placeholder skin · `L` · `P1` · Deps: T02-006, T02-007, T02-012, T02-023, T02-025, T01-036
