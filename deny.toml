@@ -6,7 +6,13 @@ all-features = false
 no-default-features = false
 
 [advisories]
-ignore = []
+# Each ignore needs a reason and a revisit condition.
+ignore = [
+    # `ttf-parser` is unmaintained (not a vulnerability). It is reached only through winit 0.30's
+    # Wayland client-side-decoration fallback (winit -> sctk-adwaita -> ab_glyph -> ttf-parser),
+    # which parses a bundled UI font. Revisit when winit moves off sctk-adwaita (winit 0.31+).
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser via winit Wayland CSD only; no safe upgrade" },
+]
 
 [licenses]
 # Project license is Apache-2.0; dependencies must be permissive. GPL/AGPL are NOT allowed
