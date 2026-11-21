@@ -15,7 +15,7 @@ The type table says what a class looks like; `OBJS` contains the instances. Each
 ```
 "OBJS"  u32 count                      (equal to the OBTY count)
 count × object record                  (in the same order as the OBTY entries)
-"EDOB"  u32 0  [extra data in 72 files] "METAEND "
+"EDOB"  u32 count  count × extra record  "METAEND "     (count is 0 in 9,090 files; see "The EDOB section")
 ```
 
 An **object record** is:
@@ -98,14 +98,20 @@ Marker usage measured in the 9,162 files that decode: `STAR` 165,678 · `DCON` 4
 `tools/re/walk_objects.py` implements these rules (read-only; `SS2_DATA_DIR`). On the retail install with all patches:
 
 - **9,090** files decode exactly to `EDOB`, `0`, `METAEND `.
-- **72** files (31 `.mdl`, 20 `.bmf`, 16 `.fnt`, 4 `.ans`, 1 `.skl`) decode exactly to an `EDOB` that is followed by a non-zero `u32` and extra data (see open questions).
+- **72** file entries (31 `.mdl`, 20 `.bmf`, 16 `.fnt`, 4 `.ans`, 1 `.skl`) have a non-zero count after `EDOB`; their extra records decode exactly (see "The EDOB section"; 60 distinct paths).
 - **107** files, all the `.wld` worlds, do not decode yet.
 - In files under 2 MB, 7,995 of 7,996 decode.
+
+## The `EDOB` section
+
+After the last object record comes the tag `EDOB`, a `u32 count`, and `count` **extra records**, then the footer `METAEND `. An extra record has the same encoding as an `OBJS` record: `u32 object id`, `u32 type id`, then the value of that type by the rules above. The ids of extra records are **not** in `OBTY` and never clash with it (checked). After the last extra record the cursor is exactly on `METAEND `.
+
+Evidence (`tools/re/edob_verify.py`): of **60 distinct non-world files** with a non-zero count (29 `.mdl`, 18 `.bmf`, 8 `.fnt`, 4 `.ans`, 1 `.skl`), **all 60** decode exactly to the footer. The records are mostly editor-side data (`CEditMesh`, `CPackedEditMesh`, `CEditFont`, `CEditSkeleton`, `CEditAnimation`, `CEditChannel`, `CEditEnvelope`, transfer maps, `CWeightVertexMap`, `CEdtDestructionEffect`), with some classes that look like game data (shader presets and graph modifiers, animation event holders, `CStaticTexture`, debris effects). Whether any main-section object of a `.mdl`/`.ans`/`.fnt` refers to an extra record was **not** checked; for `.bmf` it was (no surface material does; `bmf.md`). Worlds (`.wld`) are still open (T01-053).
 
 ## Open questions (follow-ups)
 
 - **Worlds (`.wld`, 107 files):** objects of world-only classes fail: `CEntryList` (a `CStaticStackArray<CSMEntry>` that meets zeros where `SSAR` is expected, in 11 files), and in the large worlds the cursor drifts by one word before an object header. Suspects: `CMetaHandle` and `Time`/state-manager members whose by-value encoding is not what the type table implies. → **T01-053**.
-- **Data after `EDOB` (72 files):** the `u32` following `EDOB` is non-zero; it looks like a count followed by entries or blobs (mesh/animation payload). → **T01-051**.
+- **Data after `EDOB`:** solved for the non-world files (see "The EDOB section"); the extra records of the 107 worlds depend on decoding the worlds first. → **T01-053**.
 - What the per-file `ADIM` blocks are for (fixed-array counts come from the type *name*; no other use was needed).
 - Meaning of the `kind` codes and `flags` words (T01-052) and of `INFO[0]`.
 - Whether `UUUU` (seen in 43 `.tex` files) is a payload marker.
