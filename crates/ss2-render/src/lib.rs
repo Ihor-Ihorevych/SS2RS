@@ -2,7 +2,9 @@
 
 mod batch;
 mod context;
+mod image_diff;
 mod text;
 
 pub use batch::*;
 pub use context::*;
+pub use image_diff::*;

@@ -70,7 +70,7 @@ impl Menu {
                     list.texts
                         .push(text(r.x + 24.0, label.to_string(), TextAlign::Left));
                     let pct = format!("{}%", (v * 100.0).round() as i32);
-                    list.texts.push(text(r.x + 250.0, pct, TextAlign::Center));
+                    list.texts.push(text(r.x + 225.0, pct, TextAlign::Center));
                     let track = Rect {
                         x: r.x + SLIDER_TRACK_X,
                         y: r.y + 32.0,
