@@ -1,0 +1,12 @@
+[package]
+name = "ss2-assets"
+description = "asset manager, loader registry and cooked cache (track T02)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.99"
+repository = "https://github.com/Ihor-Ihorevych/SS2RS"
+
+[workspace.dependencies]
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+directories = "6"
+winit = "0.30"
+gilrs = "0.11"
+wgpu = "30"
+glyphon = "0.12"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "1"
+png = "0.18"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

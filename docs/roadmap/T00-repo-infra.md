@@ -3,7 +3,7 @@
 Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyone can start in parallel.
 
 ## Repository & tooling
-- [~] **T00-001** [INPRG @Ihor-Ihorevych/agent · branch `m0-foundation` · 2026-11-21] · Workspace skeleton · `S` · `P0`
+- [x] **T00-001** · Workspace skeleton · `S` · `P0`
   Cargo workspace with empty crates from the design's crate map, `rust-toolchain.toml` (pinned stable), edition, `[workspace.dependencies]`, `[workspace.lints]`, MSRV policy. Done when: `cargo build --workspace` passes; every crate has `README` + doc comment owner.
 - [ ] **T00-002** · License & dependency policy · `S` · `P0` · 🟢
   `LICENSE` (Apache-2.0, already in the repo), `NOTICE`, `license = "Apache-2.0"` in every crate, `deny.toml` (allow-list MIT/Apache/BSD/ISC/Zlib/MPL; deny GPL/AGPL unless owner approves), DCO bot config. Done when: `cargo deny check` is in CI.
@@ -19,11 +19,11 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Workflow from roadmap §3/§10, commit style, DCO how-to, label set (`track:T04`, `size:M`, `prio:P0`, `spike`, `spec`, `good-first`).
 - [ ] **T00-008** · Roadmap → GitHub issues sync · `M` · `P1`
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
-- [~] **T00-009** [INPRG @Ihor-Ihorevych/agent · branch `m0-foundation` · 2026-11-21] · `ss2-testkit` data-gated tests · `S` · `P0`
+- [x] **T00-009** · `ss2-testkit` data-gated tests · `S` · `P0`
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
 - [ ] **T00-010** · Synthetic fixtures policy & generators · `S` · `P1`
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
-- [~] **T00-011** [INPRG @Ihor-Ihorevych/agent · branch `m0-foundation` · 2026-11-21] · Error/logging conventions in `ss2-core` · `S` · `P0`
+- [x] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
 - [ ] **T00-012** · Coding standards & sim-safe rules · `S` · `P0`
   `unsafe` policy, naming, module layout, determinism rules for sim-path crates (+ clippy `disallowed_types` for `HashMap`/`Instant` in them).

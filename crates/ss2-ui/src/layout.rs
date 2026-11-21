@@ -1,0 +1,64 @@
+//! Placeholder-skin layout in canvas units (1920x1080).
+
+use crate::geometry::Rect;
+use crate::menu::Item;
+
+/// Width of a button/toggle/slider row.
+pub const ITEM_W: f32 = 640.0;
+/// Height of a button/toggle/slider row.
+pub const ITEM_H: f32 = 72.0;
+/// Vertical gap between rows.
+pub const GAP: f32 = 16.0;
+/// Height of a spacer row.
+pub const SPACER_H: f32 = 36.0;
+/// Top of the first row.
+pub const TOP: f32 = 320.0;
+/// Slider track offset from the row's left edge.
+pub const SLIDER_TRACK_X: f32 = 300.0;
+/// Slider track width.
+pub const SLIDER_TRACK_W: f32 = 300.0;
+
+/// One rectangle per item (spacers included), centered horizontally on the canvas.
+pub(crate) fn item_rects(items: &[Item]) -> Vec<Rect> {
+    let x = (crate::geometry::CANVAS_W - ITEM_W) / 2.0;
+    let mut y = TOP;
+    items
+        .iter()
+        .map(|item| {
+            let h = if matches!(item, Item::Spacer) {
+                SPACER_H
+            } else {
+                ITEM_H
+            };
+            let r = Rect { x, y, w: ITEM_W, h };
+            y += h + GAP;
+            r
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::menu::{ScreenId, items};
+
+    #[test]
+    fn button_rects_are_centered_640_wide() {
+        let r = item_rects(items(ScreenId::Main));
+        assert_eq!(r.len(), 3);
+        assert_eq!((r[0].x, r[0].w, r[0].h), (640.0, 640.0, 72.0));
+        assert_eq!(r[0].y, 320.0);
+    }
+
+    #[test]
+    fn rects_do_not_overlap_and_follow_gap() {
+        let list = items(ScreenId::Options);
+        let r = item_rects(list);
+        assert_eq!(r.len(), list.len());
+        for w in r.windows(2) {
+            let gap = w[1].y - (w[0].y + w[0].h);
+            assert!((gap - 16.0).abs() < 1e-3, "gap {gap}");
+        }
+        assert_eq!(r[5].h, 36.0, "spacer height");
+    }
+}

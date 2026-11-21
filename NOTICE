@@ -1,0 +1,14 @@
+SS2RS
+Copyright 2026 the SS2RS contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+SS2RS is an independent, open-source engine reimplementation written from observed
+behavior and original code. It is not affiliated with, endorsed by, or sponsored by
+Croteam or Devolver Digital. It contains no Croteam assets, binaries or source code;
+players must supply their own legally obtained copy of Serious Sam 2.
+"Serious Sam" and "Serious Engine" are trademarks of their respective owners.
+
+Bundled font: Inter Regular v4.1 (crates/ss2-render/assets/Inter-Regular.ttf),
+Copyright (c) 2016 The Inter Project Authors, licensed under the SIL Open Font License 1.1
+(see crates/ss2-render/assets/OFL.txt). Used only for the placeholder UI.

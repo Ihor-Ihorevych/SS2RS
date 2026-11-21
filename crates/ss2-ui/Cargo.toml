@@ -1,0 +1,15 @@
+[package]
+name = "ss2-ui"
+description = "UI framework, HUD, menus and localization (track T10)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
