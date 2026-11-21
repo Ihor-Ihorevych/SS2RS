@@ -3,6 +3,7 @@
 pub mod error;
 pub mod input;
 pub mod logging;
+pub mod math;
 pub mod settings;
 
 pub use error::{Error, Result};

@@ -800,6 +800,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.34.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "627003914c6057c9c8f0832ee4f870b5a4f599d0cfa83f4072675114860cd0ff"
+
+[[package]]
 name = "glow"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2238,6 +2244,7 @@ name = "ss2-core"
 version = "0.0.0"
 dependencies = [
  "directories",
+ "glam",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
@@ -2284,6 +2291,14 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
+]
+
+[[package]]
+name = "ss2-render-api"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-ui",
 ]
 
 [[package]]
