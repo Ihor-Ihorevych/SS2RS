@@ -35,7 +35,8 @@ will start.** Before writing any code or spec for a roadmap task (`docs/roadmap/
 7. **Finish:** in the same PR change the line to `- [x]` and **remove** the `[INPRG …]` tag.
    **Give up / blocked:** push `T02-006: [RELEASED] unclaim (<reason>)` which restores `- [ ]` and removes the tag;
    leave notes on the issue or in the PR.
-8. **Stale claims:** an `[INPRG]` task whose branch/PR has no push for 7 days may be pinged; after 48 more hours
+8. **Stale claims** (`cargo xtask claims` lists them; a weekly job posts the same table, and
+   `cargo xtask check-claims` fails CI on contradictory or malformed claim lines): an `[INPRG]` task whose branch/PR has no push for 7 days may be pinged; after 48 more hours
    anyone may release it with a `[RELEASED]` commit saying `stale`.
 
 Rules of thumb: **fetch before every new task, and again before opening a PR** (merge or rebase `origin/main` into your branch so you build on the latest claims, contracts and specs); one claim at a time per agent unless the tasks are tiny and adjacent; never claim what you do
@@ -63,6 +64,8 @@ cargo xtask guard            # proprietary-content check (add --staged before co
 cargo xtask doctor           # check your tools against docs/DEV_TOOLS.md
 cargo xtask claim T02-006    # §1 steps 1-5 in one go (see below)
 cargo xtask release T02-006 --reason "blocked on T01-012"   # give a claim back (§1 step 7)
+cargo xtask check-claims     # are the roadmap claims consistent? (CI runs this on every PR)
+cargo xtask claims           # who claimed what, how long idle, which claims are stale
 cargo xtask roadmap-sync     # dry run: roadmap -> GitHub issues
 grep -rn "INPRG" docs/roadmap/   # who is working on what right now
 ```
@@ -73,4 +76,5 @@ grep -rn "INPRG" docs/roadmap/   # who is working on what right now
 commit and looks again, so it **never overwrites another claim**. Your handle defaults to the logged-in
 `gh` user (`--who` overrides it). It then prints the `git switch -c <branch>` to run. Exit status:
 `0` claimed, `3` not available (taken, blocked, finished, or you lost the race: pick another task),
-`2` real error. `--dry-run` previews from any branch. Doing the steps by hand (above) is still fine.
+`2` real error. `--dry-run` previews from any branch. Use the branch name it prints (it is recorded
+in the claim, and the stale report looks for pushes to exactly that branch). Doing the steps by hand (above) is still fine.
