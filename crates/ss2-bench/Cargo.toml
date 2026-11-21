@@ -1,0 +1,43 @@
+[package]
+name = "ss2-bench"
+description = "benchmark harness (criterion) and shared benchmark fixtures; see docs/PERF_BUDGETS.md (track T00/T12)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# Fixtures only; the benchmarks are the [[bench]] targets below.
+bench = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-vfs = { path = "../ss2-vfs" }
+ss2-assets = { path = "../ss2-assets" }
+ss2-render-api = { path = "../ss2-render-api" }
+ss2-platform-api = { path = "../ss2-platform-api" }
+ss2-audio-api = { path = "../ss2-audio-api" }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "assets"
+harness = false
+
+[[bench]]
+name = "render_extract"
+harness = false
+
+[[bench]]
+name = "platform"
+harness = false
+
+[[bench]]
+name = "audio"
+harness = false

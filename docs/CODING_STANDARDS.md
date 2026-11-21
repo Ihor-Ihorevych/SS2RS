@@ -20,6 +20,10 @@ Use `tracing` (`info!`, `warn!`, …) with the crate name as the target. Binarie
 - Public items are documented. Tests live next to the code (`#[cfg(test)]`) or in `tests/`.
 - Keep GPU/window/OS types out of headless crates (`ss2-ui`, `ss2-core`, parsers, simulation).
 
+## Performance
+
+Hot paths (anything a frame or a tick runs many times) get a micro-benchmark in `crates/ss2-bench`; budgets, how to run and compare benchmarks, and the regression policy are in [`PERF_BUDGETS.md`](PERF_BUDGETS.md). Do not optimize without a measurement, and do not merge a change that makes a tracked benchmark more than 10 % slower without saying why.
+
 ## Sim-safe
 
 `ss2-sim`, `ss2-physics` and `ss2-net` (and movement code in `ss2-game` that feeds prediction) must behave identically on every machine and every run, because the server and clients re-run the same movement code and compare results.
