@@ -3,6 +3,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use xtask::doctor;
 use xtask::guard::{self, Mode};
 use xtask::roadmap;
 
@@ -20,6 +21,12 @@ enum Command {
         /// Check only files staged for the next commit (used by the pre-commit hook).
         #[arg(long)]
         staged: bool,
+    },
+    /// Check this machine against docs/DEV_TOOLS.md; exits 1 only if a required tool is missing.
+    Doctor {
+        /// Also require the tools of a track (T01, T02, T04, T05, T06, T00, T12); repeatable.
+        #[arg(long = "role", value_name = "TRACK")]
+        roles: Vec<String>,
     },
     /// Mirror docs/roadmap/*.md as GitHub issues (dry run unless --apply).
     RoadmapSync {
@@ -40,6 +47,25 @@ fn main() -> ExitCode {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("roadmap-sync: {e:#}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Command::Doctor { roles } => {
+            let result = guard::repo_root().map(|root| {
+                doctor::run_checks(&doctor::SystemProbe, std::path::Path::new(&root), &roles)
+            });
+            match result {
+                Ok(report) => {
+                    print!("{}", doctor::render(&report));
+                    if report.has_blocking_problem() {
+                        ExitCode::from(1)
+                    } else {
+                        ExitCode::SUCCESS
+                    }
+                }
+                Err(e) => {
+                    eprintln!("doctor: {e:#}");
                     ExitCode::from(2)
                 }
             }
