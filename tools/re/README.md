@@ -17,3 +17,10 @@ python -I tools/re/tex_verify.py "C:\path	o\Serious Sam 2"       # size checks f
 ```
 
 `ctse_values.py` is the value decoder these scripts share (objects -> Python values).
+
+Mesh and extra-record evidence (docs/re/bmf.md, ctsemeta-objects.md):
+
+```
+python -I tools/re/bmf_verify.py "C:\path	o\Serious Sam 2"    # per-surface layout checks for every .bmf
+python -I tools/re/edob_verify.py "C:\path	o\Serious Sam 2"   # the EDOB extra-record rule for every non-world file
+```

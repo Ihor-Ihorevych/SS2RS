@@ -30,7 +30,7 @@ EXOB   u32 count, count × 16-byte entry
 OBTY   u32 count, count × 8-byte entry
 EDTY   u32 count, count × 8-byte entry
 OBJS   u32 count, … object data …
-EDOB   u32 0   [+ extra data in 179 files]
+EDOB   u32 count, then count extra object records   (count 0 in most files)
 "METAEND "                         (8 bytes, the last bytes of every file)
 ```
 
@@ -99,7 +99,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 
 ### OBJS, EDOB, footer
 
-`OBJS` is followed by a `u32` object count and then the object data (**open**, see below). `EDOB` is followed by `u32 0`. Every file ends with the 8 ASCII bytes `METAEND ` (including a trailing space). In **9,090 files** the last 16 bytes are exactly `EDOB 00 00 00 00 METAEND `; in **179 files** (all 107 worlds, 31 models, 20 meshes, 16 fonts, 4 animation sets, 1 skeleton) more data follows `EDOB` before `METAEND ` — large payload blobs (e.g. mesh/world data). Their layout is open.
+`OBJS` is followed by a `u32` object count and then the object data (**open**, see below). `EDOB` is followed by `u32 0`. Every file ends with the 8 ASCII bytes `METAEND ` (including a trailing space). In **9,090 files** the last 16 bytes are exactly `EDOB 00 00 00 00 METAEND `; in **179 files** (all 107 worlds, 31 models, 20 meshes, 16 fonts, 4 animation sets, 1 skeleton) more data follows `EDOB` before `METAEND `. For the non-world files this is a list of extra object records, specified in `ctsemeta-objects.md` ("The EDOB section"); for the worlds it is still open.
 
 ## Invariants (what a reader must check / may rely on)
 
@@ -128,6 +128,6 @@ Tail of the same file: `45 44 4f 42 00 00 00 00 4d 45 54 41 45 4e 44 20` = `EDOB
 ## Open questions
 
 - Encoding of **object data** inside `OBJS`: **specified in `ctsemeta-objects.md`** (9,162 of 9,269 files decode to the byte; 107 worlds still open, T01-053).
-- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; the data after `EDOB` in 72 non-world files (the `u32` after `EDOB` is non-zero there) and in the 107 worlds → T01-051/T01-053.
+- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; the data after `EDOB` in the 107 worlds → T01-053 (the non-world files are solved).
 - Formats 4–7 (old `.tex` only) → T01-051.
 - Whether `IDNT` ids are referenced from object data and how.

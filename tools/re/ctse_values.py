@@ -96,6 +96,19 @@ class TreeDec:
             out[oid], pos = self.val(tid, pos + 8)
         return out, pos
 
+    def extra_objects(self, edob_pos):
+        """Records after `EDOB`: u32 count, then count x (object id, type id, value).
+
+        Same encoding as `OBJS`; the ids do not occur in OBTY. Returns ({id: value}, end position);
+        a well-formed file ends exactly on the 8-byte `METAEND ` footer.
+        """
+        d = self.d
+        count = u32(d, edob_pos + 4); pos = edob_pos + 8; out = {}
+        for _ in range(count):
+            oid, tid = u32(d, pos), u32(d, pos + 4)
+            out[oid], pos = self.val(tid, pos + 8)
+        return out, pos
+
 
 def _natural(name):
     lower = name.lower()
