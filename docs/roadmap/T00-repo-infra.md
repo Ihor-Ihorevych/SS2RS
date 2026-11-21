@@ -52,3 +52,4 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-031** · Final project name decision (SS2RS is a working title) and rename of crates/docs if it changes; trademark review of the name (split from T00-023, which delivered the affiliation disclaimers in README and NOTICE) · `S` · `P1`
 - [x] **T00-033** · Minimal CTSEMETA writer for fixtures in `ss2_testkit::fixtures` (split from T00-010, which delivered the ZIP builder and fixture policy) · `S` · `P1` · Deps: T01-004, T01-005
 - [x] **T00-032** · CI cost: docs-only pushes to `main` skip CI (`paths-ignore` on the push trigger; pull requests unfiltered) and claim commits end with `[skip ci]` · `S` · `P1` · 🟢
+- [x] **T00-034** · Standing rule: an agent merges its own PR as soon as all checks are green (merge commit, never squash; never red/pending/conflicting; never others' PRs) · `S` · `P1` · 🟢

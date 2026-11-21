@@ -26,6 +26,7 @@ Work comes from the roadmap files in `docs/roadmap/`. **Claim before you start**
 - Start commit and PR titles with the task ID: `T02-006: CTSEMETA container reader`.
 - Keep PRs small (about 400 lines) and focused on one task.
 - Fill in the PR template, including the clean-room provenance statement ([`CLEANROOM.md`](CLEANROOM.md)).
+- **Merge your own PR as soon as every check is green** (merge commit, never squash); never merge red, pending or conflicting PRs, nor someone else's PR. Details: [`AGENTS.md`](AGENTS.md) §1b.
 
 ## Rules of the road
 
