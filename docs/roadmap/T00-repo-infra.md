@@ -13,7 +13,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Optional job: `cargo check` for `aarch64-linux-android` on portable crates only, so PC code doesn't accumulate desktop-only assumptions before the Phase 2 port. Failures are warnings, not merge blockers, until M8. Done when: job runs nightly.
 - [ ] **T00-005** · Clean-room & provenance policy · `S` · `P0`
   `CLEANROOM.md`: roles (spec author vs implementer), what may be read (specs, public docs, own measurements; SS1 for concepts only), what must never be committed. PR template checkbox + provenance field; `docs/re/` CODEOWNERS requiring RE-team review. Done when: policy merged and linked from CONTRIBUTING.
-- [ ] **T00-006** · Proprietary-content guard · `S` · `P0` · 🟢
+- [~] **T00-006** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Proprietary-content guard · `S` · `P0` · 🟢
   `.gitignore` for `Serious Sam 2/`, `*.gro`, `*.dll`, `*.exe`, Ghidra projects; CI script rejecting added files with proprietary extensions or >5 MB blobs; secrets scan. Done when: negative test PR is rejected.
 - [ ] **T00-007** · CONTRIBUTING & labels · `S` · `P0` · 🟢
   Workflow from roadmap §3/§10, commit style, DCO how-to, label set (`track:T04`, `size:M`, `prio:P0`, `spike`, `spec`, `good-first`).
