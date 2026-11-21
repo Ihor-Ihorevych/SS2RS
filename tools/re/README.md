@@ -36,3 +36,9 @@ Model evidence (docs/re/mdl.md):
 ```
 python -I tools/re/mdl_verify.py "C:\path\to\Serious Sam 2"    # structure, embedded meshes, palettes, children, references (about 5 minutes)
 ```
+
+Animation evidence (docs/re/ans.md):
+
+```
+python -I tools/re/ans_verify.py "C:\path\to\Serious Sam 2"    # keyframe rules for every envelope, bone ids, events (about 5 minutes)
+```
