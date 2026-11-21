@@ -19,7 +19,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-006** · SPEC `.tex` textures: pixel formats, mips, cube/volume, flags, sRGB, sampler state, animation (if any) · `M` · `P0` · Deps: T01-005
 - [~] **T01-007** [INPRG @Ihor-Ihorevych/agent · branch `re-bmf` · 2026-11-21] · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
 - [ ] **T01-008** · SPEC `.mdl` models: meshes, material bindings, LODs, attachments, collision/hit volumes, references to `.skl/.ans/.mtr` · `L` · `P0`
-- [ ] **T01-009** · SPEC `.skl` skeletons: bone hierarchy, bind pose, bone flags · `M` · `P0`
+- [~] **T01-009** [INPRG @Ihor-Ihorevych/agent · branch `re-skl` · 2026-11-21] · SPEC `.skl` skeletons: bone hierarchy, bind pose, bone flags · `M` · `P0`
 - [ ] **T01-010** · SPEC `.ans` animation sets: tracks, keyframe/compression format, events/notifies, root motion, blending hints · `L` · `P0`
 - [ ] **T01-011** · SPEC `.mtr` material presets ("ShaderPresets"): parameters, textures slots, shader module selection · `M` · `P0`
 - [ ] **T01-012** · SPEC `.wld` world: structure of geometry, lighting data, visibility/sectors, entity records, terrain?, navigation data, embedded vs referenced resources · `XL` → split by discovery (e.g. T01-012a geometry, b lighting, c visibility, d entities, e nav) · `P0` · **highest risk**
