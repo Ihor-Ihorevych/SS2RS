@@ -6,3 +6,6 @@ pub mod logging;
 pub mod settings;
 
 pub use error::{Error, Result};
+
+#[cfg(test)]
+mod settings_persistence_tests;
