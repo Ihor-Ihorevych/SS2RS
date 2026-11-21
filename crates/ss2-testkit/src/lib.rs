@@ -3,6 +3,8 @@
 //! Plain CI never has game data, so such tests call [`require_game_data!`], which skips the test
 //! with a printed reason when `SS2_DATA_DIR` is missing or wrong.
 
+pub mod fixtures;
+
 use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
