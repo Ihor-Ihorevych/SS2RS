@@ -25,7 +25,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
 - [x] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
-- [ ] **T00-012** · Coding standards & sim-safe rules · `S` · `P0`
+- [~] **T00-012** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Coding standards & sim-safe rules · `S` · `P0`
   `unsafe` policy, naming, module layout, determinism rules for sim-path crates (+ clippy `disallowed_types` for `HashMap`/`Instant` in them).
 - [ ] **T00-013** · RFC process · `S` · `P0` · 🟢
   `docs/rfcs/0000-template.md`, numbering, review SLA (3 working days), who approves (crate owner + 1).
