@@ -8,7 +8,7 @@ Read first: `docs/superpowers/specs/2026-11-21-ss2rs-design.md`, `docs/roadmap/R
 Many agents and people work in parallel. **A task nobody can see you working on is a task someone else
 will start.** Before writing any code or spec for a roadmap task (`docs/roadmap/T*.md`):
 
-1. `git pull --rebase origin main`, then read the claims: `grep -rn "INPRG" docs/roadmap/`
+1. **Always fetch first — before every new task, no exceptions.** Run `git fetch origin` (then `git pull --rebase origin main`) *before you pick a task, before you claim it, and before you start work on it* — even if you finished another task five minutes ago. Claims only exist for you once you have fetched; working from a stale checkout is exactly how two agents end up taking the same task. Then read the claims: `grep -rn "INPRG" docs/roadmap/`
 2. Pick a task that is `- [ ]` (unclaimed), whose **Deps** are all `- [x]` (or have merged stubs/mocks), and
    whose size is not `XL` (split XL tasks first: append new IDs, never renumber).
    `PHASE 2` tasks are off-limits until milestone M8.
@@ -38,7 +38,7 @@ will start.** Before writing any code or spec for a roadmap task (`docs/roadmap/
 8. **Stale claims:** an `[INPRG]` task whose branch/PR has no push for 7 days may be pinged; after 48 more hours
    anyone may release it with a `[RELEASED]` commit saying `stale`.
 
-Rules of thumb: one claim at a time per agent unless the tasks are tiny and adjacent; never claim what you do
+Rules of thumb: **fetch before every new task, and again before opening a PR** (merge or rebase `origin/main` into your branch so you build on the latest claims, contracts and specs); one claim at a time per agent unless the tasks are tiny and adjacent; never claim what you do
 not intend to start today; never mark `[x]` without a merged PR.
 
 ## 2. Hard rules (violations get the PR rejected)
