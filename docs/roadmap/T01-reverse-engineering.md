@@ -11,7 +11,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 ## Setup
 - [ ] **T01-001** · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
 - [ ] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
-- [ ] **T01-003** · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
+- [~] **T01-003** [INPRG @Ihor-Ihorevych/agent · branch `re-ctsemeta` · 2026-11-21] · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
 ## Container & data formats
 - [ ] **T01-004** · SPEC `CTSEMETA` container: header, `$Version` string, chunk tags (`INFO RFIL IDNT EXTY INTY DTTY …`), sizes/endianness/alignment, compression?, string tables, versioning across 2.062 patch levels · `L` · `P0` · Deps: T01-001
