@@ -3624,6 +3624,7 @@ dependencies = [
  "anyhow",
  "clap",
  "regex",
+ "ss2-testkit",
 ]
 
 [[package]]

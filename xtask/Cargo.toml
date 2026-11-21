@@ -12,6 +12,7 @@ publish = false
 anyhow.workspace = true
 clap.workspace = true
 regex.workspace = true
+ss2-testkit = { path = "../crates/ss2-testkit" }
 
 [lints]
 workspace = true

@@ -2,7 +2,7 @@
 
 The tools every contributor is expected to have, by role. Keep this file the single source of truth:
 changing a required tool means a PR to this file (and to CI if CI uses it). Nothing here is vendored
-in the repo. Run `cargo xtask doctor` (task T00-027) to check your machine.
+in the repo. Run `cargo xtask doctor` to check your machine against this list (`--role T06` also requires that track's tools; it exits 1 only when a required tool is missing, everything else is a warning with an install hint).
 
 Legend: **Required** = you can't build/test/contribute without it · **Role** = required for that
 track's work · **Optional** = nice to have.
