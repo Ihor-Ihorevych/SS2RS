@@ -43,4 +43,6 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-022** · Code of conduct, security policy, community channels (chat, forum) · `S` · `P1` · 🟢
 - [ ] **T00-023** · Naming/branding & trademark disclaimer ("not affiliated with Croteam/Devolver"), logo-free repo · `S` · `P1`
 - [ ] **T00-024** · Dependency update bot & vulnerability alerts (Dependabot/renovate, `cargo audit`) · `S` · `P2` · 🟢
+- [ ] **T00-026** · Developer tools list `docs/DEV_TOOLS.md` (required/recommended/by-track: Git+gh, rustup, MSVC/C toolchain, cargo-deny, Ghidra+JDK, ImHex, cargo-fuzz, RenderDoc, naga-cli, FFmpeg, mdbook, nextest, llvm-cov, …) linked from CONTRIBUTING and README · `S` · `P0` · 🟢
+- [ ] **T00-027** · `cargo xtask doctor`: checks the contributor's machine against `docs/DEV_TOOLS.md` (required vs role tools, versions, `SS2_DATA_DIR`, `core.hooksPath`), prints install hints, exit 1 only for missing *required* tools · `M` · `P1` · Deps: T00-026
 - [ ] **T00-025** · Crate publishing policy (which crates are libraries on crates.io, name reservation) · `S` · `P3`

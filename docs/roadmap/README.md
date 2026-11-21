@@ -91,7 +91,7 @@ Only the portability guard rails (design §8) apply before then.
 ## 6. Waves — what can start immediately (no one waits for anyone)
 
 **Wave 0 — day 1, zero dependencies** (assign these first):
-- T00: 001–013, 019, 020, 022, 023
+- T00: 001–013, 019, 020, 022, 023, 026 (tools list: everyone installs the same toolset first)
 - T01: 001–005, 020 (survey), 021 (RTTI recovery), 023 (physics middleware ID), 038, 039
 - T02: 001–005 (ZIP/VFS doesn't need RE), 030 (fuzz harness skeleton)
 - T03: 001–003, 005, 012, 013, 014, 018, 019

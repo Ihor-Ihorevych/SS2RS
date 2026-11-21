@@ -173,11 +173,12 @@
 
 **Files (all new):**
 `README.md`, `CLEANROOM.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/task.md`, `bug.md`, `parity.md`, `docs/rfcs/0000-template.md`, `docs/CODING_STANDARDS.md`, `docs/re/README.md`
+(`docs/DEV_TOOLS.md` already exists — T00-026, written with the roadmap update; this task only links to it.)
 
 **Interfaces / required content (the implementer writes the prose):**
-- `README.md`: what the project is, status "pre-alpha, nothing playable", you need your own legal copy of Serious Sam 2, trademark/affiliation disclaimer (no Croteam assets, not endorsed), links to design doc, roadmap, CONTRIBUTING.
+- `README.md`: what the project is, status "pre-alpha, nothing playable", you need your own legal copy of Serious Sam 2, trademark/affiliation disclaimer (no Croteam assets, not endorsed), links to design doc, roadmap, CONTRIBUTING, `docs/DEV_TOOLS.md`.
 - `CLEANROOM.md`: two roles (**spec author** reads binaries/Ghidra and writes `docs/re/*.md`; **implementer** writes Rust from specs and public docs only); allowed sources (specs, our own measurements, public docs, SS1 for concepts only); forbidden (copying SS1 or decompiler output, committing game files or Ghidra projects); PR provenance statement wording; what to do when unsure (stop, open an issue).
-- `CONTRIBUTING.md`: setup (`rustup` picks the pinned toolchain; `git config core.hooksPath .githooks`), branch naming `T02-006-short-name`, PR title `T02-006: …`, `git commit -s` DCO explanation, roadmap §3 workflow rules and §4 Definition of Done verbatim, label set (`track:Txx`, `size:*`, `prio:*`, `phase-2`, `spike`, `spec`, `good-first`), how to claim a task, how to run data-gated tests (`SS2_DATA_DIR`).
+- `CONTRIBUTING.md`: setup (install the tools listed in `docs/DEV_TOOLS.md` — link it prominently, state that everyone uses that toolset; `rustup` picks the pinned toolchain; `git config core.hooksPath .githooks`), branch naming `T02-006-short-name`, PR title `T02-006: …`, `git commit -s` DCO explanation, roadmap §3 workflow rules and §4 Definition of Done verbatim, label set (`track:Txx`, `size:*`, `prio:*`, `phase-2`, `spike`, `spec`, `good-first`), how to claim a task, how to run data-gated tests (`SS2_DATA_DIR`).
 - `CODE_OF_CONDUCT.md`: Contributor Covenant 2.1 text from the official source; **enforcement contact = GitHub private reporting / issue to maintainers; do not put any personal email in the repo** (owner may add one later).
 - `SECURITY.md`: report via GitHub private vulnerability reporting; scope note (parsers handle untrusted game/mod files; netcode handles untrusted peers).
 - `CODEOWNERS`: `* @Ihor-Ihorevych` and `/docs/re/ @Ihor-Ihorevych` (placeholders until track owners exist; comment says so).
