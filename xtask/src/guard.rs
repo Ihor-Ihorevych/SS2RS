@@ -144,6 +144,15 @@ fn git(root: Option<&str>, args: &[&str]) -> anyhow::Result<Vec<u8>> {
     Ok(output.stdout)
 }
 
+/// The top-level directory of the repository containing the current directory.
+pub fn repo_root() -> anyhow::Result<String> {
+    Ok(
+        String::from_utf8(git(None, &["rev-parse", "--show-toplevel"])?)?
+            .trim()
+            .to_string(),
+    )
+}
+
 /// Check the repository containing the current directory.
 pub fn run(mode: Mode) -> anyhow::Result<Vec<Violation>> {
     let root = String::from_utf8(git(None, &["rev-parse", "--show-toplevel"])?)?
