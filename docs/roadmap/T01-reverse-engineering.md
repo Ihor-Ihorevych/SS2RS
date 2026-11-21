@@ -20,7 +20,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-007** · SPEC `.bmf` binary meshes: vertex layouts, index formats, LOD, bounds, morph/tangents · `L` · `P0`
 - [~] **T01-008** [INPRG @Ihor-Ihorevych/agent · branch `re-mdl` · 2026-11-21] · SPEC `.mdl` models: meshes, material bindings, LODs, attachments, collision/hit volumes, references to `.skl/.ans/.mtr` · `L` · `P0`
 - [x] **T01-009** · SPEC `.skl` skeletons: bone hierarchy, bind pose, bone flags · `M` · `P0`
-- [ ] **T01-010** · SPEC `.ans` animation sets: tracks, keyframe/compression format, events/notifies, root motion, blending hints · `L` · `P0`
+- [~] **T01-010** [INPRG @Ihor-Ihorevych/agent · branch `re-ans` · 2026-11-21] · SPEC `.ans` animation sets: tracks, keyframe/compression format, events/notifies, root motion, blending hints · `L` · `P0`
 - [ ] **T01-011** · SPEC `.mtr` material presets ("ShaderPresets"): parameters, textures slots, shader module selection · `M` · `P0`
 - [ ] **T01-012** · SPEC `.wld` world: structure of geometry, lighting data, visibility/sectors, entity records, terrain?, navigation data, embedded vs referenced resources · `XL` → split by discovery (e.g. T01-012a geometry, b lighting, c visibility, d entities, e nav) · `P0` · **highest risk**
 - [ ] **T01-013** · SPEC `.mat` physical materials & `.scs` sound collections (impact/footstep mapping) · `M` · `P1`
