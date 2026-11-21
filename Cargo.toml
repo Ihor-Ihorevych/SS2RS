@@ -27,6 +27,7 @@ glyphon = "0.12"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "1"
 png = "0.18"
+glam = "0.34"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
