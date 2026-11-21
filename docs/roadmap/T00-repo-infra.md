@@ -17,7 +17,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   `.gitignore` for `Serious Sam 2/`, `*.gro`, `*.dll`, `*.exe`, Ghidra projects; CI script rejecting added files with proprietary extensions or >5 MB blobs; secrets scan. Done when: negative test PR is rejected.
 - [ ] **T00-007** · CONTRIBUTING & labels · `S` · `P0` · 🟢
   Workflow from roadmap §3/§10, commit style, DCO how-to, label set (`track:T04`, `size:M`, `prio:P0`, `spike`, `spec`, `good-first`).
-- [ ] **T00-008** · Roadmap → GitHub issues sync · `M` · `P1`
+- [~] **T00-008** [INPRG @Ihor-Ihorevych/agent · branch `m0-ci` · 2026-11-21] · Roadmap → GitHub issues sync · `M` · `P1`
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
 - [x] **T00-009** · `ss2-testkit` data-gated tests · `S` · `P0`
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
