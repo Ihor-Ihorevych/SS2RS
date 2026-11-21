@@ -21,7 +21,7 @@ Owner crates: workspace root, `ss2-core`, `ss2-testkit`. Goal: **M0** — everyo
   Script (`tools/roadmap-sync`) that parses these markdown files and creates/updates issues by ID, idempotently; reflects checkbox state. Done when: dry-run diff + live run on a scratch repo.
 - [x] **T00-009** · `ss2-testkit` data-gated tests · `S` · `P0`
   `require_game_data!()`, `game_data_dir()`, `SS2_DATA_DIR`, skip-with-message semantics, helpers to open the VFS once per test binary. Done when: example test skips on CI, runs locally.
-- [ ] **T00-010** · Synthetic fixtures policy & generators · `S` · `P1`
+- [~] **T00-010** [INPRG @lxstyo · branch `T00-010-fixtures` · 2026-11-21] · Synthetic fixtures policy & generators · `S` · `P1`
   Folder `testdata/` with license-clean tiny hand-made files; builder utilities (write minimal CTSEMETA/zip) so parser tests don't need real data.
 - [x] **T00-011** · Error/logging conventions in `ss2-core` · `S` · `P0`
   `tracing` setup, `thiserror` error style, `Result` aliases, panic policy (no panics on bad input), log targets per crate.
