@@ -73,8 +73,20 @@ jobs:
           done
           exit $fail
 
+  guard:
+    # Proprietary game content must never be tracked (CLEANROOM.md, cargo xtask guard).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo xtask guard
+
   secrets:
     runs-on: ubuntu-latest
+    # gitleaks lists the pull request's commits, which needs pull-requests: read.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:

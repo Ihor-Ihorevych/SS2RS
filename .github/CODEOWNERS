@@ -1,0 +1,7 @@
+# Placeholders until track owners exist. Replace with real owners per crate/track as the team
+# grows (docs/roadmap/README.md §3, rule 1: one owner per crate).
+*                @Ihor-Ihorevych
+/docs/re/        @Ihor-Ihorevych
+/CLEANROOM.md    @Ihor-Ihorevych
+/deny.toml       @Ihor-Ihorevych
+/.github/        @Ihor-Ihorevych
