@@ -1,0 +1,20 @@
+[book]
+title = "SS2RS"
+description = "Open-source Rust engine that plays Serious Sam 2 from the player's own data"
+language = "en"
+# The book *is* the docs/ folder: pages are the existing markdown files, listed in SUMMARY.md.
+src = "."
+
+[build]
+# Keep generated output out of the source tree (target/ is git-ignored).
+build-dir = "../target/book"
+
+[output.html]
+git-repository-url = "https://github.com/Ihor-Ihorevych/SS2RS"
+edit-url-template = "https://github.com/Ihor-Ihorevych/SS2RS/edit/main/docs/{path}"
+
+# mdBook turns a folder's README.md into index.html but leaves links *to* README.md pointing at
+# README.html. Keep the READMEs (GitHub renders them) and redirect instead.
+[output.html.redirect]
+"/roadmap/README.html" = "index.html"
+"/re/README.html" = "index.html"

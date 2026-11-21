@@ -1,6 +1,6 @@
 # Reverse-engineering specs
 
-This folder holds **prose specifications** of the original game's formats and behavior, written by spec authors (roadmap track T01) and used by implementers. See [`CLEANROOM.md`](../../CLEANROOM.md): specs describe *what* the original does; they never contain decompiler output, disassembly, or game files. Reviews fall under `CODEOWNERS`.
+This folder holds **prose specifications** of the original game's formats and behavior, written by spec authors (roadmap track T01) and used by implementers. See [`CLEANROOM.md`](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/CLEANROOM.md): specs describe *what* the original does; they never contain decompiler output, disassembly, or game files. Reviews fall under `CODEOWNERS`.
 
 One file per topic, named `<topic>.md` (for example `ctsemeta-container.md`, `tex.md`, `player-movement.md`). Use this template:
 

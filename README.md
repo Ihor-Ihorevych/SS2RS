@@ -23,6 +23,7 @@ cargo run -p ss2-app -- --screenshot options out.png       # render a screen to 
 | | |
 |---|---|
 | Design | [`docs/superpowers/specs/2026-11-21-ss2rs-design.md`](docs/superpowers/specs/2026-11-21-ss2rs-design.md) |
+| Architecture overview | [`docs/architecture.md`](docs/architecture.md) (docs site: `mdbook build docs`) |
 | Roadmap & milestones | [`docs/roadmap/README.md`](docs/roadmap/README.md) |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) · tools: [`docs/DEV_TOOLS.md`](docs/DEV_TOOLS.md) |
 | Clean-room rules | [`CLEANROOM.md`](CLEANROOM.md) |
