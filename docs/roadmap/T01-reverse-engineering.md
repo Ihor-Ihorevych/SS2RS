@@ -21,7 +21,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-008** · SPEC `.mdl` models: meshes, material bindings, LODs, attachments, collision/hit volumes, references to `.skl/.ans/.mtr` · `L` · `P0`
 - [x] **T01-009** · SPEC `.skl` skeletons: bone hierarchy, bind pose, bone flags · `M` · `P0`
 - [x] **T01-010** · SPEC `.ans` animation sets: tracks, keyframe/compression format, events/notifies, root motion, blending hints · `L` · `P0`
-- [~] **T01-011** [INPRG @Ihor-Ihorevych/agent · branch `re-mtr` · 2026-11-21] · SPEC `.mtr` material presets ("ShaderPresets"): parameters, textures slots, shader module selection · `M` · `P0`
+- [x] **T01-011** · SPEC `.mtr` material presets ("ShaderPresets"): parameters, textures slots, shader module selection · `M` · `P0`
 - [ ] **T01-012** · SPEC `.wld` world: structure of geometry, lighting data, visibility/sectors, entity records, terrain?, navigation data, embedded vs referenced resources · `XL` → split by discovery (e.g. T01-012a geometry, b lighting, c visibility, d entities, e nav) · `P0` · **highest risk**
 - [ ] **T01-013** · SPEC `.mat` physical materials & `.scs` sound collections (impact/footstep mapping) · `M` · `P1`
 - [ ] **T01-014** · SPEC `.ep` entity params: schema per entity class, inheritance/overrides, how classes are named · `L` · `P0`
@@ -75,3 +75,4 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-056** · SPEC `.skl` leftovers: meaning of `SkeletonBone.3`, of `SkeletonBoneIKFlags` and of the (always ±π) angle limits, and which matrix skinning uses for the odd bone in `circularsaw_l.skl` (inverse bind rotation without a local rotation) · `S` · `P2` · Deps: T01-010
 - [ ] **T01-057** · SPEC `.mdl` leftovers: physics templates (`CMechanismTemplate`, body/hull/joint templates), destruction (`CDestructionConfig`, `CDFX*`), `CSamCustomModelData` and its schemes, `CMeshModifierList`, `CAnimQueueImp`, bone-palette ids beyond the skeleton, child members `.1`/`.5`, the three distance members · `L` · `P1` · Deps: T01-023, T01-010
 - [ ] **T01-058** · SPEC `.ans` leftovers: meaning of `CAnimSet.3` and `CAnimation.1`, interpolation between sparse keys, duration/looping, what the float envelopes (ids above the bones) animate, envelopes whose id is no skeleton bone, how animations are named and selected (`.mas` schemes) · `M` · `P1` · Deps: T01-019
+- [ ] **T01-059** · SPEC `.mtr`/`CShaderPreset` leftovers: what each shader class computes (with T01-020), meaning of the blend types, `CommonParams.5/.7/.8`, `ColorMap`, the unexplained floats, modifier targets and graph semantics, how presets with several configs are chosen, colour byte order · `M` · `P1` · Deps: T01-020

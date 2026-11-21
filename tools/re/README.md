@@ -42,3 +42,9 @@ Animation evidence (docs/re/ans.md):
 ```
 python -I tools/re/ans_verify.py "C:\path\to\Serious Sam 2"    # keyframe rules for every envelope, bone ids, events (about 5 minutes)
 ```
+
+Material evidence (docs/re/mtr.md):
+
+```
+python -I tools/re/mtr_verify.py "C:\path\to\Serious Sam 2"    # preset structure, shader class codes, texture slots, modifiers (about 5 minutes)
+```
