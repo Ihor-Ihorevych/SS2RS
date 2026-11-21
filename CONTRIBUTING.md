@@ -17,7 +17,7 @@ Work comes from the roadmap files in `docs/roadmap/`. **Claim before you start**
 
 1. **Always `git fetch origin` before every new task** (then `git pull --rebase origin main`), and again before opening a PR. Then `grep -rn INPRG docs/roadmap/` to see what is taken.
 2. Pick an open `- [ ]` task whose dependencies are done, not `XL`, not `PHASE 2`.
-3. Mark it `- [~] **ID** [INPRG @your-handle · branch `…` · date]`, commit `ID: [INPRG] claim (@your-handle) [skip ci]` and push **that one-line change** to `main`.
+3. Mark it `- [~] **ID** [INPRG @your-handle · branch `…` · date]`, commit `ID: [INPRG] claim (@your-handle) [skip ci]` and push **that one-line change** to `main`. `cargo xtask claim ID` does steps 1-3 for you (and `cargo xtask release ID --reason ...` gives a claim back).
 4. Work on branch `T02-006-short-name`, open a draft PR titled `T02-006: …` early, and tick `[x]` / remove the tag in the same PR.
 
 ## Commits and pull requests
@@ -51,5 +51,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo deny check
 cargo xtask guard                 # proprietary-content check
+cargo xtask doctor                # check your machine against docs/DEV_TOOLS.md
+cargo xtask claim T02-006         # claim a roadmap task (see AGENTS.md section 3)
 cargo xtask roadmap-sync          # dry run: roadmap -> GitHub issues
 ```

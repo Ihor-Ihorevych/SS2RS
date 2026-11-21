@@ -3,6 +3,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use xtask::claim;
 use xtask::doctor;
 use xtask::guard::{self, Mode};
 use xtask::roadmap;
@@ -21,6 +22,40 @@ enum Command {
         /// Check only files staged for the next commit (used by the pre-commit hook).
         #[arg(long)]
         staged: bool,
+    },
+    /// Claim a roadmap task: edit its line, push a signed-off commit straight to main.
+    Claim {
+        /// Task ID, e.g. T02-006.
+        id: String,
+        /// Your GitHub handle (default: the logged-in `gh` user). `name` or `name/agent`.
+        #[arg(long)]
+        who: Option<String>,
+        /// Work branch name (default: derived from the ID and title).
+        #[arg(long)]
+        branch: Option<String>,
+        /// Show what would change, change nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Claim although dependencies are not ticked (only if merged stubs/mocks exist).
+        #[arg(long)]
+        allow_open_deps: bool,
+    },
+    /// Give a claim back with a [RELEASED] commit.
+    Release {
+        /// Task ID, e.g. T02-006.
+        id: String,
+        /// Why you are releasing it (goes into the commit message).
+        #[arg(long)]
+        reason: String,
+        /// Your GitHub handle (default: the logged-in `gh` user).
+        #[arg(long)]
+        who: Option<String>,
+        /// Release somebody else's claim (stale claims only, see AGENTS.md rule 8).
+        #[arg(long)]
+        force: bool,
+        /// Show what would change, change nothing.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Check this machine against docs/DEV_TOOLS.md; exits 1 only if a required tool is missing.
     Doctor {
@@ -51,6 +86,51 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::Claim {
+            id,
+            who,
+            branch,
+            dry_run,
+            allow_open_deps,
+        } => finish_claim(|ctx| {
+            let who = match who {
+                Some(w) => w,
+                None => claim::default_who()?,
+            };
+            claim::claim(
+                ctx,
+                &claim::ClaimReq {
+                    id,
+                    who,
+                    branch,
+                    date: claim::today_utc(),
+                    dry_run,
+                    allow_open_deps,
+                },
+            )
+        }),
+        Command::Release {
+            id,
+            reason,
+            who,
+            force,
+            dry_run,
+        } => finish_claim(|ctx| {
+            let who = match who {
+                Some(w) => w,
+                None => claim::default_who()?,
+            };
+            claim::release(
+                ctx,
+                &claim::ReleaseReq {
+                    id,
+                    who,
+                    reason,
+                    force,
+                    dry_run,
+                },
+            )
+        }),
         Command::Doctor { roles } => {
             let result = guard::repo_root().map(|root| {
                 doctor::run_checks(&doctor::SystemProbe, std::path::Path::new(&root), &roles)
@@ -90,6 +170,38 @@ fn main() -> ExitCode {
                     ExitCode::from(2)
                 }
             }
+        }
+    }
+}
+
+/// Run a claim/release and print the outcome. Exit status: 0 done, 3 task not available (taken,
+/// blocked, finished, lost the race: pick another), 2 real error.
+fn finish_claim(run: impl FnOnce(&claim::Ctx) -> anyhow::Result<claim::Done>) -> ExitCode {
+    let result = guard::repo_root().and_then(|root| run(&claim::Ctx::new(root)));
+    match result {
+        Ok(done) => {
+            let verb = if done.dry_run {
+                "would commit"
+            } else {
+                "committed and pushed"
+            };
+            println!("{verb}: {}", done.message);
+            println!("{}", done.line);
+            if let (Some(branch), false) = (&done.branch, done.dry_run) {
+                println!(
+                    "
+next: git switch -c {branch}"
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) if e.downcast_ref::<claim::NotAvailable>().is_some() => {
+            eprintln!("not available: {e}");
+            ExitCode::from(3)
+        }
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            ExitCode::from(2)
         }
     }
 }

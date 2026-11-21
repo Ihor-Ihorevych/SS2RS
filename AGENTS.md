@@ -60,9 +60,17 @@ not intend to start today; never mark `[x]` without a merged PR.
 
 ```
 cargo xtask guard            # proprietary-content check (add --staged before committing)
-cargo xtask doctor           # check your tools against docs/DEV_TOOLS.md   (T00-027)
-cargo xtask claim T02-006    # claim a task per §1 automatically            (T00-028)
+cargo xtask doctor           # check your tools against docs/DEV_TOOLS.md
+cargo xtask claim T02-006    # §1 steps 1-5 in one go (see below)
+cargo xtask release T02-006 --reason "blocked on T01-012"   # give a claim back (§1 step 7)
 cargo xtask roadmap-sync     # dry run: roadmap -> GitHub issues
 grep -rn "INPRG" docs/roadmap/   # who is working on what right now
 ```
-(`xtask` subcommands appear as their roadmap tasks land; until then do the steps by hand.)
+
+`cargo xtask claim <ID>` must be run from a clean `main`: it fetches, checks the task is `[ ]`, not
+`XL`, not `PHASE 2` and that its deps are `[x]`, edits the one line, commits it signed off as
+`ID: [INPRG] claim (@handle) [skip ci]`, pushes to `main`, and if the push is rejected drops its own
+commit and looks again, so it **never overwrites another claim**. Your handle defaults to the logged-in
+`gh` user (`--who` overrides it). It then prints the `git switch -c <branch>` to run. Exit status:
+`0` claimed, `3` not available (taken, blocked, finished, or you lost the race: pick another task),
+`2` real error. `--dry-run` previews from any branch. Doing the steps by hand (above) is still fine.
