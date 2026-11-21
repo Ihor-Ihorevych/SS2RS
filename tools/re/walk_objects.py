@@ -79,6 +79,11 @@ class Dec:
             if en in EXT: s.log[("extprim", en)] += 1; return pos + EXT[en]
             raise Unknown(f"external/unknown type {tid} {en}")
         if t.members is not None:
+            if t.name == "CMetaHandle":
+                # declared with no members, but stored by value as one u32 (docs/re/ctsemeta-objects.md, "CMetaHandle")
+                s.log[("prim", "CMetaHandle", 4)] += 1; return pos + 4
+            if not is_object_class(r, tid) and not any(ct.members for ct in chain(r, tid)):
+                s.log[("empty-class-by-value", t.name)] += 1          # these really are 0 bytes: alignment holds in every file
             if t.name == "CTransString":
                 if d[pos:pos+4] != b"DTRS": raise Unknown(f"CTransString expected DTRS got {d[pos:pos+4].hex()}")
                 s.log[("marker", "struct", "DTRS")] += 1; pos += 4
@@ -142,7 +147,7 @@ def main():
     arch = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("SS2_DATA_DIR", "")
     if not arch or not os.path.isdir(arch):
         sys.exit("pass the install folder (the one containing All_PC_01.gro) or set SS2_DATA_DIR")
-    res = collections.Counter(); fails = collections.Counter(); ex = {}; markers = collections.Counter()
+    res = collections.Counter(); fails = collections.Counter(); ex = {}; markers = collections.Counter(); empties = collections.Counter()
     for f in sorted(os.listdir(arch)):
         if not f.lower().endswith(".gro"): continue
         with zipfile.ZipFile(os.path.join(arch, f)) as z:
@@ -157,15 +162,21 @@ def main():
                 try:
                     end = dec.decode()
                     if d[end:end+4] == b"EDOB":
-                        extra = len(d) - 8 - (end + 8) if d[end+4:end+8] == bytes(4) else None
-                        res["exact, EDOB+0+METAEND" if extra == 0 else "exact, EDOB followed by more data"] += 1
+                        count = u32(d, end + 4); pos = end + 8
+                        for _ in range(count):                       # extra records: (object id, type id, value), see ctsemeta-objects.md
+                            pos = dec.value(u32(d, pos + 4), pos + 8)
+                        tail = d[pos:] == b"METAEND "
+                        res["exact; EDOB count 0; METAEND" if count == 0 and tail else
+                            "exact; EDOB extra records decode; METAEND" if tail else "EDOB extra records do not end at METAEND"] += 1
                         markers.update({k[1:]: v for k, v in dec.log.items() if k[0] == "marker"})
+                        empties.update({k[1]: v for k, v in dec.log.items() if k[0] == "empty-class-by-value"})
                     else:
                         k = f"ended at {d[end:end+4]!r}"; fails[k] += 1; ex.setdefault(k, i.filename); res["decode ended elsewhere"] += 1
                 except Unknown as e:
                     k = str(e)[:100]; fails[k] += 1; ex.setdefault(k, i.filename); res["unknown rule"] += 1
     print(dict(res))
     print("container/struct markers seen in files that decode:", dict(markers))
+    print("empty classes met by value, encoded as 0 bytes (CMetaHandle is the exception, see its rule):", dict(empties))
     for k, c in fails.most_common(6): print(f"  {c:4d} {k}   e.g. {ex[k]}")
 
 if __name__ == "__main__":

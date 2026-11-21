@@ -127,7 +127,7 @@ Tail of the same file: `45 44 4f 42 00 00 00 00 4d 45 54 41 45 4e 44 20` = `EDOB
 
 ## Open questions
 
-- Encoding of **object data** inside `OBJS`: **specified in `ctsemeta-objects.md`** (9,162 of 9,269 files decode to the byte; 107 worlds still open, T01-053).
-- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; the data after `EDOB` in the 107 worlds → T01-053 (the non-world files are solved).
+- Encoding of **object data** inside `OBJS`: **specified in `ctsemeta-objects.md`** (all 9,269 file entries decode to the byte, the worlds included).
+- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; (the data after `EDOB` is solved for all files).
 - Formats 4–7 (old `.tex` only) → T01-051.
 - Whether `IDNT` ids are referenced from object data and how.

@@ -55,6 +55,7 @@ class TreeDec:
             if en in EXT_SIZE: return self.prim(en, EXT_SIZE[en], pos)
             raise Unknown(f"external type {tid} {en}")
         if t.members is not None:
+            if t.name == "CMetaHandle": return Ref(u32(d, pos)), pos + 4   # declared empty, stored as one object id
             if t.name == "CTransString": pos += 4            # DTRS marker
             o = Obj(t.name)
             for ct in chain(r, tid):
