@@ -43,6 +43,6 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Menu slice (PC, placeholder skin) — partial T10-001/T10-004/T10-005/T10-017 only; original-data skin remains T10-004/T10-033
 - [~] **T10-030** [INPRG @Ihor-Ihorevych/agent · branch `menu-slice` · 2026-11-21] · `NavInput`, UI geometry, `DrawList`, 1920×1080 virtual canvas fit (letterbox, 0×0-safe) · `M` · `P1`
-- [ ] **T10-031** · Menu model (Main/Options/Pause), focus navigation, settings toggles/sliders, command output · `M` · `P1` · Deps: T10-030
-- [ ] **T10-032** · Placeholder-skin layout, draw list and pointer input (hover/press/release rules) · `M` · `P1` · Deps: T10-031
+- [~] **T10-031** [INPRG @Ihor-Ihorevych/agent · branch `menu-slice` · 2026-11-21] · Menu model (Main/Options/Pause), focus navigation, settings toggles/sliders, command output · `M` · `P1` · Deps: T10-030
+- [~] **T10-032** [INPRG @Ihor-Ihorevych/agent · branch `menu-slice` · 2026-11-21] · Placeholder-skin layout, draw list and pointer input (hover/press/release rules) · `M` · `P1` · Deps: T10-031
 - [ ] **T10-033** · Menu skin and flow from original `.rsc`/`.tex`/`.fnt` data, replacing the placeholder skin · `L` · `P1` · Deps: T02-006, T02-007, T02-012, T02-023, T02-025, T01-036
