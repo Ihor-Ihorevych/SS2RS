@@ -50,5 +50,5 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [ ] **T00-025** · Crate publishing policy (which crates are libraries on crates.io, name reservation) · `S` · `P3`
 - [ ] **T00-030** · Community channels: set up a chat server/forum, link it from README and CONTRIBUTING (split from T00-022, which delivered the code of conduct and security policy) · `S` · `P1` · 🟢
 - [ ] **T00-031** · Final project name decision (SS2RS is a working title) and rename of crates/docs if it changes; trademark review of the name (split from T00-023, which delivered the affiliation disclaimers in README and NOTICE) · `S` · `P1`
-- [ ] **T00-033** · Minimal CTSEMETA writer for fixtures in `ss2_testkit::fixtures` (split from T00-010, which delivered the ZIP builder and fixture policy) · `S` · `P1` · Deps: T01-004, T01-005
+- [~] **T00-033** [INPRG @lxstyo · branch `T00-033-ctsemeta-writer` · 2026-11-21] · Minimal CTSEMETA writer for fixtures in `ss2_testkit::fixtures` (split from T00-010, which delivered the ZIP builder and fixture policy) · `S` · `P1` · Deps: T01-004, T01-005
 - [x] **T00-032** · CI cost: docs-only pushes to `main` skip CI (`paths-ignore` on the push trigger; pull requests unfiltered) and claim commits end with `[skip ci]` · `S` · `P1` · 🟢
