@@ -56,3 +56,9 @@ python -I tools/re/wld_verify.py "C:\path\to\Serious Sam 2"    # all 59 worlds: 
 ```
 
 `walk_objects.py` now reports 9,269 of 9,269 file entries decoding (about 11 minutes).
+
+World root evidence (docs/re/wld-root.md):
+
+```
+python -I tools/re/wld_root_verify.py "C:\path\to\Serious Sam 2" [N]    # relations of the CWorld root in all 59 worlds (about 20 minutes); N = only the N smallest
+```
