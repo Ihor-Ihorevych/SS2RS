@@ -10,3 +10,6 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }

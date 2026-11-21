@@ -63,6 +63,12 @@ fn inprg_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\s*\[INPRG[^\]]*\]").unwrap())
 }
 
+fn claim_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    // A real claim tag has a space and a handle after INPRG: `[INPRG @handle · branch ... · date]`.
+    RE.get_or_init(|| Regex::new(r"\[INPRG [^\]]+\]").unwrap())
+}
+
 fn spec_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\bSPEC\b").unwrap())
@@ -120,7 +126,7 @@ fn build(state: char, id: &str, first: &str, continuation: &[&str], source: &str
         good_first: full.contains('🟢'),
         spike: full.contains("SPIKE"),
         spec: spec_re().is_match(&full),
-        in_progress: state == '~' || full.contains("[INPRG"),
+        in_progress: state == '~' || claim_re().is_match(first),
         done: state == 'x',
         deps,
         body,
@@ -459,6 +465,15 @@ mod tests {
             (t.size.as_deref(), t.prio.as_deref()),
             (Some("M"), Some("P0"))
         );
+    }
+
+    #[test]
+    fn text_that_merely_mentions_the_tag_is_not_a_claim() {
+        let t = one(
+            "- [ ] **T00-028** · Automates the `[INPRG]` protocol with `xtask claim` · `M` · `P0`",
+        );
+        assert!(!t.in_progress);
+        assert!(!t.labels().contains(&"in-progress".to_string()));
     }
 
     #[test]

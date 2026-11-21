@@ -1,0 +1,16 @@
+[package]
+name = "ss2-render-api"
+description = "GPU-free renderer front-end contract: RenderWorld extract, camera, resource ids (tracks T00/T04)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-ui = { path = "../ss2-ui" }

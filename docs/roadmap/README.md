@@ -62,7 +62,7 @@ Design: [`../superpowers/specs/2026-11-21-ss2rs-design.md`](../superpowers/specs
 8. **Sim-safe crates** (`ss2-sim`, `ss2-physics`, `ss2-net`, movement in `ss2-game`): no
    `HashMap` iteration order dependence, no wall-clock, no thread-order dependence.
 
-9. **Claim before you start (`[INPRG]`).** Before working on a task, mark it `- [~] **ID** [INPRG @handle · branch
+9. **Fetch, then claim (`[INPRG]`).** Always `git fetch origin` before every new task. Before working on a task, mark it `- [~] **ID** [INPRG @handle · branch
    `…` · date]` in its track file and **commit + push that one-line change to `main`** (`ID: [INPRG] claim`).
    Everyone runs `grep -rn INPRG docs/roadmap/` before picking work. Full protocol, race handling and
    stale-claim rule: [`AGENTS.md`](../../AGENTS.md) §1.
@@ -159,7 +159,7 @@ T13 mods ◄─ T09 stable entity API
 
 ## 10. How to claim work
 
-1. `git pull --rebase origin main`; `grep -rn INPRG docs/roadmap/` to see what is taken.
+1. **Always `git fetch origin` before every new task** (then `git pull --rebase origin main`), and again before opening a PR; then `grep -rn INPRG docs/roadmap/` to see what is taken.
 2. Pick an unchecked `- [ ]` task whose deps are ✅ (or whose deps have merged stubs/mocks), not `XL`, not `PHASE 2`.
 3. **Claim it:** change to `- [~] **T02-006** [INPRG @handle · branch `T02-006-meta-reader` · YYYY-MM-DD]`, then
    `git commit -s -m "T02-006: [INPRG] claim (@handle)"` and `git push origin main`.
