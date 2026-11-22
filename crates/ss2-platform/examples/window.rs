@@ -13,6 +13,7 @@ use ss2_platform_api::{
     AppControl, AppHandler, FrameInfo, InputEvent, KeyCode, LifecycleEvent, LifecycleTracker,
     PlatformEvent,
 };
+use ss2_platform_api::{DisplayRequest, WindowMode};
 
 #[derive(Default)]
 struct Demo {
@@ -94,6 +95,35 @@ impl PlatformApp for Demo {
             window.size(),
             window.scale_factor()
         );
+        let monitors = window.monitors();
+        for m in &monitors {
+            let sizes = ss2_platform_api::resolution_list(m, (800, 600));
+            println!(
+                "monitor {:?}: {}x{} at {:?}, scale {}, primary {}, {} video modes, resolutions {:?}",
+                m.name,
+                m.size.0,
+                m.size.1,
+                m.position,
+                m.scale_factor,
+                m.primary,
+                m.modes.len(),
+                &sizes[..sizes.len().min(4)]
+            );
+        }
+        // What an exclusive request would resolve to (planned only, never applied here).
+        let plan = ss2_platform_api::plan_display(
+            &DisplayRequest {
+                mode: WindowMode::Exclusive,
+                resolution: Some((1920, 1080)),
+                refresh_hz: Some(144),
+                monitor: None,
+            },
+            &monitors,
+        );
+        println!(
+            "exclusive 1920x1080@144 would use {:?}; notes {:?}",
+            plan.mode, plan.notes
+        );
         window.set_text_input(true);
         self.window = Some(window.clone());
         Ok(())
@@ -110,7 +140,21 @@ fn main() {
         frames_left: std::env::args().nth(1).and_then(|a| a.parse().ok()),
         ..Demo::default()
     };
-    match run(&WindowConfig::default(), &mut app) {
+    // `window <frames> [windowed|borderless|exclusive] [monitor name]`
+    let mode = match std::env::args().nth(2).as_deref() {
+        Some("borderless") => WindowMode::Borderless,
+        Some("exclusive") => WindowMode::Exclusive,
+        _ => WindowMode::Windowed,
+    };
+    let config = WindowConfig {
+        display: DisplayRequest {
+            mode,
+            monitor: std::env::args().nth(3),
+            ..DisplayRequest::default()
+        },
+        ..WindowConfig::default()
+    };
+    match run(&config, &mut app) {
         Ok(()) => println!("done after drawing {} frames", app.drawn),
         Err(e) => {
             eprintln!("error: {e}");

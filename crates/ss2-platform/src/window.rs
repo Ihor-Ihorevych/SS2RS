@@ -16,7 +16,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use ss2_platform_api::{
-    AppControl, AppHandler, FrameInfo, InputEvent, LifecycleEvent, PlatformEvent, SurfaceInfo,
+    AppControl, AppHandler, DisplayPlan, DisplayRequest, FrameInfo, InputEvent, LifecycleEvent,
+    MonitorInfo, PlatformEvent, SurfaceInfo, WindowMode,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -25,6 +26,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHan
 use winit::keyboard::PhysicalKey;
 use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
+use crate::display;
 use crate::input::{self, HeldInputs};
 use crate::translate::{self, Observed, ResizeFilter};
 
@@ -55,8 +57,11 @@ pub struct WindowConfig {
     pub title: String,
     /// Initial client size in **logical** pixels.
     pub size: (u32, u32),
-    /// Start borderless-fullscreen on the current monitor.
+    /// Start borderless-fullscreen (shorthand for `display.mode = Borderless` when `display`
+    /// is left at its default).
     pub fullscreen: bool,
+    /// Which window mode, monitor, resolution and refresh rate to start with.
+    pub display: DisplayRequest,
 }
 
 impl Default for WindowConfig {
@@ -65,11 +70,22 @@ impl Default for WindowConfig {
             title: "SS2RS".to_owned(),
             size: (1280, 720),
             fullscreen: false,
+            display: DisplayRequest::default(),
         }
     }
 }
 
 impl WindowConfig {
+    /// The display request to start with: `display`, with `fullscreen` meaning borderless
+    /// fullscreen when no other mode was asked for.
+    pub fn display_request(&self) -> DisplayRequest {
+        let mut request = self.display.clone();
+        if self.fullscreen && request.mode == WindowMode::Windowed {
+            request.mode = WindowMode::Borderless;
+        }
+        request
+    }
+
     /// Check the values before touching the OS.
     ///
     /// # Errors
@@ -125,6 +141,30 @@ impl PlatformWindow {
     pub fn set_fullscreen(&self, fullscreen: bool) {
         self.window
             .set_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)));
+    }
+
+    /// The connected monitors with their video modes, for the options screen.
+    pub fn monitors(&self) -> Vec<MonitorInfo> {
+        display::list_monitors(
+            self.window.available_monitors(),
+            self.window.primary_monitor().as_ref(),
+        )
+    }
+
+    /// Apply a window mode, monitor, resolution and refresh rate. Wishes that cannot be met
+    /// fall back (see [`ss2_platform_api::plan_display`]) and are logged; the plan that was
+    /// really applied is returned.
+    pub fn set_display(&self, request: &DisplayRequest) -> DisplayPlan {
+        let (fullscreen, plan) = display::resolve_fullscreen(
+            self.window.available_monitors(),
+            self.window.primary_monitor().as_ref(),
+            request,
+        );
+        for note in &plan.notes {
+            tracing::warn!("{note}");
+        }
+        self.window.set_fullscreen(fullscreen);
+        plan
     }
 
     /// Change the title bar text.
@@ -325,14 +365,18 @@ impl Driver<'_> {
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), PlatformError> {
         let (w, h) = self.config.size;
+        let (fullscreen, plan) = display::resolve_fullscreen(
+            event_loop.available_monitors(),
+            event_loop.primary_monitor().as_ref(),
+            &self.config.display_request(),
+        );
+        for note in &plan.notes {
+            tracing::warn!("{note}");
+        }
         let attributes = Window::default_attributes()
             .with_title(self.config.title.clone())
             .with_inner_size(LogicalSize::new(f64::from(w), f64::from(h)))
-            .with_fullscreen(
-                self.config
-                    .fullscreen
-                    .then_some(Fullscreen::Borderless(None)),
-            );
+            .with_fullscreen(fullscreen);
         let window = event_loop
             .create_window(attributes)
             .map_err(|e| PlatformError::Window(e.to_string()))?;
@@ -500,6 +544,45 @@ impl ApplicationHandler for Driver<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_default_display_request_is_a_normal_window() {
+        assert_eq!(
+            WindowConfig::default().display_request().mode,
+            WindowMode::Windowed
+        );
+    }
+
+    #[test]
+    fn the_fullscreen_flag_means_borderless_unless_another_mode_was_asked_for() {
+        let flag = WindowConfig {
+            fullscreen: true,
+            ..WindowConfig::default()
+        };
+        assert_eq!(flag.display_request().mode, WindowMode::Borderless);
+
+        let exclusive = WindowConfig {
+            fullscreen: true,
+            display: DisplayRequest {
+                mode: WindowMode::Exclusive,
+                resolution: Some((1920, 1080)),
+                ..DisplayRequest::default()
+            },
+            ..WindowConfig::default()
+        };
+        let request = exclusive.display_request();
+        assert_eq!(request.mode, WindowMode::Exclusive, "an explicit mode wins");
+        assert_eq!(request.resolution, Some((1920, 1080)));
+
+        let borderless = WindowConfig {
+            display: DisplayRequest {
+                mode: WindowMode::Borderless,
+                ..DisplayRequest::default()
+            },
+            ..WindowConfig::default()
+        };
+        assert_eq!(borderless.display_request().mode, WindowMode::Borderless);
+    }
 
     #[test]
     fn default_config_is_valid() {

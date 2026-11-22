@@ -54,6 +54,7 @@
 
 mod actions;
 mod app;
+mod display;
 mod event;
 mod input_state;
 mod keys;
@@ -62,6 +63,10 @@ mod paths;
 
 pub use actions::{ActionId, ActionMap, ActionQuery, Binding, InputContext, MockInput};
 pub use app::{AppControl, AppHandler, FrameInfo, ScriptReport, ScriptStep, run_script};
+pub use display::{
+    DisplayPlan, DisplayRequest, MonitorInfo, ResolvedMode, UiScale, VideoMode, WindowMode,
+    best_video_mode, effective_ui_scale, plan_display, resolution_list, select_monitor,
+};
 pub use event::{InputEvent, LifecycleEvent, PlatformEvent, SurfaceInfo, TouchPhase};
 pub use input_state::{BindingSet, InputState};
 pub use keys::{GamepadAxis, GamepadButton, GamepadId, KeyCode, MouseButton};
