@@ -122,7 +122,7 @@ Source of the process: [CLEANROOM.md](https://github.com/Ihor-Ihorevych/SS2RS/bl
   to it (T12-010, RELEASING section 6). The SBOM is part of T12-010 and is open.
 - [ ] Bundled assets (for example the Inter font, under OFL-1.1) are listed with their license files.
 - [ ] The **"unofficial fan engine" notice** is shown in the README, in the packaged files, and on the
-  credits and legal screen (T10-016). The wording is for maintainers to approve.
+  credits and legal screen (T10-016: the **About** screen exists, its wording is a draft that mirrors `NOTICE` and is for maintainers to approve; a test keeps the two in step). The screen is English only and not yet in the localization tables (T10-014).
 - [ ] **Name and trademark:** the final project name is decided and the trademark review is done (T00-031).
   If the name changes, crates and docs are renamed under that task before the release tag.
 - [ ] The release notes state that the player needs their own legally obtained copy of Serious Sam 2.

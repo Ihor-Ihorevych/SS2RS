@@ -7,7 +7,7 @@
 use crate::geometry::Vec2;
 use crate::layout::{SLIDER_TRACK_W, SLIDER_TRACK_X};
 use crate::menu::{
-    Item, Menu, MenuCommand, SliderSetting, UiInput, items, set_slider, slider_value,
+    Item, Menu, MenuCommand, SliderSetting, UiInput, focusable, items, set_slider, slider_value,
 };
 use crate::menu::{MAX_STEPS, STEP};
 
@@ -19,7 +19,7 @@ impl Menu {
             rects
                 .iter()
                 .enumerate()
-                .find(|(i, r)| r.contains(p) && !matches!(list[*i], Item::Spacer))
+                .find(|(i, r)| r.contains(p) && focusable(&list[*i]))
                 .map(|(i, _)| i)
         };
         match input {

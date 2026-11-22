@@ -7,6 +7,8 @@ use crate::menu::{Item, Menu, items, slider_value, title};
 use crate::theme;
 
 const LABEL_SIZE: f32 = 40.0;
+/// Font size of the read-only lines of the About screen.
+const TEXT_SIZE: f32 = 28.0;
 const TEXT_TOP: f32 = 14.0;
 
 impl Menu {
@@ -30,8 +32,22 @@ impl Menu {
             .zip(self.item_rects())
             .enumerate()
         {
-            if matches!(item, Item::Spacer) {
-                continue;
+            match *item {
+                Item::Spacer => continue,
+                Item::Text { line } => {
+                    list.texts.push(TextRun {
+                        pos: Vec2 {
+                            x: r.x,
+                            y: r.y + 4.0,
+                        },
+                        text: line.to_string(),
+                        size: TEXT_SIZE,
+                        color: theme::TEXT,
+                        align: TextAlign::Left,
+                    });
+                    continue;
+                }
+                _ => {}
             }
             let color = if i == self.focus {
                 theme::FOCUSED
@@ -89,7 +105,7 @@ impl Menu {
                         color: theme::TRACK_FILL,
                     });
                 }
-                Item::Spacer => {}
+                Item::Spacer | Item::Text { .. } => {}
             }
         }
         list

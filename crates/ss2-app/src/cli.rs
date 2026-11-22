@@ -4,7 +4,7 @@ use ss2_core::cli::{LaunchOptions, Parsed, Role, parse_launch_options};
 use ss2_ui::ScreenId;
 use std::path::PathBuf;
 
-const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause> <out.png> [--size WxH]\n  ss2-app --smoke-frames <N>";
+const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause|about> <out.png> [--size WxH]\n  ss2-app --smoke-frames <N>";
 
 /// What `ss2-app` was asked to do.
 #[derive(Debug, PartialEq)]
@@ -53,9 +53,10 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, Strin
                 "main" => ScreenId::Main,
                 "options" => ScreenId::Options,
                 "pause" => ScreenId::Pause,
+                "about" => ScreenId::About,
                 other => {
                     return Err(format!(
-                        "unknown screen '{other}' (expected main, options or pause)"
+                        "unknown screen '{other}' (expected main, options, pause or about)"
                     ));
                 }
             };
@@ -157,6 +158,20 @@ mod tests {
                 size: (1280, 720)
             })
         );
+    }
+
+    #[test]
+    fn screenshot_about_is_a_known_screen_and_unknown_ones_list_the_choices() {
+        assert_eq!(
+            parse(&["--screenshot", "about", "a.png"]),
+            Ok(Mode::Screenshot {
+                screen: ScreenId::About,
+                out: PathBuf::from("a.png"),
+                size: (1280, 720)
+            })
+        );
+        let err = parse(&["--screenshot", "credits", "a.png"]).unwrap_err();
+        assert!(err.contains("about"), "{err}");
     }
 
     #[test]

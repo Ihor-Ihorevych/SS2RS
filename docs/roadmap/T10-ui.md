@@ -15,7 +15,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [ ] **T10-012** · Settings screens: video (quality, resolution, FOV, vsync), audio buses, controls/rebinding (T03-005), gameplay, network · `L` · `P1`
 - [ ] **T10-018** · Co-op lobby/session UI: host/join, direct IP/invite code/server browser, player list, ready state, character select · `L` · `P1` · Deps: T08-019
 - [ ] **T10-009** · Loading screens with progress and tips, shader/cache warm-up status · `S` · `P1` · 🟢
-- [~] **T10-016** [INPRG @Ihor-Ihorevych/agent · branch `T10-016-about-screen` · 2026-11-22] · Credits, legal/attribution screens (open-source licenses, "unofficial fan engine" notice) · `S` · `P2` · 🟢
+- [x] **T10-016** · Credits, legal/attribution screens: the **About** screen (unofficial-fan-engine notice, licence, bundled-font credit, pointer to `NOTICE`); a per-dependency licence list is not shown (it is in `NOTICE` and `cargo deny` output) · `S` · `P2` · 🟢
 - [ ] **T10-019** · First-run data-location wizard (desktop): find/select the SS2 install, validate version/patch level via `ss2-doctor` (T11-013), remember choice · `M` · `P0`
 - [ ] **T10-020** · Pause menu, death/respawn screens, end-of-level summary · `M` · `P1`
 

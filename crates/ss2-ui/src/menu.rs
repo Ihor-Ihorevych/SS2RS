@@ -17,6 +17,8 @@ pub enum ScreenId {
     Options,
     /// The in-game pause menu.
     Pause,
+    /// The unofficial-fan-engine notice, the licence and the third-party credits.
+    About,
 }
 
 /// Input events the menu understands.
@@ -85,6 +87,10 @@ pub(crate) enum Item {
         setting: SliderSetting,
     },
     Spacer,
+    /// A line of read-only text (never focused or clicked).
+    Text {
+        line: &'static str,
+    },
 }
 
 pub(crate) fn title(screen: ScreenId) -> &'static str {
@@ -92,6 +98,7 @@ pub(crate) fn title(screen: ScreenId) -> &'static str {
         ScreenId::Main => "SS2RS",
         ScreenId::Options => "Options",
         ScreenId::Pause => "Paused",
+        ScreenId::About => "About",
     }
 }
 
@@ -108,8 +115,40 @@ pub(crate) fn items(screen: ScreenId) -> &'static [Item] {
                 action: Open(ScreenId::Options),
             },
             Item::Button {
+                label: "About",
+                action: Open(ScreenId::About),
+            },
+            Item::Button {
                 label: "Quit",
                 action: Quit,
+            },
+        ],
+        ScreenId::About => &[
+            Item::Text {
+                line: "SS2RS is an unofficial, open-source fan engine for Serious Sam 2.",
+            },
+            Item::Text {
+                line: "It is not affiliated with, endorsed by or sponsored by Croteam or Devolver Digital.",
+            },
+            Item::Text {
+                line: "It contains no game assets or code: you need your own copy of the game.",
+            },
+            Item::Text {
+                line: "\"Serious Sam\" and \"Serious Engine\" are trademarks of their respective owners.",
+            },
+            Item::Text {
+                line: "SS2RS is licensed under the Apache License 2.0. Copyright the SS2RS contributors.",
+            },
+            Item::Text {
+                line: "UI font: Inter Regular, Copyright The Inter Project Authors, SIL Open Font License 1.1.",
+            },
+            Item::Text {
+                line: "Other credits and licences: see the NOTICE and LICENSE files that come with the program.",
+            },
+            Item::Spacer,
+            Item::Button {
+                label: "Back",
+                action: Back,
             },
         ],
         ScreenId::Options => &[
@@ -156,8 +195,8 @@ pub(crate) fn items(screen: ScreenId) -> &'static [Item] {
     }
 }
 
-fn focusable(item: &Item) -> bool {
-    !matches!(item, Item::Spacer)
+pub(crate) fn focusable(item: &Item) -> bool {
+    !matches!(item, Item::Spacer | Item::Text { .. })
 }
 
 pub(crate) fn slider_value(s: &Settings, which: SliderSetting) -> f32 {
@@ -363,7 +402,7 @@ mod tests {
     fn down_up_wrap_around() {
         let mut m = Menu::new(Settings::default());
         nav(&mut m, NavInput::Up);
-        assert_eq!(m.focused(), Some(2));
+        assert_eq!(m.focused(), Some(3), "Up from the first item wraps to Quit");
         nav(&mut m, NavInput::Down);
         assert_eq!(m.focused(), Some(0));
     }

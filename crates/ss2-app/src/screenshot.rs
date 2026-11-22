@@ -20,6 +20,11 @@ pub fn take(screen: ScreenId, out: &Path, size: (u32, u32)) -> Result<(), String
             menu.handle(UiInput::Nav(NavInput::Activate));
         }
         ScreenId::Pause => menu.open_pause(),
+        ScreenId::About => {
+            menu.handle(UiInput::Nav(NavInput::Down));
+            menu.handle(UiInput::Nav(NavInput::Down));
+            menu.handle(UiInput::Nav(NavInput::Activate));
+        }
     }
     let image = renderer
         .render_to_image(&menu.draw(), theme::BACKGROUND)
