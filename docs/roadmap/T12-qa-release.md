@@ -9,7 +9,7 @@ PC first. Mobile budgets/devices/packaging are Phase 2.
 - [ ] **T12-007** · Nightly fuzz + sanitizer jobs (ASan/UBSan for any `unsafe`, Miri on selected crates) · `M` · `P1`
 - [ ] **T12-008** · Nightly/release artifacts for Windows/Linux/macOS; reproducible builds; checksums; changelog · `M` · `P1`
 - [ ] **T12-009** · PC packaging & distribution: GitHub Releases, Windows zip/installer, AppImage/Flatpak, macOS `.app`; no game assets in any package · `M` · `P2`
-- [~] **T12-010** [INPRG @Ihor-Ihorevych/agent · branch `T12-010-compliance` · 2026-11-22] · Compliance: license audit/SBOM per release, clean-room audit log (RE spec ↔ implementer), DCO check · `M` · `P1`
+- [x] **T12-010** · Compliance: license audit/SBOM per release, clean-room audit log (RE spec ↔ implementer), DCO check · `M` · `P1`
 - [ ] **T12-011** · Playtest program: build channels, structured feedback form (no telemetry by default), crash-report triage · `M` · `P2`
 - [x] **T12-012** · Accessibility review (input remap, subtitles, contrast, motion) · `S` · `P2`
 - [x] **T12-013** · Localization QA pass (text overflow, fonts) · `S` · `P3`

@@ -26,6 +26,8 @@
 - [Localization QA pass](LOCALIZATION_QA.md)
 - [Modding policy](MODDING_POLICY.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
+- [Compliance procedure](COMPLIANCE.md)
+- [Clean-room audit log](compliance/clean-room-log.md)
 
 # Roadmap
 
