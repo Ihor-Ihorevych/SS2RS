@@ -119,7 +119,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 - **Install:** extract the archive anywhere and run the binary. No installer, shortcut, file association or PATH entry (section 2).
 - **Settings (IMPLEMENTED):** `Settings::default_path` (`crates/ss2-core/src/settings.rs`) puts `settings.toml` in the OS config directory under `SS2RS/`, found with the `directories` crate (for example `%APPDATA%\SS2RS\settings.toml` on Windows). Saved through a temporary file; a missing or broken file gives defaults (T03-030, done). Schema and migration: T03-014 (`P0`, open).
 - **Key bindings:** `bindings_file` in `crates/ss2-platform-api/src/paths.rs` is planned; the feature is T03-005 (open).
-- **Saves (OPEN):** `PlatformPaths` has a `save_dir`, but no per-OS location is wired and no save is written yet. Per-OS directories and a portable-mode flag: T03-012 (`P0`, open). Save format versioning follows RELEASING section 1.
+- **Saves (OPEN):** `PlatformPaths` has a `save_dir` and, since T03-012, resolves the per-OS directories (`PlatformPaths::resolve` with `UserDirs::detect()`: `%APPDATA%\SS2RS`, `~/.config/SS2RS` and so on) and a **portable mode** (a file `ss2-portable` next to the executable, or an explicit flag: everything below `ss2-data/` next to the executable); the app does not call it yet and no save is written yet. Save format versioning follows RELEASING section 1.
 - **Data location (OPEN):** `SS2_DATA_DIR` today; the remembered choice is T10-019; a `--data` option is T03-020. None exists.
 - **Logs and crash reports (OPEN):** T03-019 and T03-016. The log location is not decided.
 - **Updates (OPEN):** new versions are announced on GitHub Releases only. No roadmap task adds an updater or update check, so the engine does not check for updates. An automatic update would need a new task.
@@ -146,7 +146,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 9. Provenance, attestations and signing of `SHA256SUMS` are undecided.
 10. Reproducible builds (T12-008) and nightly artifacts are not built; `release.yml` has no schedule.
 11. No SBOM generator and no third-party notices file (COMPLIANCE sections 3 and 8).
-12. Saves, logs, per-OS directories and `--data` are open (T03-012, T03-019, T03-020); uninstall text depends on them.
+12. Saves, logs and `--data` are open (T03-019, T03-020) and the app does not yet use the per-OS directories of T03-012; uninstall text depends on them.
 13. No update check exists and none is in the roadmap.
 14. Actions is blocked, so `release.yml` has never run on a tag; the first archives are untested.
 15. Package channels and store questions (section 6) have no owner.

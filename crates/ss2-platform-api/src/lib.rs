@@ -64,4 +64,4 @@ pub use app::{AppControl, AppHandler, FrameInfo, ScriptReport, ScriptStep, run_s
 pub use event::{InputEvent, LifecycleEvent, PlatformEvent, SurfaceInfo, TouchPhase};
 pub use keys::{GamepadAxis, GamepadButton, GamepadId, KeyCode, MouseButton};
 pub use lifecycle::LifecycleTracker;
-pub use paths::PlatformPaths;
+pub use paths::{PlatformPaths, PortableMode, UserDirs, PORTABLE_DIR, PORTABLE_MARKER};
