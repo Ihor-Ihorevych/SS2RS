@@ -69,6 +69,12 @@ World geometry evidence (docs/re/wld-geometry.md):
 python -I tools/re/wld_geometry_verify.py "C:\path\to\Serious Sam 2" [N]    # static models, hulls, collision grid cells in all 59 worlds (about 20 minutes)
 ```
 
+World lighting evidence (docs/re/wld-lighting.md):
+
+```
+python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
+```
+
 Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
 
 ```
