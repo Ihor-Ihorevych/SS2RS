@@ -62,3 +62,9 @@ World root evidence (docs/re/wld-root.md):
 ```
 python -I tools/re/wld_root_verify.py "C:\path\to\Serious Sam 2" [N]    # relations of the CWorld root in all 59 worlds (about 20 minutes); N = only the N smallest
 ```
+
+World geometry evidence (docs/re/wld-geometry.md):
+
+```
+python -I tools/re/wld_geometry_verify.py "C:\path\to\Serious Sam 2" [N]    # static models, hulls, collision grid cells in all 59 worlds (about 20 minutes)
+```
