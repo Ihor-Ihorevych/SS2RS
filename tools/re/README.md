@@ -69,6 +69,12 @@ World geometry evidence (docs/re/wld-geometry.md):
 python -I tools/re/wld_geometry_verify.py "C:\path\to\Serious Sam 2" [N]    # static models, hulls, collision grid cells in all 59 worlds (about 20 minutes)
 ```
 
+Lighting evidence (docs/re/lighting.md, lighting-tables.md):
+
+```
+python -I tools/re/shading_verify.py "C:\path\to\Serious Sam 2" [--tables docs/re/lighting-tables.md] [LIMIT]    # light kinds and flags, baked shadow buffers (CShadowBuffer), the GI object, EntityShadowType against lightmaps, modifiers next to lightmaps (about 20 minutes)
+```
+
 World lighting evidence (docs/re/wld-lighting.md):
 
 ```

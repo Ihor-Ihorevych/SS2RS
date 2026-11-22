@@ -109,6 +109,6 @@ CAmbientMaskCache
 - The shader parameter ids `.1`/`.2` of the oven modifier and the UV map id `.3`: how they select the material slot and the lightmap UV set (needs the shader specs, T01-020).
 - The roles of `CPointLightProperties.3` (intensity?), `.11`, `.12`, `.13`, `.7`, `CPointLightSource.9`, and the directional light's parameters; byte order of the packed colours.
 - The 172 lights without parent whose property placement differs from the world placement; the 184 oven modifiers without a bake record in the extra section; the lightmaps whose ambient mask has another size; the 411 non-square lightmaps.
-- Which lights cast shadows and how the `CShadowBuffer` is used.
+- ~~Which lights cast shadows and how the `CShadowBuffer` is used.~~ Answered in `lighting.md` (T01-045): the baked shadow buffer, the flags, ambient and GI; the run-time use stays open (T01-079).
 - The external flare configuration files (`.lfx`) and the effect entities: parts h and the format spec for `.lfx` (T01-017).
-- How the baked lightmaps combine with dynamic lights in the shader (T01-045, T01-020).
+- How the baked lightmaps combine with dynamic lights in the shader: `lighting.md` gives the data-side answer (lightmapped instances carry a full-bright style BOOL modifier); the shader-side rule needs code analysis (T01-079).
