@@ -68,7 +68,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [x] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
-- [ ] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
+- [~] **T01-047** [INPRG @Ihor-Ihorevych/agent · branch `re-veh` · 2026-11-22] · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
 - [ ] **T01-048** · SPEC boss fights (per boss) · `L` each · `P2`
 - [ ] **T01-049** · Review & QA of specs: independent re-read, cross-check test vectors against `meta-dump` output · rolling · `P0`
 - [ ] **T01-050** · SPEC CTSEMETA object data: layout of `OBJS`, the `DCON`/`STAR`/`SSAR`/`BOOL`/`UUUU` markers, how each member type selects its value encoding (primitives, containers, references to `IDNT`/`RFIL`/objects), with test vectors; start with the small `.ep` and `.rsc` files · `XL` — **umbrella, split into T01-050a…d below; do not claim this line** · `P0` · Deps: T01-005 · **this unblocks every loader**
