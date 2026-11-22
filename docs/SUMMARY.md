@@ -65,6 +65,7 @@
 - [0002 Renderer front-end API](rfcs/0002-render-frontend-api.md)
 - [0003 Platform API](rfcs/0003-platform-api.md)
 - [0004 Audio API](rfcs/0004-audio-api.md)
+- [0005 ECS choice](rfcs/0005-ecs-choice.md)
 
 # Reverse-engineering specs
 

@@ -42,3 +42,6 @@ __pycache__/
 /fuzz/corpus/
 /fuzz/artifacts/
 /fuzz/coverage/
+
+# Throwaway spikes (spikes/*/README.md): build output is never committed
+/spikes/*/target/
