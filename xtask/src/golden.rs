@@ -120,12 +120,16 @@ pub fn decode_png(bytes: &[u8]) -> Result<Rgba> {
     let pixels = match info.color_type {
         png::ColorType::Rgba => data.to_vec(),
         png::ColorType::Rgb => data
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::Grayscale => data.iter().flat_map(|&g| [g, g, g, 255]).collect(),
         png::ColorType::GrayscaleAlpha => data
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Indexed => bail!("palette PNGs are not compared"),
@@ -171,7 +175,9 @@ pub fn compare_images(old: &Rgba, new: &Rgba) -> ImageChange {
         };
     }
     let (mut sum, mut max_abs, mut changed) = (0_u64, 0_u8, 0_usize);
-    for (a, b) in old.pixels.chunks_exact(4).zip(new.pixels.chunks_exact(4)) {
+    let (old_pixels, _) = old.pixels.as_chunks::<4>();
+    let (new_pixels, _) = new.pixels.as_chunks::<4>();
+    for (a, b) in old_pixels.iter().zip(new_pixels) {
         let mut differs = false;
         for (&x, &y) in a.iter().zip(b) {
             let d = x.abs_diff(y);
