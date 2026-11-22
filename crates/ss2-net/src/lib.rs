@@ -2,4 +2,5 @@
 
 pub mod inputstream;
 pub mod netsim;
+pub mod snapshots;
 pub mod timesync;
