@@ -182,3 +182,10 @@ Localization (docs/re/localization.md):
 ```
 python -X utf8 tools/re/l10n_verify.py "C:\path\to\Serious Sam 2"    # CTransString counts and key styles, Locales/ files (about a minute)
 ```
+
+World and `.mac` scripting evidence (docs/re/wld-macro.md, wld-macro-schema.md, wld-macro-vocab.md):
+
+```
+python -I tools/re/wld_macro_verify.py "C:\path\to\Serious Sam 2" [--vocab docs/re/wld-macro-vocab.md] [LIMIT]    # programs, trees, text, entities, variables (about 15 minutes)
+python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-macro-schema.md --match "Macro|OnHandler|Variant|HintedVar|LatentID|SingleEvent|EntityVariable|EntityPropertyVariable|Expression|VarAssignment|VarTypeHint|ObjectAction" --also-ext .mac --title "..."    # the class reference
+```
