@@ -32,7 +32,7 @@ Tooling is not invented here: every command below exists in the repo or is a sta
 | Golden image | exists (menu only) | `crates/ss2-render/tests/golden_*.rs` | no (needs a GPU adapter) | yes, skips without adapter | no |
 | Golden audio | planned, T06-013 | none yet | no | n/a | n/a |
 | Sim scenario | planned, T08-017 | none yet | no | n/a | n/a |
-| Netsim | planned, T08-017 | none yet | no | n/a | n/a |
+| Netsim | T08-017 (in-process; socket level is T08-017b) | `cargo test -p ss2-net` | no | n/a | n/a |
 | Soak | planned, T12-016 | none yet | yes (its own server) | n/a | n/a |
 | Fuzz | T12-007 (targets), T02-030 (format readers) | `fuzz/`, `cargo +nightly fuzz run <target>` | no | n/a | nightly (not yet run in CI) |
 
@@ -157,13 +157,19 @@ test workflow yet.
 - **Game data:** not for synthetic scenarios; scenarios that load a real level will be data-gated.
 - **When:** pull requests, once the runner exists.
 
-### 3.7 Netsim tests (planned, T08-017)
+### 3.7 Netsim tests (T08-017)
 
-- **What (planned):** a network conditioner (latency, jitter, loss, reordering, bandwidth cap), usable
-  in-process and at socket level. The M4 exit criterion is prediction smooth at 100 ms and 2 % loss
-  (`docs/roadmap/README.md`, section 5).
-- **Where:** none yet. The netsim CLI front-end is T11-010 (`P2`).
-- **Game data:** no. **When:** pull requests for unit-level use; long runs nightly, once they exist.
+- **What:** `ss2_net::netsim` is an in-process network conditioner: `NetSim<T>` models one direction of a link
+  (latency, jitter, loss, duplication, reordering, a bandwidth cap with a tail-drop queue) and `Duplex<T>` two. It is **exactly
+  repeatable**: no clock, no global randomness; the test passes the time in microseconds and a seed, so the same seed gives the
+  same run. Presets: `LinkConfig::lan`, `broadband`, `mobile`, `bad_wifi`, `satellite` and `acceptance_100ms_2pct` (the M4 exit
+  criterion: prediction smooth at 100 ms and 2 % loss, `docs/roadmap/README.md` section 5).
+- **Use:** drive it with a virtual clock in a test loop: `send(now, packet, bytes)` when a side transmits, `poll(now)` to get the
+  packets that have arrived; `stats()` says how many were lost, duplicated, reordered or refused.
+- **Not built:** the **socket-level** conditioner (a UDP proxy that applies the same `LinkConfig` to real traffic; it needs a real
+  clock, which the sim-safe `ss2-net` must not read: T08-017b), the scenario runner and the CLI front-end (T11-010, `P2`).
+  Nothing uses the simulator yet because the transport and the prediction code (T08-005 and the rest) do not exist.
+- **Game data:** no. **When:** pull requests (it is plain unit tests).
 
 ### 3.8 Soak tests (planned, T12-016)
 
