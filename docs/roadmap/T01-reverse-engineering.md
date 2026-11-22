@@ -50,7 +50,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-026** · SPEC entity class inventory of `Sam2Game.dll`: every class, its properties, events, relation to `.ep` · `XL` · `P0`
 - [x] **T01-027** · SPEC player rules: health/armor, inventory, ammo caps, pickups, powerups, death/respawn, Netricsa · `L` · `P1`
 - [x] **T01-028** · SPEC weapons — **one spec per weapon** (list from `.ep`/classes; `AutoShotgun` confirmed present): fire modes, rate, damage, spread, projectile physics, ammo use, animation events, effects · `L` each · `P1` · *parallelizable per weapon*
-- [ ] **T01-029** · SPEC enemies — **one spec per enemy type**: stats, attacks, movement, AI states, spawn/death effects, damage modifiers · `L` each · `P1` · *parallelizable per enemy*
+- [~] **T01-029** [INPRG @Ihor-Ihorevych/agent · branch `re-enm` · 2026-11-22] · SPEC enemies — **one spec per enemy type**: stats, attacks, movement, AI states, spawn/death effects, damage modifiers · `L` each · `P1` · *parallelizable per enemy*
 - [x] **T01-030** · SPEC level logic: triggers, mechanisms (doors, elevators), scripted sequences, checkpoints, secrets, cutscene triggers · `L` · `P1`
 - [ ] **T01-031** · SPEC what state original MP replicates (to design *our* replication; not protocol parity) · `M` · `P2`
 - [ ] **T01-032** · SPEC save-game contents (our format will differ; informs what must persist) · `M` · `P2`
