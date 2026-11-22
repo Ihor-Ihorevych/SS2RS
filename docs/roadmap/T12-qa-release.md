@@ -2,7 +2,7 @@
 
 PC first. Mobile budgets/devices/packaging are Phase 2.
 
-- [ ] **T12-001** · Test strategy doc: unit / synthetic-fixture / data-gated / golden-image / golden-audio / sim-scenario / netsim / soak / fuzz layers; what runs on PR vs nightly · `S` · `P0`
+- [~] **T12-001** [INPRG @Ihor-Ihorevych/agent · branch `T12-001-test-strategy` · 2026-11-22] · Test strategy doc: unit / synthetic-fixture / data-gated / golden-image / golden-audio / sim-scenario / netsim / soak / fuzz layers; what runs on PR vs nightly · `S` · `P0`
 - [ ] **T12-002** · Data-gated CI design: self-hosted runner(s) operated by contributors with legal copies; data never leaves the machine; results only (pass/fail/coverage); trust model for fork PRs · `M` · `P0`
 - [ ] **T12-003** · Parity checklist template per level/weapon/enemy; signed off in the PR that completes the task; evidence stored as text/CSV, not game assets · `S` · `P1` · 🟢
 - [ ] **T12-004** · PC performance budgets (frame ms, draw calls, memory, load time) on 2–3 reference PCs (low/mid/high); automated perf runs on fixed scenes, regression alerts · `M` · `P1`
