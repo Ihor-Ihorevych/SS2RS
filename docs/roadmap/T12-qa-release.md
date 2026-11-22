@@ -13,7 +13,7 @@ PC first. Mobile budgets/devices/packaging are Phase 2.
 - [ ] **T12-011** · Playtest program: build channels, structured feedback form (no telemetry by default), crash-report triage · `M` · `P2`
 - [x] **T12-012** · Accessibility review (input remap, subtitles, contrast, motion) · `S` · `P2`
 - [ ] **T12-013** · Localization QA pass (text overflow, fonts) · `S` · `P3`
-- [ ] **T12-014** · User docs: "Install & point to your data", FAQ, troubleshooting, supported game versions (Steam/GOG/retail, patch level) · `M` · `P1` · 🟢
+- [~] **T12-014** [INPRG @Ihor-Ihorevych/agent · branch `T12-014-user-docs` · 2026-11-22] · User docs: "Install & point to your data", FAQ, troubleshooting, supported game versions (Steam/GOG/retail, patch level) · `M` · `P1` · 🟢
 - [x] **T12-015** · Bug triage process, severity definitions, issue templates (crash, desync, visual parity, gameplay parity) · `S` · `P1` · 🟢
 - [ ] **T12-016** · Soak test farm: nightly long co-op bot sessions on a dedicated server; leak/desync detectors · `L` · `P2`
 - [x] **T12-017** · PC 1.0 release checklist & go/no-go criteria (perf, parity, crash-free %, legal) · `S` · `P2`
