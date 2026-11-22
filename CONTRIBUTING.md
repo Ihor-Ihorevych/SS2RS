@@ -30,6 +30,8 @@ Work comes from the roadmap files in `docs/roadmap/`. **Claim before you start**
 
 ## Rules of the road
 
+Mod content rules (what mods may contain, and how mods are licensed): [`docs/MODDING_POLICY.md`](docs/MODDING_POLICY.md).
+
 The workflow rules and the **Definition of Done** are in the [roadmap README](docs/roadmap/README.md) (§3, §4). In short: contracts before code, spec → implement → verify, stay inside your crate (`CODEOWNERS`), tests included, `cargo fmt`, `cargo clippy -D warnings`, `cargo deny`, and docs updated. Coding rules: [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md). Cross-crate API changes need an RFC ([`docs/rfcs/`](docs/rfcs/0000-template.md)).
 
 ## Dependencies

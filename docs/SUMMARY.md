@@ -14,6 +14,7 @@
 - [Performance budgets and benchmarks](PERF_BUDGETS.md)
 - [Releasing](RELEASING.md)
 - [Bug triage](TRIAGE.md)
+- [Modding policy](MODDING_POLICY.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
 
 # Roadmap
