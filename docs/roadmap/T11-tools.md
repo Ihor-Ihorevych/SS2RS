@@ -17,5 +17,5 @@ turns opaque `CTSEMETA` files into readable text so RE and loader work can move 
 - [ ] **T11-012** · Progress dashboard: auto-generated coverage page — file types loadable, % of levels loading, weapons/enemies implemented; fed by the data-gated runner · `M` · `P2`
 - [ ] **T11-013** · `ss2-doctor`: validates an install (completeness, version, patch level), prints actionable errors for end users · `S` · `P1` · 🟢
 - [ ] **T11-014** · Texture/model exporters (PNG/glTF) for modders and spec reviewers · `M` · `P2`
-- [~] **T11-015** [INPRG @Ihor-Ihorevych/agent · branch `T11-015-golden-cli` · 2026-11-22] · Golden-file update CLI (images/audio/sim traces) with review-diff output · `S` · `P1` · 🟢
+- [x] **T11-015** · Golden-file update CLI (images/audio/sim traces) with review-diff output · `S` · `P1` · 🟢
 - [ ] **T11-016** · Level lister/mapper: levels, entities-by-class counts, which classes are still unimplemented (drives T09-027) · `M` · `P1` · Deps: T02-020d
