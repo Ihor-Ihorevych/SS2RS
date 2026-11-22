@@ -104,6 +104,8 @@ creates nothing.
 
 ## 4. Release files
 
+The per-platform package formats, versions and distribution plan are in [PACKAGING.md](PACKAGING.md).
+
 Names are `ss2rs-<version>-<target>.<ext>` where `<target>` is the Rust target triple:
 
 | Platform | File |
