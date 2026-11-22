@@ -75,6 +75,13 @@ World lighting evidence (docs/re/wld-lighting.md):
 python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
 ```
 
+Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
+
+```
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --check [--worlds N]    # structure, references, entity links (all worlds: about 20 minutes)
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/ep-schema.md    # regenerate the schema reference
+```
+
 Font evidence (docs/re/fnt.md):
 
 ```
