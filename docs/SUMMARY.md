@@ -19,6 +19,7 @@
 - [Data-gated CI design](DATA_GATED_CI.md)
 - [Parity with the original game](PARITY.md)
 - [Performance budgets and benchmarks](PERF_BUDGETS.md)
+- [Profiling](PROFILING.md)
 - [Releasing](RELEASING.md)
 - [PC packaging and distribution](PACKAGING.md)
 - [Publishing crates](PUBLISHING.md)

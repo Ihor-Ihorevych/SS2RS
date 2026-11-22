@@ -3,6 +3,7 @@
 mod app;
 mod cli;
 mod diagnostics;
+mod profiling;
 mod screenshot;
 mod state;
 
@@ -25,6 +26,11 @@ fn main() -> ExitCode {
             ss2_core::logging::init_logging("info");
             None
         }
+    };
+    // Only the modes that run frames can be profiled; the guard lives until `main` returns.
+    let _profiler = match &mode {
+        cli::Mode::Window(_) | cli::Mode::Smoke { .. } => profiling::start(),
+        _ => None,
     };
     let result = match mode {
         cli::Mode::Help => {

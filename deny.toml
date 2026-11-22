@@ -12,6 +12,11 @@ ignore = [
     # Wayland client-side-decoration fallback (winit -> sctk-adwaita -> ab_glyph -> ttf-parser),
     # which parses a bundled UI font. Revisit when winit moves off sctk-adwaita (winit 0.31+).
     { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser via winit Wayland CSD only; no safe upgrade" },
+    # `bincode` 1.3.3 is unmaintained (not a vulnerability; the authors call 1.3.3 complete). It is
+    # reached only through puffin, the optional `profile` feature of ss2-app (docs/PROFILING.md),
+    # which is off by default and never part of a release build; it encodes frame timings sent to a
+    # local viewer. Revisit when puffin drops bincode, or remove the feature's dependency.
+    { id = "RUSTSEC-2025-0141", reason = "unmaintained bincode via puffin, optional dev-only profile feature" },
 ]
 
 [licenses]

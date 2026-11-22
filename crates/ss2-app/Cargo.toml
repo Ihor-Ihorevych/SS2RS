@@ -21,6 +21,14 @@ winit.workspace = true
 gilrs.workspace = true
 png.workspace = true
 tracing.workspace = true
+# Optional frame profiler (T11-011): `cargo run -p ss2-app --features profile`, see docs/PROFILING.md.
+puffin = { version = "0.20", optional = true }
+puffin_http = { version = "0.17", optional = true }
+
+[features]
+default = []
+# Serve puffin frame/scope data on 127.0.0.1:8585 (`SS2_PROFILE` picks another address).
+profile = ["dep:puffin", "dep:puffin_http"]
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -107,8 +107,8 @@ Only figures in the cited documents. "derived" means arithmetic on them.
 
 ### 5.2 Planned
 
-- Scene runs and frame capture: T12-004. GPU timestamps, CPU spans, overlay: T04-019, T10-007. Tracy or puffin:
-  T11-011 (optional, `docs/DEV_TOOLS.md` §3). RenderDoc for GPU capture from M2 (same section). Net profiling
+- Scene runs and frame capture: T12-004. GPU timestamps, CPU spans, overlay: T04-019, T10-007. Frame profiling with puffin
+  (`docs/PROFILING.md`, T11-011, optional). RenderDoc for GPU capture from M2 (same section). Net profiling
   T08-018; UI draw budget T10-023; frame pacing T03-013.
 - Original-game reference numbers: T01-038 (frame times as numbers) with the harness T11-008 and T01-039.
 
