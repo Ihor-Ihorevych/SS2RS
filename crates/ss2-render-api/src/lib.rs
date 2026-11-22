@@ -37,12 +37,14 @@
 //! ```
 
 mod camera;
+mod culling;
 mod ids;
 mod renderer;
 mod resources;
 mod scene;
 
 pub use camera::{Camera, Projection};
+pub use culling::{Aabb, Frustum, Plane, Sphere, Visibility, jitter_for_frame};
 pub use ids::{ClipId, MaterialId, ModelId, RenderId, TextureId};
 pub use renderer::{FrameStats, NullRenderer, Renderer};
 pub use resources::{MockResources, RenderResources};
