@@ -65,7 +65,7 @@ Buffer numbers used by element paths are positions in the `.12` / `.13` lists. A
 | `.4` | reference | always null |
 | `.5` | list of `CRenderMeshSection` | exactly **one** section per LOD |
 | `.6` | float | switch distance; ascending with the LOD number in all 76 files (for example 150, 300, 500) |
-| `.7` | `EPlatform` | platform mask: `0xFFFFFFFF` (83 LODs), `0xFFFFFFFD` (32), `0x3` (4), `0xFFFFFFFE` (4), `0x1` (2). Bit meanings **unknown** |
+| `.7` | `EPlatform` | platform mask: `0xFFFFFFFF` (83 LODs: all platforms), `0xFFFFFFFD` (32: all but the Xbox), `0x3` (4: PC and Xbox only), `0xFFFFFFFE` (4: all but the PC) and `0x1` (2: PC only). **Bit 0 is the PC and bit 1 the Xbox** (decoded from the platform masks of the menu gadgets in `gui.md`), so **a PC draws 121 of the 125 LODs**: every LOD with bit 0 set; the 4 `0xFFFFFFFE` LODs are for the other platform only |
 | `.8` | int | 1 in 74 LODs; 31 distinct values between 0 and 64 in all: **unknown** |
 
 `CRenderMeshSection.1` is the list of `CRenderMeshSurface`.
@@ -174,7 +174,7 @@ A skinned surface has bone weights (`.10`) and bone indices (`.11`): 4 bytes per
 ## Open questions
 
 - Winding order of the triangles, handedness and units of the coordinate system, and the orientation of the UV `v` axis: **not tested** (they need a rendered comparison or the engine's conventions).
-- Meaning of `EPlatform` bits in `CRenderMeshLOD.7` (which LODs a PC uses), of `CRenderMeshLOD.8`, of `CRenderMesh.7`/`.8`/`.9`, and of surface `.13`, `.20`, `.23` → **T01-055**.
+- Meaning of `CRenderMeshLOD.8` (the `EPlatform` bits of `CRenderMeshLOD.7` are decoded: bit 0 PC, bit 1 Xbox, see the table above and `gui.md`), of `CRenderMesh.7`/`.8`/`.9`, and of surface `.13`, `.20`, `.23` → **T01-055**.
 - What the engine uses for the 88 surfaces without a preset.
 - Morph map semantics and the collision mesh layout → **T01-055**.
 - Whether the bone palette holds skeleton bone indices (needs T01-009).
