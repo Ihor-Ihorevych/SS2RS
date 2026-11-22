@@ -110,6 +110,20 @@ fn options_menu_matches_golden() {
     );
 }
 
+fn about_menu() -> Menu {
+    let mut m = Menu::new(Settings::default());
+    m.handle(UiInput::Nav(NavInput::Down));
+    m.handle(UiInput::Nav(NavInput::Down));
+    m.handle(UiInput::Nav(NavInput::Activate));
+    m
+}
+
+#[test]
+fn about_menu_matches_golden() {
+    let Some(mut r) = renderer() else { return };
+    check_golden("menu_about_1280x720.png", &render(&mut r, &about_menu()));
+}
+
 // Canvas 1920x1080 -> 1280x720 is scale 2/3. First button: canvas (640..1280, 320..392),
 // second: y 408..480. Sample near the left edge, away from the label text.
 const SAMPLE_X: u32 = 440;

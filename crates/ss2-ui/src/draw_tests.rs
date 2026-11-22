@@ -23,10 +23,11 @@ fn to_options(m: &mut Menu) {
 fn focused_item_uses_accent_color_others_idle() {
     let m = Menu::new(Settings::default());
     let q = m.draw().quads;
-    assert_eq!(q.len(), 3);
+    assert_eq!(q.len(), 4);
     assert_eq!(q[0].color, theme::FOCUSED);
     assert_eq!(q[1].color, theme::IDLE);
     assert_eq!(q[2].color, theme::IDLE);
+    assert_eq!(q[3].color, theme::IDLE);
 }
 
 #[test]
@@ -37,7 +38,7 @@ fn draw_has_title_and_one_label_per_button() {
         .into_iter()
         .map(|t| t.text)
         .collect();
-    for want in ["SS2RS", "New Game", "Options", "Quit"] {
+    for want in ["SS2RS", "New Game", "Options", "About", "Quit"] {
         assert!(
             texts.iter().any(|t| t == want),
             "{want} missing in {texts:?}"
@@ -105,11 +106,22 @@ fn pointer_and_nav_fuzz_never_panics_and_keeps_focus_valid() {
         seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         seed
     };
-    for screen in [ScreenId::Main, ScreenId::Options, ScreenId::Pause] {
+    for screen in [
+        ScreenId::Main,
+        ScreenId::Options,
+        ScreenId::Pause,
+        ScreenId::About,
+    ] {
         let mut m = Menu::new(Settings::default());
         match screen {
             ScreenId::Pause => m.open_pause(),
             ScreenId::Options => to_options(&mut m),
+            ScreenId::About => {
+                m.handle(UiInput::Nav(NavInput::Down));
+                m.handle(UiInput::Nav(NavInput::Down));
+                m.handle(UiInput::Nav(NavInput::Activate));
+                assert_eq!(m.screen(), ScreenId::About);
+            }
             ScreenId::Main => {}
         }
         for _ in 0..200 {
