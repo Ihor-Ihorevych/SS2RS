@@ -265,3 +265,9 @@ Boss fight evidence (docs/re/bosses.md, bosses-tables.md):
 ```
 python -I tools/re/bosses_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/bosses-tables.md] [LIMIT]    # the seven boss characters, their behavior states and the events, actions and calls the arena scripts address to each boss (about 15 minutes)
 ```
+
+Menu evidence (docs/re/gui.md, menus-tables.md):
+
+```
+python -I tools/re/menus_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/menus-tables.md]    # the 99 menu screen layouts: gadgets, link graph, platform masks, button bars (about 1 minute)
+```
