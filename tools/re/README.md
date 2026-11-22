@@ -95,3 +95,10 @@ Physical material and scheme evidence (docs/re/mat.md):
 ```
 python -I tools/re/mat_verify.py "C:\path\to\Serious Sam 2"    # .mat, .scs, .scp, .sca, .mas and who refers to them
 ```
+
+Resource database and character tool evidence (docs/re/rsc-ctl.md, docs/re/rsc-ctl-schema.md):
+
+```
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --check --ext .rsc,.ctl    # roots and references of all .rsc and .ctl files
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/rsc-ctl-schema.md --ext .rsc,.ctl --title "..."    # regenerate the schema
+```
