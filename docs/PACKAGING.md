@@ -58,8 +58,9 @@ only sees git paths, so this needs either a temporary git index holding the pack
 |---|---|---|
 | All | GitHub Release assets: archives and `SHA256SUMS`, as a draft that a human publishes | IMPLEMENTED (`release.yml` draft-release job); not yet run for a tag |
 | Windows x64 | portable zip (`ss2rs-<ver>-x86_64-pc-windows-msvc.zip`) | IMPLEMENTED (`Compress-Archive`) |
-| Windows x64 | installer (WiX/MSI or Inno Setup) | PROPOSED, after the zip; depends on T03-026 (open) |
-| Windows x64 | code signing | OPEN: T03-026; no certificate in the repo. Release notes say the binaries are unsigned |
+| Windows x64 | application manifest in `ss2-app.exe` (per-monitor DPI awareness, Windows 10 baseline, long paths, UTF-8 code page) | IMPLEMENTED (`crates/ss2-app/build.rs`, tested by `crates/ss2-app/tests/windows_manifest.rs`, T03-026) |
+| Windows x64 | installer (WiX/MSI or Inno Setup) | PROPOSED, after the zip: T03-035 |
+| Windows x64 | code signing | OPEN: T03-035; no certificate in the repo. Release notes say the binaries are unsigned |
 | Linux x64 | tar.gz (`ss2rs-<ver>-x86_64-unknown-linux-gnu.tar.gz`) | IMPLEMENTED (workflow) |
 | Linux x64 | AppImage | PROPOSED, T03-011 (`P2`, open). See 2.1 |
 | Linux x64 | Flatpak | PROPOSED, T03-011 (open). See 2.1 |
@@ -140,7 +141,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 3. Whether `gro-tool` ships (section 1).
 4. The packaged `README.md` does not yet explain `SS2_DATA_DIR` to players.
 5. macOS: no `.app`, no Intel archive, no codesign or notarisation, no Apple Developer account.
-6. Windows: no installer, no code signing; the 10+ baseline and DPI manifest are T03-026 (open).
+6. Windows: no installer and no code signing (T03-035). The executable declares Windows 10 or later and per-monitor DPI awareness in its manifest (T03-026); `ss2-server.exe` has no manifest.
 7. Linux: no AppImage or Flatpak (T03-011). The Flatpak folder-access design and whether `libudev` is needed at run time are unchecked.
 8. No clean-machine test exists for any archive (VC runtime, system libraries). The smoke run is the only check.
 9. Provenance, attestations and signing of `SHA256SUMS` are undecided.

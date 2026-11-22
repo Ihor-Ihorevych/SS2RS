@@ -42,6 +42,8 @@ wizard (T10-019) and `ss2-doctor` (T11-013). Neither exists yet.
 ## Platforms
 
 - **PC first:** Windows, then Linux and macOS ([README](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/README.md)).
+- **Windows version:** Windows 10 or later (64-bit). The program declares this and per-monitor high-DPI support in its
+  manifest, so on a high-resolution screen with display scaling the window is sharp, not stretched.
 - **Android and other platforms:** planned for later phases. The Android port starts only after
   milestone M8 ([roadmap section 5](../roadmap/README.md#5-milestones-and-exit-criteria)).
 

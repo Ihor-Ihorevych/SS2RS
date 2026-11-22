@@ -22,7 +22,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-020** · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
 
 ## Other PC platforms (after Windows works; before M8)
-- [~] **T03-026** [INPRG @Ihor-Ihorevych/agent · branch `T03-026-windows-manifest` · 2026-11-22] · Windows: installer/portable zip, DPI-awareness manifest, Win10+ baseline · `S` · `P1` · 🟢
+- [x] **T03-026** · Windows: portable zip (`release.yml`), DPI-awareness manifest (per-monitor v2, long paths, UTF-8 code page) and the Windows 10+ baseline in `ss2-app.exe`; installer and code signing split into T03-035 · `S` · `P1` · 🟢
 - [ ] **T03-011** · Linux: Wayland+X11, AppImage/Flatpak, Steam Deck/gamescope, handheld controller layouts · `M` · `P2`
 - [ ] **T03-010** · macOS: `.app` bundle, Metal path verification, notarization notes, Apple Silicon + x86_64 · `M` · `P2`
 
@@ -48,3 +48,4 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-032** · `ss2-app` window loop and menu wiring (winit 0.30): CLI (`--screenshot`, `--smoke-frames`), scenes (menu/placeholder game), live vsync/fullscreen, minimize-safe · `M` · `P1` · Deps: T04-036, T03-031, T03-030
 - [ ] **T03-033** · Move `ss2-app` onto `ss2_platform::window::run`: the app implements `PlatformApp` (renderer created in `window_ready`, dropped in `window_lost`) and reads input as `PlatformEvent`s instead of raw `winit`/`gilrs` calls (split from T03-001, which delivered the loop and lifecycle; the input events are T03-002/T03-003) · `M` · `P1` · Deps: T03-001, T03-002, T03-003
 - [ ] **T03-034** · Platform log backends: Android `logcat` and macOS `OSLog` layers for `tracing` (behind `cfg(target_os)`; needs the `tracing-android` / `tracing-oslog` crates and the target toolchains for the portability check; the workspace forbids `unsafe`) · `S` · `P2` · Deps: T03-019
+- [ ] **T03-035** · Windows installer (WiX/MSI or Inno Setup) and Authenticode code signing (needs a certificate and the owner's decision; unsigned builds are stated in the release notes until then) · `M` · `P2` · Deps: T03-026
