@@ -133,3 +133,9 @@ Shader program evidence (docs/re/shaders.md):
 ```
 python -X utf8 tools/re/shader_verify.py "C:\path\to\Serious Sam 2"    # GPU-Programs.asm: programs, families, version tags, fragments (prints numbers only)
 ```
+
+Class catalogue (docs/re/classes.md, classes-catalog.md):
+
+```
+python -X utf8 tools/re/class_catalog.py "C:\path\to\Serious Sam 2" --markdown docs/re/classes-catalog.md [--modules modules.json]    # about 30 seconds
+```
