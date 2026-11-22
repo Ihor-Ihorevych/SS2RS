@@ -44,7 +44,7 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 - [ ] **T09-027** · **Per-level tasks — one per campaign level** (`T09-027a…`, each `L` · `P2`): all entity classes it uses exist, scripts behave, soft-locks checked, co-op tested, parity checklist signed. Driven by T11-016's "unimplemented classes per level" report.
 
 ## Dev & test
-- [ ] **T09-028** · Cheats/dev commands (god, noclip, give, spawn, kill-all, level skip) via console · `S` · `P1` · 🟢
+- [~] **T09-028** [INPRG @Ihor-Ihorevych/agent · branch `T09-028-cheat-commands` · 2026-11-22] · Cheats/dev commands (god, noclip, give, spawn, kill-all, level skip) via console · `S` · `P1` · 🟢
 - [ ] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached) · `M` · `P0`
 - [ ] **T09-030** · Balance/parity validation vs oracle numbers (T01-038): time-to-kill tables, rate-of-fire, projectile speeds, enemy speeds · `L` · `P1`
 - [ ] **T09-031** · Difficulty system tables & modifiers · `M` · `P1`
