@@ -46,6 +46,7 @@ code yet.
 | `snapshots` | `SNAPSHOTS.md` | interpolation, short extrapolation, teleport and despawn handling, adaptive delay for remote entities |
 | `events` | `EVENTS.md` | server-to-client events delivered exactly once, in order, with late-join suppression |
 | `protocol` | `PROTOCOL.md` | protocol version rules, schema hash, handshake compatibility check |
+| `netstats` | `NETSTATS.md` | traffic per tick by kind, round trip, jitter and loss over sliding windows, for an overlay and profiling |
 
 Two properties run through all of them. **Reliability is built on unreliable datagrams by repetition** (inputs, events), so a lost
 packet is repaired by the next one with no resend round trip; and **state is never repaired by resending**: the next snapshot

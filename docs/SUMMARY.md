@@ -22,6 +22,7 @@
 - [Snapshot buffer](SNAPSHOTS.md)
 - [Reliable events](EVENTS.md)
 - [Netcode architecture guide](NETCODE.md)
+- [Net statistics](NETSTATS.md)
 - [Network protocol versioning](PROTOCOL.md)
 - [Testing strategy](TESTING.md)
 - [Data-gated CI design](DATA_GATED_CI.md)
