@@ -48,7 +48,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-024** · SPEC player movement: speeds, acceleration, friction, air control, jump, gravity, step height, slope limit, crouch, swim, ladders — as **measured numbers + test vectors** · `L` · `P0` · Deps: T01-038/039
 - [x] **T01-025** · SPEC AI/navigation: perception, pathfinding (navmesh/waypoints), steering, group behavior, spawners · `L` · `P1`
 - [ ] **T01-026** · SPEC entity class inventory of `Sam2Game.dll`: every class, its properties, events, relation to `.ep` · `XL` · `P0`
-- [ ] **T01-027** · SPEC player rules: health/armor, inventory, ammo caps, pickups, powerups, death/respawn, Netricsa · `L` · `P1`
+- [~] **T01-027** [INPRG @lxstyo · branch `T01-027-player-rules` · 2026-11-22] · SPEC player rules: health/armor, inventory, ammo caps, pickups, powerups, death/respawn, Netricsa · `L` · `P1`
 - [ ] **T01-028** · SPEC weapons — **one spec per weapon** (list from `.ep`/classes; `AutoShotgun` confirmed present): fire modes, rate, damage, spread, projectile physics, ammo use, animation events, effects · `L` each · `P1` · *parallelizable per weapon*
 - [ ] **T01-029** · SPEC enemies — **one spec per enemy type**: stats, attacks, movement, AI states, spawn/death effects, damage modifiers · `L` each · `P1` · *parallelizable per enemy*
 - [ ] **T01-030** · SPEC level logic: triggers, mechanisms (doors, elevators), scripted sequences, checkpoints, secrets, cutscene triggers · `L` · `P1`
