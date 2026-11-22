@@ -68,7 +68,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [x] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
-- [~] **T01-047** [INPRG @Ihor-Ihorevych/agent · branch `re-veh` · 2026-11-22] · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
+- [x] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
 - [ ] **T01-048** · SPEC boss fights (per boss) · `L` each · `P2`
 - [ ] **T01-049** · Review & QA of specs: independent re-read, cross-check test vectors against `meta-dump` output · rolling · `P0`
 - [ ] **T01-050** · SPEC CTSEMETA object data: layout of `OBJS`, the `DCON`/`STAR`/`SSAR`/`BOOL`/`UUUU` markers, how each member type selects its value encoding (primitives, containers, references to `IDNT`/`RFIL`/objects), with test vectors; start with the small `.ep` and `.rsc` files · `XL` — **umbrella, split into T01-050a…d below; do not claim this line** · `P0` · Deps: T01-005 · **this unblocks every loader**
@@ -97,3 +97,4 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-069** · SPEC level logic leftovers: timing and ordering of events and actions (detector re-arm by `Recharge`, `Assure…` doors, `macDestroyOnePhase`, how `Wait` conditions are re-evaluated), what ends a level (`StartNextLevelLink`, portals), the 11 chapters off the chain, the unresolved actions and runs, boss logic · `M` · `P1` · Deps: T01-038, T01-039
 - [ ] **T01-070** · SPEC environment leftovers: the roles and formulas of the haze members `.5/.6/.7/.10` and the bloom members, how the renderer blends several hazes and the bloom, where underwater and fog overlays come from, which models use the water shader per level, the three skies without textures · `S` · `P2` · Deps: T01-020
 - [ ] **T01-071** · SPEC destruction leftovers: the run-time break rule (health versus accumulated damage, damage type match, phase transition), debris simulation (collision modes, toughness, speeds), the names of `ModelBodyType`, `EDamageType` and the `EPlatform` bits and how the platform configuration is chosen, the 769 models without a holder · `S` · `P2` · Deps: T01-038
+- [ ] **T01-072** · SPEC vehicle/turret run-time rules: movement units and input mapping (`SAircraftPlayerControls`), boarding and leaving a ride (`en_iWayToSeat`, `macMountRide`, `RiderLost`), vehicle damage and collision, turret gun limits (`STurretPuppetParams.1`) · `S` · `P2` · Deps: T01-038

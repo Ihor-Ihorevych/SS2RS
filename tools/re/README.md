@@ -229,3 +229,9 @@ Destruction evidence (docs/re/destruction.md, destruction-models.md):
 ```
 python -I tools/re/destruction_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/destruction-models.md] [LIMIT]    # holders, configurations, effects, substitute chains in all models; use in worlds (about 12 minutes)
 ```
+
+Vehicle and turret evidence (docs/re/vehicles.md, vehicles-table.md):
+
+```
+python -I tools/re/vehicles_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/vehicles-table.md] [LIMIT]    # aircraft, turret, hovercraft and rolling-ball parameter files and their placed entities in all worlds (about 15 minutes)
+```
