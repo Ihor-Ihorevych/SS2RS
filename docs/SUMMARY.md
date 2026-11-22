@@ -17,6 +17,7 @@
 - [PC 1.0 release checklist](PC_1_0_CHECKLIST.md)
 - [Bug triage](TRIAGE.md)
 - [Accessibility review and checklist](ACCESSIBILITY.md)
+- [Localization QA pass](LOCALIZATION_QA.md)
 - [Modding policy](MODDING_POLICY.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
 
