@@ -9,8 +9,8 @@ shipped `SeriousEngineTools.chm`, our own `meta-dump` (T11-002), instrumentation
 Reminder: Ghidra projects and decompiler listings stay **out of git**; only prose + numbers.
 
 ## Setup
-- [~] **T01-001** [INPRG @lxstyo · branch `T01-001-spec-conventions` · 2026-11-22] · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
-- [ ] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
+- [x] **T01-001** · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
+- [x] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
 - [x] **T01-003** · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
 ## Container & data formats
@@ -36,10 +36,10 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-014** · SPEC `.ep` entity params: schema per entity class, inheritance/overrides, how classes are named · `L` · `P0`
 - [x] **T01-015** · SPEC `.rsc` resource databases (e.g. `HudParams.rsc`) and `.ctl` control/tool definitions · `M` · `P1`
 - [x] **T01-016** · SPEC `.pfx` particle effects: emitters, curves, forces, rendering modes, LOD/budget · `L` · `P1`
-- [ ] **T01-017** · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
+- [x] **T01-017** · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
 - [x] **T01-018** · SPEC `.fnt` fonts (+ `Content/Fonts`): glyph metrics, atlases, encodings/languages · `M` · `P1`
-- [ ] **T01-019** · Identify unknown types: `.cb .srt .sfc .crt .mac .mch .scp .pss .sca .mas .ctr .preload .bin .dsc .nfo` → one-page spec each as discovered (`.dsc`/`.nfo` look like plain text). **Identified so far** (`mat.md`, `ep.md`): `.scp` = particle scheme (`CParticleScheme`), `.sca` = animation scheme (`CAnimationScheme`), `.mas` = moving animation scheme (`CMovingAnimationScheme`), `.pss` = puppet spine data (referenced by `SLeggedPuppetBodyParams.lpbp_psdPuppetSpineData`); their internal layouts are still to be specified · `L` · `P1`
-- [ ] **T01-020** · SPEC Shader system: `Bin/Shaders.module`, `GPU-Programs.asm`, `Sources/Shaders`; how materials pick programs, permutations, constants, vertex formats · `L` · `P0`
+- [x] **T01-019** · Identify unknown types: `.cb .srt .sfc .crt .mac .mch .scp .pss .sca .mas .ctr .preload .bin .dsc .nfo` → one-page spec each as discovered (`.dsc`/`.nfo` look like plain text). **Identified so far** (`mat.md`, `ep.md`): `.scp` = particle scheme (`CParticleScheme`), `.sca` = animation scheme (`CAnimationScheme`), `.mas` = moving animation scheme (`CMovingAnimationScheme`), `.pss` = puppet spine data (referenced by `SLeggedPuppetBodyParams.lpbp_psdPuppetSpineData`); their internal layouts are still to be specified · `L` · `P1`
+- [~] **T01-020** [INPRG @lxstyo · branch `T01-020-shader-system` · 2026-11-22] · SPEC Shader system: `Bin/Shaders.module`, `GPU-Programs.asm`, `Sources/Shaders`; how materials pick programs, permutations, constants, vertex formats · `L` · `P0`
 
 ## Engine behavior (from `Engine.dll`/`Core.dll`)
 - [ ] **T01-021** · Recover C++ class hierarchy & vtables via MSVC RTTI for all three game DLLs → `docs/re/classes.md` (names, inheritance, sizes) · `L` · `P0`

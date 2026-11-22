@@ -33,4 +33,6 @@ Hand-made or measured only — no excerpts of copyrighted files beyond a few byt
 illustrate a header.
 ```
 
+Naming, the review checklist, confidence levels and the rules for exporting notes from Ghidra without code are in [`conventions.md`](conventions.md).
+
 Specs are the contract between spec authors and implementers: if an implementer finds one wrong or incomplete, open an issue (label `spec`) instead of reading the original binary.

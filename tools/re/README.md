@@ -114,4 +114,16 @@ World visibility evidence (docs/re/wld-visibility.md):
 
 ```
 python -I tools/re/wld_vis_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # vis boxes and groups, the active list, the 2D grids (about 15 minutes for all worlds)
+
+Flare, text-effect and vibration-effect evidence (docs/re/fx.md):
+
+```
+python -I tools/re/fx_verify.py "C:\path\to\Serious Sam 2" [--refs]    # .lfx / .tfx / .vfx classes, ranges, graph patterns (seconds; --refs adds a few minutes)
+```
+
+Smaller file types (docs/re/misc-types.md, misc-schema.md):
+
+```
+python -X utf8 tools/re/misc_verify.py "C:\path\to\Serious Sam 2"    # .nfo .dsc .srt .crt .preload .cfg .bin and the .cb .sfc .pss .ctr .mch .mac files
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/misc-schema.md --ext .cb,.sfc,.pss,.ctr,.mch,.mac,.sca,.mas --title "..."
 ```
