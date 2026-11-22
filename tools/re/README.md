@@ -68,3 +68,10 @@ World geometry evidence (docs/re/wld-geometry.md):
 ```
 python -I tools/re/wld_geometry_verify.py "C:\path\to\Serious Sam 2" [N]    # static models, hulls, collision grid cells in all 59 worlds (about 20 minutes)
 ```
+
+Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
+
+```
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --check [--worlds N]    # structure, references, entity links (all worlds: about 20 minutes)
+python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/ep-schema.md    # regenerate the schema reference
+```
