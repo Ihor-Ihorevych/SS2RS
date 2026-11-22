@@ -317,14 +317,20 @@ mod tests {
         else {
             return;
         };
-        assert_eq!(PlatformPaths::from_user_dirs(&dirs).settings_file(), core_path);
+        assert_eq!(
+            PlatformPaths::from_user_dirs(&dirs).settings_file(),
+            core_path
+        );
     }
 
     #[test]
     fn portable_in_keeps_everything_in_one_folder_next_to_the_exe() {
         let p = PlatformPaths::portable_in("app");
         for dir in [&p.config_dir, &p.save_dir, &p.cache_dir, &p.log_dir] {
-            assert!(dir.starts_with(Path::new("app").join("ss2-data")), "{dir:?}");
+            assert!(
+                dir.starts_with(Path::new("app").join("ss2-data")),
+                "{dir:?}"
+            );
         }
     }
 
@@ -332,29 +338,29 @@ mod tests {
     fn marker_file_next_to_the_exe_selects_portable_mode() {
         let exe_dir = tempfile::tempdir().unwrap();
         std::fs::write(exe_dir.path().join(PORTABLE_MARKER), b"").unwrap();
-        let p = PlatformPaths::resolve(exe_dir.path(), PortableMode::Auto, Some(user_dirs()))
-            .unwrap();
+        let p =
+            PlatformPaths::resolve(exe_dir.path(), PortableMode::Auto, Some(user_dirs())).unwrap();
         assert_eq!(p, PlatformPaths::portable_in(exe_dir.path()));
     }
 
     #[test]
     fn without_a_marker_auto_mode_uses_the_user_directories() {
         let exe_dir = tempfile::tempdir().unwrap();
-        let p = PlatformPaths::resolve(exe_dir.path(), PortableMode::Auto, Some(user_dirs()))
-            .unwrap();
+        let p =
+            PlatformPaths::resolve(exe_dir.path(), PortableMode::Auto, Some(user_dirs())).unwrap();
         assert_eq!(p, PlatformPaths::from_user_dirs(&user_dirs()));
     }
 
     #[test]
     fn an_explicit_mode_overrides_the_marker() {
         let exe_dir = tempfile::tempdir().unwrap();
-        let on = PlatformPaths::resolve(exe_dir.path(), PortableMode::On, Some(user_dirs()))
-            .unwrap();
+        let on =
+            PlatformPaths::resolve(exe_dir.path(), PortableMode::On, Some(user_dirs())).unwrap();
         assert_eq!(on, PlatformPaths::portable_in(exe_dir.path()), "no marker");
 
         std::fs::write(exe_dir.path().join(PORTABLE_MARKER), b"").unwrap();
-        let off = PlatformPaths::resolve(exe_dir.path(), PortableMode::Off, Some(user_dirs()))
-            .unwrap();
+        let off =
+            PlatformPaths::resolve(exe_dir.path(), PortableMode::Off, Some(user_dirs())).unwrap();
         assert_eq!(off, PlatformPaths::from_user_dirs(&user_dirs()), "marker");
     }
 
