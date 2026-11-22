@@ -235,3 +235,9 @@ Vehicle and turret evidence (docs/re/vehicles.md, vehicles-table.md):
 ```
 python -I tools/re/vehicles_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/vehicles-table.md] [LIMIT]    # aircraft, turret, hovercraft and rolling-ball parameter files and their placed entities in all worlds (about 15 minutes)
 ```
+
+Camera and weapon view evidence (docs/re/camera-view.md, camera-tables.md):
+
+```
+python -I tools/re/camera_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/camera-tables.md]    # the 18-camera database, the 16 weapon view placements, camera names used by puppets, the player's view parameters (about 3 minutes)
+```
