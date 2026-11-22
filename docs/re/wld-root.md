@@ -58,7 +58,7 @@ An entity is an object of a class deriving from `CEntity`; the **class is the ob
 | Object | Member | Meaning (observed) |
 |---|---|---|
 | `CRenderingDomain` | `.1` | all `CRenderable` objects of the world (59 of 59) |
-| | `.8` | a **subset** of `.1`. In 4 of the 5 smallest worlds it is exactly the second renderable grid's list (`.1` minus the haze effect); in the campaign world `1_3_village` it holds only 157 of 895 renderables, and over all worlds the missing ones are mostly editor primitives and models: probably the renderables **active in the stored state** (not a function of class or flags) |
+| | `.8` | a **subset** of `.1`. In 4 of the 5 smallest worlds it is exactly the second renderable grid's list (`.1` minus the haze effect); in the campaign world `1_3_village` it holds only 157 of 895 renderables, and over all worlds the missing ones are mostly editor primitives and models: the renderables that are **in no vis group** (all of them except the haze effect, `wld-visibility.md`) |
 | | `.3` | the dynamic **light sources**: `CPointLightSource` (11,349 over all worlds), `CDirectionalLightSource` (89) |
 | | `.9` | the haze effect renderable (`CHazeEffectRenderable`, 65 over all worlds) |
 | | `.5` | → the `CLightGrid` |
@@ -97,7 +97,7 @@ All grids are **pools with free lists**; a reader can take the lists as stored.
 - **`CGenericGrid2D`** (base of `CRenderableGrid` and `CLightGrid`): `.1` nodes, each `CGridNode2D` = four ints (**child node indices**, −1 for none: a quadtree) and an int (index of the first **link**, −1 for none); `.3` links, each `CGridLink2D` = two ints (entry index, next link); `.5` entries, each `CGridEntry2D` = five ints; `.2`, `.4`, `.6` are the **free lists** (unique valid indices into nodes, links, entries); `.7` depth (11 or 12) and `.8` extent (4096.0). The number of **used entries** (pool size − free list) equals the number of objects in the grid's own list (`CRenderableGrid.1` or `CLightGrid.1`) for all 177 grids. The light grid's list holds only light sources (`CPointLightSource`, `CDirectionalLightSource`), the renderable grids' lists only renderables of the world. Of the two renderable grids of a world, one has an empty own list in 15 of the 59 worlds; in the five smallest worlds the other holds exactly the renderables of `CRenderingDomain.8`.
 - **`CCollisionGrid`**: `.1` nodes (`CGridNode`: four child indices + int), `.2` free nodes, `.3` links (`CGridLink`: **hull reference** (null possible) + next link), `.4` free links, `.5` depth, `.6` extent. Every used link points at a hull of the world, and **every hull appears in at least one used link** (all 59 worlds).
 
-How a node index maps to a rectangle of the plane, and how the quadtree is walked, is not specified here (the data gives the structure but the geometry convention was not tested).
+How the cells of the quadtree map to the plane and how it is walked is in `wld-visibility.md` (entry = cell rectangle plus level, child slot = `bx + 2*bz`).
 
 ## State manager and `Time`
 
@@ -123,4 +123,4 @@ How a node index maps to a rectangle of the plane, and how the quadtree is walke
 - Bit meanings of `CAspect.6` and `CBaseEntity.1` (`0x2`); `CEntity.5`/`.6` (always 0); `CWorld.19`, `CWorld.11` and the exact role of `CWorld.9`.
 - Exact meaning of `CRenderingDomain.8`, `CPhysicsDomain.2` and `CCollisionDomain.3`; contents of the sync lists, the state manager and the steppers.
 - The quadtree geometry of the grids; whether a loader can rebuild the grids from the placements (they look like pure acceleration structures, but this was not proven).
-- Everything below the entity level is in the other parts: models and placement (a), lights and baked lightmaps (b), visibility boxes (c), entity classes and their properties (d), navigation (e), scripting (g), sound and effects (h), physics bodies (i).
+- Everything below the entity level is in the other parts: models and placement (a), lights and baked lightmaps (b), visibility boxes (c, `wld-visibility.md`), entity classes and their properties (d), navigation (e), scripting (g), sound and effects (h), physics bodies (i).

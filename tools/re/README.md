@@ -109,3 +109,9 @@ Particle effect evidence (docs/re/pfx.md, docs/re/pfx-schema.md):
 python -I tools/re/pfx_verify.py "C:\path\to\Serious Sam 2"    # structure, emitter shapes, graph holders, enumerations
 python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --check --ext .pfx    # roots and references
 ```
+
+World visibility evidence (docs/re/wld-visibility.md):
+
+```
+python -I tools/re/wld_vis_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # vis boxes and groups, the active list, the 2D grids (about 15 minutes for all worlds)
+```
