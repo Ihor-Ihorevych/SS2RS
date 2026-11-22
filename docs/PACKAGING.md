@@ -49,7 +49,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 
 - Today the only way is the environment variable **`SS2_DATA_DIR`**, pointing at the folder with the
   `.gro` archives ([install guide](user/install.md)).
-- The first-run wizard (T10-019, `P0`) is **planned**; it needs `ss2-doctor` (T11-013), also not built.
+- The first-run wizard (T10-019, `P0`) is **planned**. `ss2-doctor` (T11-013, `crates/ss2-vfs/src/bin/ss2-doctor.rs`) exists, but **`release.yml` does not put it in the archives yet** (it packs `ss2-app` and `ss2-server` only): add it with T12-008.
 - No package step downloads, copies or bundles game data.
 
 ## 2. Package formats per platform

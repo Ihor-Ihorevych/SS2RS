@@ -217,7 +217,7 @@ and each size in MB to one decimal place (rounded).
 - Compare names and entry counts with that table, using `cargo run -p gro-tool -- stats` (`install.md`). Do not run
   `tools/re/inventory.py` on a runner (R5).
 - A mismatch is recorded in the summary and, PROPOSED, does not block tests until a version checker exists. That
-  checker is planned (`ss2-doctor`, T11-013; first-run wizard, T10-019) and not built.
+  checker exists as `ss2-doctor` (T11-013; it checks the archives, their readability and the patch level, not the file contents); the first-run wizard (T10-019) is not built.
 
 ### 4.4 What a runner reports (PROPOSED)
 
@@ -295,7 +295,7 @@ own "first real run" check before its results count.
    `docs/re/inventory.md` records "paths, sizes and counts"; `docs/PUBLISHING.md` section 3 says "no derived data".
 9. **File names in summaries.** `docs/COMPLIANCE.md` section 4 says the clean-room log never holds an install file name,
    while `docs/re/inventory.md` lists them. The summary rule must choose.
-10. **Version detection** is manual (names and counts). `ss2-doctor` (T11-013) and the wizard (T10-019) are planned.
+10. **Version detection** is by archive names only: `ss2-doctor` (T11-013) reports the patch level from the newest `Patch_*.gro` name and checks that every archive opens; it does not compare file contents or counts against a reference. The wizard (T10-019) is planned.
 11. **Egress allow-list** (GitHub, crates.io, Rust toolchain hosts) is not defined; take it from GitHub's and Cargo's documentation.
 12. **Ephemeral runners and runner-version pinning** are assumed; verify both.
 13. **Quorum and single operator.** Section 4.6 has no second operator in sight.

@@ -36,8 +36,9 @@ No document says that other editions, storefront copies or other patch levels wo
 verified. The [crash report template](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/.github/ISSUE_TEMPLATE/crash.md)
 asks for the store, version and patch level so the project can collect that information.
 
-A checker that reports the version and patch level of an install is **planned**: the first-run
-wizard (T10-019) and `ss2-doctor` (T11-013). Neither exists yet.
+A checker for the folder exists: `ss2-doctor <folder>` (T11-013) lists the archives, tells you which are missing or damaged
+and reports the patch level from the newest patch file name. It is not in the download archives yet; from a source checkout run
+`cargo run -p ss2-vfs --bin ss2-doctor -- <folder>`. The first-run wizard (T10-019) is still planned.
 
 ## Platforms
 
