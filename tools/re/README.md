@@ -145,3 +145,9 @@ AI evidence (docs/re/ai.md):
 ```
 python -X utf8 tools/re/ai_verify.py "C:\path\to\Serious Sam 2" [--worlds 6] [--table]    # .cb behaviors; with --worlds also spawners, tactics, markers, nav mesh
 ```
+
+Player and global rules (docs/re/player-rules.md):
+
+```
+python -X utf8 tools/re/rules_verify.py "C:\path\to\Serious Sam 2"    # difficulty tables, power-up durations, damage multipliers, item numbers, player puppet values
+```
