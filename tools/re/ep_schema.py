@@ -2,10 +2,11 @@
 behind docs/re/ep.md (read-only).
 
 Usage:
-  python -I tools/re/ep_schema.py [DATA_DIR] --check [--worlds N]
+  python -I tools/re/ep_schema.py [DATA_DIR] --check [--worlds N] [--ext .ep[,.rsc,.ctl,...]]
       prints the checks (decode, one root, class tree, references resolve, entity links in the N smallest worlds)
-  python -I tools/re/ep_schema.py [DATA_DIR] --markdown OUT.md
-      writes the schema reference (docs/re/ep-schema.md is generated this way)
+  python -I tools/re/ep_schema.py [DATA_DIR] --markdown OUT.md [--ext .ep[,.rsc,...]] [--title "..."]
+      writes the schema reference (docs/re/ep-schema.md is generated this way; `--ext .rsc,.ctl --title "..."` writes
+      docs/re/rsc-ctl-schema.md: any set of extensions can be given)
 DATA_DIR defaults to $SS2_DATA_DIR.
 """
 import collections, os, sys, zipfile
@@ -20,10 +21,11 @@ NULL = 0xFFFFFFFF
 def ids(v): return [x.oid for x in (v or []) if isinstance(x, Ref) and x.oid != NULL]
 
 
-def load(install):
+def load(install, exts=(".ep",)):
     out = {}
-    for name, d in sorted(merged_files(install, ".ep").items()):
-        r = parse(d); objs, edob = TreeDec(d, r).objects(); out[name] = (d, r, objs, edob)
+    for ext in exts:
+        for name, d in sorted(merged_files(install, ext).items()):
+            r = parse(d); objs, edob = TreeDec(d, r).objects(); out[name] = (d, r, objs, edob)
     return out
 
 
@@ -37,26 +39,26 @@ def type_name(r, tid):
     return t.name if t is not None else "external " + str(r["exty"].get(tid, "?"))
 
 
-def check(install, world_limit):
-    eps = load(install); st = collections.Counter(); roots = collections.Counter(); tree = {}
+def check(install, world_limit, exts=(".ep",)):
+    files = load(install, exts); st = collections.Counter(); roots = collections.defaultdict(collections.Counter); tree = {}
     allpaths = set()
     for f in os.listdir(install):
         if f.lower().endswith(".gro"):
             with zipfile.ZipFile(os.path.join(install, f)) as z: allpaths |= {i.filename.lower() for i in z.infolist() if not i.is_dir()}
-    refs = collections.Counter(); root_class = {}
-    for name, (d, r, objs, edob) in eps.items():
-        st[".ep files"] += 1; sh = root_of(objs); st["exactly one shared root"] += len(sh) == 1
+    refs = collections.defaultdict(collections.Counter); root_class = {}
+    for name, (d, r, objs, edob) in files.items():
+        ext = "." + name.rsplit(".", 1)[-1]; st[f"{ext} files"] += 1; sh = root_of(objs); st[f"{ext}: exactly one shared root"] += len(sh) == 1
         tid = dict(r["obty"])[sh[0]]; ch = [c.name for c in chain(r, tid)]
-        st["root derives from CEntityParams"] += "CEntityParams" in ch; root_class[name] = objs[sh[0]].type; roots[objs[sh[0]].type] += 1
-        tree[objs[sh[0]].type] = " > ".join(ch[3:])
-        st["no extra records after EDOB"] += d[edob + 4:edob + 8] == bytes(4)
+        if ext == ".ep": st[".ep: root derives from CEntityParams"] += "CEntityParams" in ch
+        root_class[name] = objs[sh[0]].type; roots[ext][objs[sh[0]].type] += 1; tree[objs[sh[0]].type] = " > ".join(ch[3:] if len(ch) > 3 else ch)
+        st[f"{ext}: no extra records after EDOB"] += d[edob + 4:edob + 8] == bytes(4)
         for e in r["rfil"]:
-            ext = e[2].rsplit(".", 1)[-1].lower(); refs[ext] += 1; st["external references"] += 1
-            st["... resolve to a file of the install"] += e[2].lower() in allpaths or e[2].lower().startswith("bin/")
-    print("\n".join(f"{v:7d}  {k}" for k, v in sorted(st.items())))
-    print("root classes:", len(roots), dict(roots.most_common(12))); print("external reference types:", dict(refs.most_common()))
+            x = e[2].rsplit(".", 1)[-1].lower(); refs[ext][x] += 1; st[f"{ext}: external references"] += 1
+            st[f"{ext}: ... resolve to a file of the install"] += e[2].lower() in allpaths or e[2].lower().startswith("bin/")
+    print(chr(10).join(f"{v:7d}  {k}" for k, v in sorted(st.items())))
+    for ext in sorted(roots): print(f"{ext} root classes ({len(roots[ext])}):", dict(roots[ext].most_common(12))); print(f"{ext} external reference types:", dict(refs[ext].most_common()))
     for k, v in sorted(tree.items()): print("   ", k, "<-", v)
-    if world_limit:
+    if world_limit and ".ep" in exts:
         links = collections.Counter(); bad = collections.Counter()
         paths = {n.lower(): c for n, c in root_class.items()}
         for name, d in sorted(merged_files(install, ".wld").items(), key=lambda kv: len(kv[1]))[:world_limit]:
@@ -78,8 +80,8 @@ def check(install, world_limit):
         for k, v in links.most_common(12): print("   ", v, k)
 
 
-def schema(install):
-    eps = load(install); variants = collections.defaultdict(collections.Counter); parent = {}; stats = collections.defaultdict(list); used = collections.Counter()
+def schema(install, exts=(".ep",)):
+    eps = load(install, exts); variants = collections.defaultdict(collections.Counter); parent = {}; stats = collections.defaultdict(list); used = collections.Counter()
     for name, (d, r, objs, edob) in eps.items():
         T = r["types"]
         for tid, t in T.items():
@@ -137,16 +139,17 @@ def observed(items):
     return "; ".join(parts) or "-"
 
 
-def write_markdown(install, path):
-    variants, parent, stats, used = schema(install)
-    lines = ["# `.ep` entity parameter schema (generated)", "",
-             "Generated by `tools/re/ep_schema.py --markdown` from the type tables and the objects of the **322 distinct `.ep` files** of the retail install with all patches. "
+def write_markdown(install, path, exts=(".ep",), title="`.ep` entity parameter schema (generated)"):
+    variants, parent, stats, used = schema(install, exts)
+    nfiles = sum(len(merged_files(install, e)) for e in exts)
+    lines = [f"# {title}", "",
+             f"Generated by `tools/re/ep_schema.py --markdown --ext {','.join(exts)}` from the type tables and the objects of the **{nfiles} distinct files** (extensions {', '.join(exts)}) of the retail install with all patches. "
              "For every class: its base class, its **own** members in stored order (a class's full member list is its base classes' members first), the type of each member as named in the type table, and what the files contain.",
-             "Numeric members without a readable name are shown by their number (`.5`); readable names are the engine's own (`bp_`, `gpp_`, `pp_`, `lpp_`, `sb_` prefixes). 'Observed' summarizes all instances in the install; `ref` = a reference (an object of the same file or an external file), `null` = null reference. Classes whose definition differs between files list each variant with its file count. See `ep.md` for the meaning of the structure.", ""]
+             "Numeric members without a readable name are shown by their number (`.5`); readable names are the engine's own (`bp_`, `gpp_`, `pp_`, `lpp_`, `sb_` prefixes). 'Observed' summarizes all instances in the install; `ref` = a reference (an object of the same file or an external file), `null` = null reference. Classes whose definition differs between files list each variant with its file count. The prose specification is next to this file in `docs/re/`.", ""]
     for cls in sorted(variants):
         vs = variants[cls].most_common()
         if not vs or not any(k for k, _ in vs): continue
-        lines += [f"## `{cls}`", f"Base: `{parent.get(cls) or '-'}` · instances in `.ep` files: {used.get(cls, 0)}", ""]
+        lines += [f"## `{cls}`", f"Base: `{parent.get(cls) or '-'}` · instances in these files: {used.get(cls, 0)}", ""]
         for vi, (members, nfiles) in enumerate(vs):
             if len(vs) > 1: lines += [f"**Variant {vi + 1}** ({nfiles} files, {len(members)} members)", ""]
             lines += ["| Member | Type | Observed |", "|---|---|---|"]
@@ -160,10 +163,13 @@ def write_markdown(install, path):
 def main():
     args = sys.argv[1:]; install = next((a for a in args if os.path.isdir(a)), os.environ.get("SS2_DATA_DIR", ""))
     if not install or not os.path.isdir(install): sys.exit("pass the install folder or set SS2_DATA_DIR")
-    if "--markdown" in args: write_markdown(install, args[args.index("--markdown") + 1])
+    if "--markdown" in args:
+        exts = tuple(args[args.index("--ext") + 1].split(",")) if "--ext" in args else (".ep",)
+        title = args[args.index("--title") + 1] if "--title" in args else "`.ep` entity parameter schema (generated)"
+        write_markdown(install, args[args.index("--markdown") + 1], exts, title)
     else:
         n = int(args[args.index("--worlds") + 1]) if "--worlds" in args else 0
-        check(install, n)
+        check(install, n, tuple(args[args.index("--ext") + 1].split(",")) if "--ext" in args else (".ep",))
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-012i** · SPEC `.wld` part i — physics in worlds: `CMechanism` (24,651), `CDynamicBody`, `CHybridBody`, `CKinematicBody`, `CMechanismMotionHandler`, link to the model mechanism templates (T01-057) · `M` · `P1` · Deps: T01-012f, T01-023
 - [x] **T01-013** · SPEC `.mat` physical materials & `.scs` sound collections (impact/footstep mapping) · `M` · `P1`
 - [x] **T01-014** · SPEC `.ep` entity params: schema per entity class, inheritance/overrides, how classes are named · `L` · `P0`
-- [~] **T01-015** [INPRG @Ihor-Ihorevych/agent · branch `re-rsc` · 2026-11-22] · SPEC `.rsc` resource databases (e.g. `HudParams.rsc`) and `.ctl` control/tool definitions · `M` · `P1`
+- [x] **T01-015** · SPEC `.rsc` resource databases (e.g. `HudParams.rsc`) and `.ctl` control/tool definitions · `M` · `P1`
 - [ ] **T01-016** · SPEC `.pfx` particle effects: emitters, curves, forces, rendering modes, LOD/budget · `L` · `P1`
 - [ ] **T01-017** · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
 - [x] **T01-018** · SPEC `.fnt` fonts (+ `Content/Fonts`): glyph metrics, atlases, encodings/languages · `M` · `P1`
