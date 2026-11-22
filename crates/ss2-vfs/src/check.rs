@@ -323,14 +323,13 @@ pub fn check_install(dir: impl AsRef<Path>) -> InstallReport {
             ArchiveRole::Unexpected => report.findings.push(finding(Severity::Warning, format!("{name} is not part of the original game; it is loaded over the game data and can change it"), "If the game behaves differently from the original, move this file out of the folder.")),
             _ => {}
         }
-        if let Some(level) = patch {
-            if report
+        if let Some(level) = patch
+            && report
                 .patch_level
                 .as_ref()
                 .is_none_or(|best| level.key() > best.key())
-            {
-                report.patch_level = Some(level);
-            }
+        {
+            report.patch_level = Some(level);
         }
         report.archives.push(ArchiveInfo {
             name,
