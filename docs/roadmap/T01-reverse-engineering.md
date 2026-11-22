@@ -42,7 +42,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-020** · SPEC Shader system: `Bin/Shaders.module`, `GPU-Programs.asm`, `Sources/Shaders`; how materials pick programs, permutations, constants, vertex formats · `L` · `P0`
 
 ## Engine behavior (from `Engine.dll`/`Core.dll`)
-- [ ] **T01-021** · Recover C++ class hierarchy & vtables via MSVC RTTI for all three game DLLs → `docs/re/classes.md` (names, inheritance, sizes) · `L` · `P0`
+- [~] **T01-021** [INPRG @lxstyo · branch `T01-021-rtti-classes` · 2026-11-22] · Recover C++ class hierarchy & vtables via MSVC RTTI for all three game DLLs → `docs/re/classes.md` (names, inheritance, sizes) · `L` · `P0`
 - [ ] **T01-022** · SPEC main loop & time: tick rate, fixed/variable step, interpolation, timers, pause semantics · `M` · `P0`
 - [ ] **T01-023** · Identify physics/collision middleware from imports/strings; list features used (rigid bodies, ragdolls, destruction) · `S` · `P0`
 - [ ] **T01-024** · SPEC player movement: speeds, acceleration, friction, air control, jump, gravity, step height, slope limit, crouch, swim, ladders — as **measured numbers + test vectors** · `L` · `P0` · Deps: T01-038/039
