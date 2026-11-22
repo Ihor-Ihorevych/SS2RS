@@ -157,3 +157,10 @@ Audio assets (docs/re/audio.md):
 ```
 python -X utf8 tools/re/audio_verify.py "C:\path\to\Serious Sam 2"    # .wav and .ogg formats, rates, channels, folders (about a minute)
 ```
+
+World entity evidence (docs/re/wld-entities.md, docs/re/wld-entity-schema.md):
+
+```
+python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-entity-schema.md [--json OUT.json]    # entity and record classes, members, census (about 15 minutes)
+python -I tools/re/wld_entity_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # spawners, record hierarchy, .ep links (about 15 minutes)
+```

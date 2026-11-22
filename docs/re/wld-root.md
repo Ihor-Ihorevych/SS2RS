@@ -123,4 +123,4 @@ How the cells of the quadtree map to the plane and how it is walked is in `wld-v
 - Bit meanings of `CAspect.6` and `CBaseEntity.1` (`0x2`); `CEntity.5`/`.6` (always 0); `CWorld.19`, `CWorld.11` and the exact role of `CWorld.9`.
 - Exact meaning of `CRenderingDomain.8`, `CPhysicsDomain.2` and `CCollisionDomain.3`; contents of the sync lists, the state manager and the steppers.
 - The quadtree geometry of the grids; whether a loader can rebuild the grids from the placements (they look like pure acceleration structures, but this was not proven).
-- Everything below the entity level is in the other parts: models and placement (a), lights and baked lightmaps (b), visibility boxes (c, `wld-visibility.md`), entity classes and their properties (d), navigation (e), scripting (g), sound and effects (h), physics bodies (i).
+- Everything below the entity level is in the other parts: models and placement (a), lights and baked lightmaps (b), visibility boxes (c, `wld-visibility.md`), entity classes and their properties (d, `wld-entities.md`), navigation (e), scripting (g), sound and effects (h), physics bodies (i).
