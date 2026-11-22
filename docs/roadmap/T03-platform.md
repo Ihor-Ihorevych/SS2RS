@@ -22,7 +22,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-020** · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
 
 ## Other PC platforms (after Windows works; before M8)
-- [ ] **T03-026** · Windows: installer/portable zip, DPI-awareness manifest, Win10+ baseline · `S` · `P1` · 🟢
+- [~] **T03-026** [INPRG @Ihor-Ihorevych/agent · branch `T03-026-windows-manifest` · 2026-11-22] · Windows: installer/portable zip, DPI-awareness manifest, Win10+ baseline · `S` · `P1` · 🟢
 - [ ] **T03-011** · Linux: Wayland+X11, AppImage/Flatpak, Steam Deck/gamescope, handheld controller layouts · `M` · `P2`
 - [ ] **T03-010** · macOS: `.app` bundle, Metal path verification, notarization notes, Apple Silicon + x86_64 · `M` · `P2`
 
