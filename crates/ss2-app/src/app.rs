@@ -1,6 +1,6 @@
 //! The interactive window: winit event loop, input routing, rendering and settings effects.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -36,13 +36,29 @@ struct App {
     failure: Option<String>,
 }
 
-/// Run the interactive app. With `smoke_frames`, exits after that many frames.
-pub fn run(smoke_frames: Option<u32>) -> Result<(), String> {
-    let settings_path = Settings::default_path();
-    let settings = settings_path
-        .as_deref()
+/// The settings for this run: the saved file (or the platform defaults when there is none), then
+/// the `--set KEY=VALUE` overrides from the command line.
+///
+/// # Errors
+/// The message of the first invalid override.
+pub(crate) fn effective_settings(
+    path: Option<&Path>,
+    overrides: &[String],
+) -> Result<Settings, String> {
+    let mut settings = path
         .map(Settings::load_from)
-        .unwrap_or_default();
+        .unwrap_or_else(|| Settings::for_platform(ss2_core::settings::PlatformClass::current()));
+    settings
+        .apply_overrides(overrides)
+        .map_err(|e| e.to_string())?;
+    Ok(settings)
+}
+
+/// Run the interactive app. With `smoke_frames`, exits after that many frames. `overrides` are
+/// the `--set KEY=VALUE` settings overrides of this run.
+pub fn run(smoke_frames: Option<u32>, overrides: &[String]) -> Result<(), String> {
+    let settings_path = Settings::default_path();
+    let settings = effective_settings(settings_path.as_deref(), overrides)?;
     let gilrs = match Gilrs::new() {
         Ok(g) => Some(g),
         Err(e) => {
@@ -250,5 +266,37 @@ impl ApplicationHandler for App {
         if let Some(window) = &self.window {
             window.request_redraw();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_a_file_or_overrides_the_platform_defaults_apply() {
+        let s = effective_settings(None, &[]).unwrap();
+        assert_eq!(
+            s,
+            Settings::for_platform(ss2_core::settings::PlatformClass::current())
+        );
+    }
+
+    #[test]
+    fn overrides_are_applied_on_top_of_the_saved_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "vsync = false\nmaster_volume = 0.3\n").unwrap();
+        let overrides = ["fullscreen=1".to_owned(), "master_volume=0.9".to_owned()];
+        let s = effective_settings(Some(&path), &overrides).unwrap();
+        assert!(!s.vsync, "kept from the file");
+        assert!(s.fullscreen, "set by the override");
+        assert_eq!(s.master_volume, 0.9, "the override wins over the file");
+    }
+
+    #[test]
+    fn a_bad_override_is_an_error_naming_it() {
+        let message = effective_settings(None, &["brightness=1".to_owned()]).unwrap_err();
+        assert!(message.contains("brightness"), "{message}");
     }
 }

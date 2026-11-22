@@ -15,3 +15,6 @@ pub use error::{Error, Result};
 
 #[cfg(test)]
 mod settings_persistence_tests;
+
+#[cfg(test)]
+mod settings_schema_tests;

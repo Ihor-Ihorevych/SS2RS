@@ -4,8 +4,8 @@
 //! tested once. The app adds its own developer modes (`--screenshot`, `--smoke-frames`) on top.
 //!
 //! ```text
-//! ss2-app    [--connect HOST[:PORT] | --listen] [--level NAME] [--data DIR] [--portable]
-//! ss2-server [--bind ADDR] [--level NAME] [--data DIR] [--portable]
+//! ss2-app    [--connect HOST[:PORT] | --listen] [--level NAME] [--data DIR] [--portable] [--set KEY=VALUE]...
+//! ss2-server [--bind ADDR] [--level NAME] [--data DIR] [--portable] [--set KEY=VALUE]...
 //! ```
 //!
 //! Options are `--name value` or `--name=value`; `--help`/`-h` and `--version`/`-V` stop parsing
@@ -40,6 +40,9 @@ pub struct LaunchOptions {
     pub bind: Option<String>,
     /// `--portable`: keep all files next to the executable.
     pub portable: bool,
+    /// `--set KEY=VALUE` (repeatable, in order): overrides for settings, applied with
+    /// [`Settings::apply_overrides`](crate::settings::Settings::apply_overrides).
+    pub set: Vec<String>,
 }
 
 /// The outcome of parsing.
@@ -61,12 +64,12 @@ fn invalid(detail: impl Into<String>) -> Error {
 pub fn usage(role: Role, program: &str) -> String {
     let (synopsis, specific) = match role {
         Role::Client => (
-            "[--connect HOST[:PORT] | --listen] [--level NAME] [--data DIR] [--portable]",
+            "[--connect HOST[:PORT] | --listen] [--level NAME] [--data DIR] [--portable] [--set KEY=VALUE]...",
             "  --connect HOST[:PORT]  join a server (IPv6 in brackets: [::1]:27960)\n  \
              --listen               host a game from this client\n",
         ),
         Role::Server => (
-            "[--bind ADDR] [--level NAME] [--data DIR] [--portable]",
+            "[--bind ADDR] [--level NAME] [--data DIR] [--portable] [--set KEY=VALUE]...",
             "  --bind ADDR            address to listen on\n",
         ),
     };
@@ -76,6 +79,7 @@ pub fn usage(role: Role, program: &str) -> String {
          --level NAME           start directly in this level\n  \
          --data DIR             folder with your own Serious Sam 2 install\n  \
          --portable             keep all files next to the executable\n  \
+         --set KEY=VALUE        override a setting (repeatable), e.g. --set vsync=off\n  \
          -h, --help             show this text\n  \
          -V, --version          show the version\n"
     )
@@ -108,9 +112,11 @@ pub fn parse_launch_options<I: IntoIterator<Item = String>>(role: Role, args: I)
             ("--level", _) => "--level",
             ("--connect", Role::Client) => "--connect",
             ("--bind", Role::Server) => "--bind",
+            ("--set", _) => "--set",
             _ => return Err(unknown(&arg, role)),
         };
-        if !seen.insert(flag) {
+        // `--set` may be repeated; every other option may be given once.
+        if flag != "--set" && !seen.insert(flag) {
             return Err(invalid(format!("{flag} was given twice")));
         }
         if matches!(flag, "--portable" | "--listen") {
@@ -137,6 +143,16 @@ pub fn parse_launch_options<I: IntoIterator<Item = String>>(role: Role, args: I)
         match flag {
             "--data" => options.data_dir = Some(PathBuf::from(value)),
             "--level" => options.level = Some(value),
+            "--set" => {
+                match value.split_once('=') {
+                    Some((key, _)) if !key.trim().is_empty() => options.set.push(value),
+                    _ => {
+                        return Err(invalid(format!(
+                            "--set {value:?} is not KEY=VALUE (for example --set vsync=off)"
+                        )));
+                    }
+                };
+            }
             "--connect" => {
                 validate_endpoint(&value)
                     .map_err(|why| invalid(format!("--connect {value}: {why}")))?;
@@ -329,6 +345,36 @@ mod tests {
     }
 
     #[test]
+    fn set_overrides_are_collected_in_order_and_may_repeat() {
+        for role in [Role::Client, Role::Server] {
+            let o = run(role, &["--set", "vsync=off", "--set=master_volume=0.5"]);
+            assert_eq!(o.set, ["vsync=off", "master_volume=0.5"]);
+        }
+    }
+
+    #[test]
+    fn set_needs_a_key_value_pair() {
+        for args in [&["--set", "vsync"][..], &["--set", "=1"], &["--set="]] {
+            let m = err(Role::Client, args);
+            assert!(m.contains("--set"), "{m}");
+        }
+        let m = err(Role::Client, &["--set", "vsync"]);
+        assert!(m.contains("KEY=VALUE"), "{m}");
+        assert!(err(Role::Client, &["--set"]).contains("needs a value"));
+    }
+
+    #[test]
+    fn set_values_feed_the_settings_overrides() {
+        let o = run(
+            Role::Client,
+            &["--set", "vsync=off", "--set", "fullscreen=1"],
+        );
+        let mut settings = crate::settings::Settings::default();
+        settings.apply_overrides(&o.set).unwrap();
+        assert!(!settings.vsync && settings.fullscreen);
+    }
+
+    #[test]
     fn usage_lists_the_options_of_the_role() {
         let client = usage(Role::Client, "ss2-app");
         for needle in [
@@ -338,6 +384,7 @@ mod tests {
             "--level",
             "--data",
             "--portable",
+            "--set",
             "--help",
         ] {
             assert!(client.contains(needle), "{needle}\n{client}");
@@ -345,5 +392,6 @@ mod tests {
         assert!(!client.contains("--bind"));
         let server = usage(Role::Server, "ss2-server");
         assert!(server.contains("--bind") && !server.contains("--connect"));
+        assert!(server.contains("--set"));
     }
 }
