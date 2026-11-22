@@ -146,7 +146,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 9. Provenance, attestations and signing of `SHA256SUMS` are undecided.
 10. Reproducible builds (T12-008) and nightly artifacts are not built; `release.yml` has no schedule.
 11. No SBOM generator and no third-party notices file (COMPLIANCE sections 3 and 8).
-12. Saves and `--data` are open (T03-020); the rotating log file exists (`ss2_core::logfile`, T03-019) and the per-OS directories exist (T03-012), but the app does not call either yet; uninstall text depends on them.
+12. Saves are open; the launch options (`--data`, `--level`, `--portable`, and `--connect`/`--listen` for the app, `--bind` for the server) are parsed (`ss2_core::cli`, T03-020), the rotating log file (`ss2_core::logfile`, T03-019) and the per-OS directories (T03-012) exist, but the app does not use any of them yet (`--connect`/`--listen` report that multiplayer is not implemented); uninstall text depends on them.
 13. No update check exists and none is in the roadmap.
 14. Actions is blocked, so `release.yml` has never run on a tag; the first archives are untested.
 15. Package channels and store questions (section 6) have no owner.

@@ -19,7 +19,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [ ] **T03-017** · Display modes: windowed/borderless/exclusive, resolution list, HiDPI scale, vsync, monitor selection · `M` · `P1`
 - [ ] **T03-018** · Job system/thread policy (rayon or custom): worker count, big.LITTLE affinity hints, named threads, tracing spans · `M` · `P1`
 - [x] **T03-019** · Logging backends: stdout and size-rotated file (`ss2_core::logfile`, `init_logging_with_file`); `logcat`/Oslog split into T03-034 · `S` · `P0` · 🟢
-- [~] **T03-020** [INPRG @Ihor-Ihorevych/agent · branch `T03-020-cli-modes` · 2026-11-22] · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
+- [x] **T03-020** · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
 
 ## Other PC platforms (after Windows works; before M8)
 - [ ] **T03-026** · Windows: installer/portable zip, DPI-awareness manifest, Win10+ baseline · `S` · `P1` · 🟢

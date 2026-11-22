@@ -1,15 +1,20 @@
 //! Command-line parsing for `ss2-app`.
 
+use ss2_core::cli::{LaunchOptions, Parsed, Role, parse_launch_options};
 use ss2_ui::ScreenId;
 use std::path::PathBuf;
 
-const USAGE: &str = "usage:\n  ss2-app\n  ss2-app --screenshot <main|options|pause> <out.png> [--size WxH]\n  ss2-app --smoke-frames <N>";
+const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause> <out.png> [--size WxH]\n  ss2-app --smoke-frames <N>";
 
 /// What `ss2-app` was asked to do.
 #[derive(Debug, PartialEq)]
 pub enum Mode {
-    /// Open the window and run interactively.
-    Window,
+    /// Open the window and run interactively with these launch options.
+    Window(LaunchOptions),
+    /// Print the usage text and exit.
+    Help,
+    /// Print the version and exit.
+    Version,
     /// Render one menu screen offscreen to a PNG and exit.
     Screenshot {
         screen: ScreenId,
@@ -37,7 +42,7 @@ fn parse_size(text: &str) -> Result<(u32, u32), String> {
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, String> {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
-        return Ok(Mode::Window);
+        return Ok(Mode::Window(LaunchOptions::default()));
     };
     match first.as_str() {
         "--screenshot" => {
@@ -85,7 +90,15 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, Strin
             }
             Ok(Mode::Smoke { frames })
         }
-        other => Err(format!("unknown argument '{other}'\n{USAGE}")),
+        _ => {
+            // Everything else is a launch option shared with ss2-server.
+            let all = std::iter::once(first).chain(args);
+            match parse_launch_options(Role::Client, all).map_err(|e| e.to_string())? {
+                Parsed::Run(options) => Ok(Mode::Window(*options)),
+                Parsed::Help => Ok(Mode::Help),
+                Parsed::Version => Ok(Mode::Version),
+            }
+        }
     }
 }
 
@@ -101,7 +114,37 @@ mod tests {
 
     #[test]
     fn no_args_is_window() {
-        assert_eq!(parse(&[]), Ok(Mode::Window));
+        assert_eq!(parse(&[]), Ok(Mode::Window(LaunchOptions::default())));
+    }
+
+    #[test]
+    fn launch_options_open_the_window_with_those_options() {
+        let Ok(Mode::Window(o)) = parse(&["--level", "1_1_jungle", "--data=C:/SS2", "--portable"])
+        else {
+            panic!("expected a window mode");
+        };
+        assert_eq!(o.level.as_deref(), Some("1_1_jungle"));
+        assert_eq!(o.data_dir, Some(PathBuf::from("C:/SS2")));
+        assert!(o.portable);
+        let Ok(Mode::Window(o)) = parse(&["--connect", "example.org:27960"]) else {
+            panic!("expected a window mode");
+        };
+        assert_eq!(o.connect.as_deref(), Some("example.org:27960"));
+        assert!(parse(&["--listen"]).is_ok());
+    }
+
+    #[test]
+    fn help_and_version_have_their_own_modes() {
+        assert_eq!(parse(&["--help"]), Ok(Mode::Help));
+        assert_eq!(parse(&["-V"]), Ok(Mode::Version));
+    }
+
+    #[test]
+    fn bad_launch_options_are_errors_with_the_reason() {
+        let e = parse(&["--connect", "h", "--listen"]).unwrap_err();
+        assert!(e.contains("--connect") && e.contains("--listen"), "{e}");
+        assert!(parse(&["--data"]).unwrap_err().contains("--data"));
+        assert!(parse(&["--bind", "x"]).unwrap_err().contains("--bind"));
     }
 
     #[test]
