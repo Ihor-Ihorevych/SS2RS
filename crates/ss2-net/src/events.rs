@@ -2,7 +2,7 @@
 //! sounds, anything that must happen once and cannot be reconstructed from a snapshot.
 //!
 //! The server appends each event to an [`EventLog`] with a sequence number. For each client it
-//! repeats every event the client has not yet acknowledged in every packet ([`EventLog::pending`]),
+//! repeats every event the client has not yet acknowledged in every packet ([`EventLog::packet`]),
 //! so a lost packet is repaired by the next one with no resend round trip. The client
 //! ([`EventReceiver`]) drops the copies it has already seen, hands the events to the game exactly
 //! once and **in order**, and reports how far it got ([`EventReceiver::ack_seq`]).
