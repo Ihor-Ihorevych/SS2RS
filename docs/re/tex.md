@@ -80,6 +80,6 @@ Flag bit `0x02` (set in exactly the 32 textures with flags `0x23`, all format 7)
 ## Open questions
 
 - Formats 4–7 (155 files) → T01-051.
-- Exact meaning of the format codes within a layout group, of `TexFlags` bits other than `0x02`, and of the `GfxTexWrap` values → T01-054 (needs the material/shader specs and how the engine uses them).
+- Exact meaning of the format codes within a layout group, of `TexFlags` bits other than `0x02`, and of the `GfxTexWrap` values: the data-side answer is in `tex-flags.md` (T01-054: bit `0x10` = baked lightmap, wrap `0x50` repeat and `0x51` clamp, the format codes as content classes); the rest needs code analysis (T01-080).
 - Gamma/sRGB treatment (no flag was identified for it).
 - How the 31 files whose `CResource` lacks member 5 differ (probably a newer class version).

@@ -69,6 +69,12 @@ World geometry evidence (docs/re/wld-geometry.md):
 python -I tools/re/wld_geometry_verify.py "C:\path\to\Serious Sam 2" [N]    # static models, hulls, collision grid cells in all 59 worlds (about 20 minutes)
 ```
 
+Texture flag evidence (docs/re/tex-flags.md, tex-flags-tables.md):
+
+```
+python -I tools/re/texflags_verify.py "C:\path\to\Serious Sam 2" [--worlds N] [--sample N] [--tables docs/re/tex-flags-tables.md]    # flag bits against format, folder and size; wrap codes with a seam test; format-code content classes; embedded lightmaps and their baker record (about 10 minutes)
+```
+
 Lighting evidence (docs/re/lighting.md, lighting-tables.md):
 
 ```
