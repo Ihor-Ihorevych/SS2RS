@@ -10,7 +10,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 
 ## Setup
 - [x] **T01-001** · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
-- [~] **T01-002** [INPRG @lxstyo · branch `T01-002-chm-digest` · 2026-11-22] · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
+- [x] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
 - [x] **T01-003** · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
 ## Container & data formats
