@@ -65,7 +65,7 @@ DCO sign-off.
 
 1. **Prepare.** `git fetch origin && git checkout main && git pull --rebase origin main`. CI on
    `main` is green. The milestone's exit criteria are met (roadmap §5; for 1.0, the go/no-go list
-   from T12-017). `cargo semver-checks` on the contract crates is clean or explained.
+   in [PC_1_0_CHECKLIST.md](PC_1_0_CHECKLIST.md)). `cargo semver-checks` on the contract crates is clean or explained.
 2. **Look before you leap.** Dry run (the default; nothing is written):
    ```
    cargo release version minor      # or patch / major / 0.2.0-alpha.1

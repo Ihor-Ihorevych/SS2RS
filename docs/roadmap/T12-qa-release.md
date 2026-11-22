@@ -16,7 +16,7 @@ PC first. Mobile budgets/devices/packaging are Phase 2.
 - [ ] **T12-014** · User docs: "Install & point to your data", FAQ, troubleshooting, supported game versions (Steam/GOG/retail, patch level) · `M` · `P1` · 🟢
 - [x] **T12-015** · Bug triage process, severity definitions, issue templates (crash, desync, visual parity, gameplay parity) · `S` · `P1` · 🟢
 - [ ] **T12-016** · Soak test farm: nightly long co-op bot sessions on a dedicated server; leak/desync detectors · `L` · `P2`
-- [~] **T12-017** [INPRG @Ihor-Ihorevych/agent · branch `T12-017-release-checklist` · 2026-11-22] · PC 1.0 release checklist & go/no-go criteria (perf, parity, crash-free %, legal) · `S` · `P2`
+- [x] **T12-017** · PC 1.0 release checklist & go/no-go criteria (perf, parity, crash-free %, legal) · `S` · `P2`
 
 ## PHASE 2 — Android & other platforms
 - [ ] **T12-005** · Mobile memory budgets (4 GB-class devices): per-subsystem caps, texture streaming limits, OOM recovery tests · `M` · `PHASE 2`
