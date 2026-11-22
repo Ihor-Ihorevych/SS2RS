@@ -30,10 +30,10 @@ CShaderPreset
 CShaderConfig
   .1   -> shader                   external object of Bin/Shaders.module (EXOB flags = shader class code)
   .2   -> arguments object         one of the eight argument classes
-  .3   EPlatform                   0x3 (6,750 configs), 0xFFFFFFFF (1,257), 0x1 (2)
+  .3   EPlatform                   0x3 (6,750 configs: PC and Xbox), 0xFFFFFFFF (1,257: all platforms), 0x1 (2: PC only)
 ```
 
-A preset with several configs presumably offers alternatives per platform or quality (the masks differ); how the engine chooses is **not determined**. `EPlatform` bit meanings are unknown (see `bmf.md`).
+A preset with several configs presumably offers alternatives per platform or quality (the masks differ); how the engine chooses is **not determined**. `EPlatform` bit meanings are known: **bit 0 is the PC and bit 1 the Xbox** (`gui.md`); since 8,007 of 8,009 configs include both, the mask rarely selects between configs, and the 2 PC-only configs are the only platform-specific ones.
 
 ### Shader reference and class codes
 
@@ -171,7 +171,7 @@ Graph classes seen: `CSineGraph`, `CStepUpGraph`, `CStepDownGraph`, `CStepGraph`
 ## Open questions
 
 - What the shader classes compute and how a class picks a program (T01-020); the meaning of the blend types, the common bools, `ColorMap`, the unexplained floats (`.50`/`.51`, `.5`, per-class numbers) → **T01-059**.
-- Whether presets with several configs choose by platform or by quality; the bits of `EPlatform`.
+- Whether presets with several configs choose by platform or by quality (the `EPlatform` bits are decoded: `gui.md`; the masks hardly differ, so quality is the likelier switch).
 - Modifier targets and graph semantics → T01-059.
 - Colour byte order (the top byte is alpha).
 - What the engine draws for surfaces without a preset (88 in `.bmf`, see `bmf.md`).
