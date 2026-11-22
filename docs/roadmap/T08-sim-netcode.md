@@ -38,7 +38,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-022** · Save/load as serialization of sim state (own format) + co-op saves, checkpoints, quick-save rules · `L` · `P1`
 
 ## Tooling, tests, ops
-- [ ] **T08-017** · Network simulator (latency, jitter, loss, reorder, bandwidth cap) usable in-process and at socket level; scenario runner · `M` · `P0`
+- [~] **T08-017** [INPRG @Ihor-Ihorevych/agent · branch `T08-017-netsim` · 2026-11-22] · Network simulator (latency, jitter, loss, reorder, bandwidth cap) usable in-process and at socket level; scenario runner · `M` · `P0`
 - [ ] **T08-029** · Headless bot clients for soak tests (N bots × M minutes); assertions on desync/divergence/bandwidth · `L` · `P1`
 - [ ] **T08-018** · Net profiling: bytes/tick per component, RTT/loss graph, prediction error HUD (`net_graph`), Tracy spans · `M` · `P1`
 - [ ] **T08-021** · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
