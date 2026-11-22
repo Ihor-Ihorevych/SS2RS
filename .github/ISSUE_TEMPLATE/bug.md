@@ -1,17 +1,24 @@
 ---
-name: Bug report
-about: Something crashes, desyncs or behaves wrongly
+name: Bug (other)
+about: Something behaves wrongly, and it is not a crash, a desync or a difference from the original game
 labels: ["bug"]
 ---
 
-**What happened / what you expected:**
+<!-- Do not attach game files or copied game text. See docs/TRIAGE.md section 8. Crashes, desyncs and parity differences have their own templates. -->
+
+**What happened:**
+
+**What you expected:**
 
 **Steps to reproduce:**
 
-**Environment**
-- OS and version:
-- GPU and driver:
-- SS2RS version / commit:
-- Game version and patch level (from `ss2-doctor` once available, else the newest `Patch_*.gro` you have):
+**Frequency:** always / sometimes / once
 
-**Logs** (set `SS2_LOG=debug`; remove personal paths):
+**Environment**
+- Version or commit (`git rev-parse --short HEAD`, or the release tag):
+- OS and version:
+- GPU and driver version:
+- `SS2_DATA_DIR` points to an unmodified retail install? (yes / no / not sure):
+- Game store and version and patch level (names of the `Patch_*` files are enough):
+
+**Logs:** run with `SS2_LOG=debug` and attach the log. Remove user names and personal paths.
