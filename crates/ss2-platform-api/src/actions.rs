@@ -89,6 +89,34 @@ pub struct ActionMap {
 }
 
 impl ActionMap {
+    /// A map with no bindings, usable in a `static`.
+    pub(crate) const fn empty() -> Self {
+        Self {
+            actions: BTreeMap::new(),
+        }
+    }
+
+    /// Bind `binding` to `action` and take it away from every other action (one physical input
+    /// drives one action). Returns the actions it was taken from, in name order, so the UI can
+    /// say "W was unbound from move_forward".
+    pub fn bind_exclusive(
+        &mut self,
+        action: impl Into<ActionId>,
+        binding: Binding,
+    ) -> Vec<ActionId> {
+        let action = action.into();
+        let mut taken = Vec::new();
+        for (name, list) in &mut self.actions {
+            if *name != action && list.contains(&binding) {
+                list.retain(|b| *b != binding);
+                taken.push(name.clone());
+            }
+        }
+        self.actions.retain(|_, list| !list.is_empty());
+        self.bind(action, binding);
+        taken
+    }
+
     /// Add `binding` to `action` (no effect if it is already bound there).
     pub fn bind(&mut self, action: impl Into<ActionId>, binding: Binding) {
         let list = self.actions.entry(action.into()).or_default();

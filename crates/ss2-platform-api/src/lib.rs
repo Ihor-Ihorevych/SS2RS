@@ -55,6 +55,7 @@
 mod actions;
 mod app;
 mod event;
+mod input_state;
 mod keys;
 mod lifecycle;
 mod paths;
@@ -62,6 +63,7 @@ mod paths;
 pub use actions::{ActionId, ActionMap, ActionQuery, Binding, InputContext, MockInput};
 pub use app::{AppControl, AppHandler, FrameInfo, ScriptReport, ScriptStep, run_script};
 pub use event::{InputEvent, LifecycleEvent, PlatformEvent, SurfaceInfo, TouchPhase};
+pub use input_state::{BindingSet, InputState};
 pub use keys::{GamepadAxis, GamepadButton, GamepadId, KeyCode, MouseButton};
 pub use lifecycle::LifecycleTracker;
 pub use paths::{PORTABLE_DIR, PORTABLE_MARKER, PlatformPaths, PortableMode, UserDirs};
