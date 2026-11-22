@@ -14,7 +14,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-028** · Event bus (gameplay events, triggers I/O) with replication-aware events · `M` · `P1`
 
 ## Transport & sessions
-- [ ] **T08-005** · **SPIKE** transport: QUIC (`quinn`) vs custom UDP (renet/laminar-style) vs WebRTC-ish; need: unreliable + reliable-ordered channels, MTU/fragmentation, encryption, NAT-friendliness, small overhead, and nothing that blocks a later Android build; RFC · `M` · `P0`
+- [~] **T08-005** [INPRG @Ihor-Ihorevych/agent · branch `T08-005-transport-spike` · 2026-11-22] · **SPIKE** transport: QUIC (`quinn`) vs custom UDP (renet/laminar-style) vs WebRTC-ish; need: unreliable + reliable-ordered channels, MTU/fragmentation, encryption, NAT-friendliness, small overhead, and nothing that blocks a later Android build; RFC · `M` · `P0`
 - [ ] **T08-006** · Connection lifecycle: handshake, protocol/version/mod-hash check, session password, auth token, timeouts, graceful disconnect, kick/ban · `L` · `P0`
 - [ ] **T08-019** · Session discovery: LAN broadcast, direct IP, invite code via lightweight relay/rendezvous (optional master server later), NAT traversal/hole punching · `L` · `P1`
 - [ ] **T08-020** · Dedicated server binary: headless, config file, console/RCON-lite, log rotation, metrics endpoint, Docker image · `M` · `P1`
