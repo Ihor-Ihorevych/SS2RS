@@ -2,18 +2,28 @@
 
 mod app;
 mod cli;
+mod diagnostics;
 mod screenshot;
 mod state;
 
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    ss2_core::logging::init_logging("info");
     let mode = match cli::parse_args(std::env::args().skip(1)) {
         Ok(mode) => mode,
         Err(message) => {
             eprintln!("ss2-app: {message}");
             return ExitCode::from(2);
+        }
+    };
+    // An interactive run writes a log file and crash reports; --help and --version touch
+    // nothing; the developer modes only log to the terminal.
+    let paths = match &mode {
+        cli::Mode::Window(options) => diagnostics::start(options),
+        cli::Mode::Help | cli::Mode::Version => None,
+        cli::Mode::Smoke { .. } | cli::Mode::Screenshot { .. } => {
+            ss2_core::logging::init_logging("info");
+            None
         }
     };
     let result = match mode {
@@ -28,8 +38,8 @@ fn main() -> ExitCode {
             println!("ss2-app {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        cli::Mode::Window(options) => launch(&options),
-        cli::Mode::Smoke { frames } => app::run(Some(frames), &[]),
+        cli::Mode::Window(options) => launch(&options, paths.as_ref()),
+        cli::Mode::Smoke { frames } => app::run(Some(frames), &[], None),
         cli::Mode::Screenshot { screen, out, size } => screenshot::take(screen, &out, size),
     };
     match result {
@@ -43,7 +53,10 @@ fn main() -> ExitCode {
 
 /// Open the interactive window. The launch options that need features which do not exist yet
 /// are reported instead of being silently ignored.
-fn launch(options: &ss2_core::cli::LaunchOptions) -> Result<(), String> {
+fn launch(
+    options: &ss2_core::cli::LaunchOptions,
+    paths: Option<&ss2_platform_api::PlatformPaths>,
+) -> Result<(), String> {
     if options.connect.is_some() || options.listen {
         return Err("--connect and --listen need multiplayer, which is not implemented yet".into());
     }
@@ -53,8 +66,9 @@ fn launch(options: &ss2_core::cli::LaunchOptions) -> Result<(), String> {
     if let Some(dir) = &options.data_dir {
         tracing::info!("game data folder {} (not used yet)", dir.display());
     }
-    if options.portable {
-        tracing::info!("portable mode requested (not wired into the app yet)");
-    }
-    app::run(None, &options.set)
+    app::run(
+        None,
+        &options.set,
+        paths.map(ss2_platform_api::PlatformPaths::settings_file),
+    )
 }
