@@ -134,6 +134,18 @@ Shader program evidence (docs/re/shaders.md):
 python -X utf8 tools/re/shader_verify.py "C:\path\to\Serious Sam 2"    # GPU-Programs.asm: programs, families, version tags, fragments (prints numbers only)
 ```
 
+Class catalogue (docs/re/classes.md, classes-catalog.md):
+
+```
+python -X utf8 tools/re/class_catalog.py "C:\path\to\Serious Sam 2" --markdown docs/re/classes-catalog.md [--modules modules.json]    # about 30 seconds
+```
+
+AI evidence (docs/re/ai.md):
+
+```
+python -X utf8 tools/re/ai_verify.py "C:\path\to\Serious Sam 2" [--worlds 6] [--table]    # .cb behaviors; with --worlds also spawners, tactics, markers, nav mesh
+```
+
 World entity evidence (docs/re/wld-entities.md, docs/re/wld-entity-schema.md):
 
 ```

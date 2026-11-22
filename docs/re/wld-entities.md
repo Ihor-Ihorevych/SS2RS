@@ -102,7 +102,7 @@ The link members are the only `.ep` references in worlds (11,420 in all: 9,707 i
 
 ## Open questions
 
-- What each member of the 241 classes does: the schema gives names, types and value ranges only; about 60 % of the members have number-only names. Tracked as T01-063 (gameplay semantics per family, with the spawn, script and AI specs T01-027, T01-030, T01-034).
+- What each member of the 241 classes does: the schema gives names, types and value ranges only; about 60 % of the members have number-only names. Tracked as T01-064 (gameplay semantics per family, with the spawn, script and AI specs T01-027, T01-030, T01-034).
 - When the engine uses a spawner's template record instead of the live record, and how spawners re-create entities.
 - The 130 owned records in the extra section that are neither spawner records nor world records (their class mix was not analysed), the 8 parent links whose target is not a world record, and the 5 effect entities without a record.
 - `CEntityProperties.8` (equals the serial where present) and `CBaseEntity.1` flags (`wld-root.md`).
