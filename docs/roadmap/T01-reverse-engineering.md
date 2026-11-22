@@ -9,7 +9,7 @@ shipped `SeriousEngineTools.chm`, our own `meta-dump` (T11-002), instrumentation
 Reminder: Ghidra projects and decompiler listings stay **out of git**; only prose + numbers.
 
 ## Setup
-- [~] **T01-001** [INPRG @lxstyo · branch `T01-001-spec-conventions` · 2026-11-22] · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
+- [x] **T01-001** · Spec template, naming scheme, review checklist; shared Ghidra conventions (naming dictionary, how to export notes without code) · `S` · `P0`
 - [ ] **T01-002** · Digest `Help/SeriousEngineTools.chm` into a private notes index; produce *summaries* (not verbatim) of every format/tool page; list what it confirms · `M` · `P0`
 - [x] **T01-003** · Full archive inventory (counts, dirs, patch overrides, per-type size) → `docs/re/inventory.md` (paths only, no content) + generated machine-readable list kept local · `S` · `P0`
 
