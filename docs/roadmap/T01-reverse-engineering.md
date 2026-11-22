@@ -66,7 +66,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-042** · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
 - [x] **T01-043** · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
 - [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
-- [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
+- [~] **T01-045** [INPRG @Ihor-Ihorevych/agent · branch `T01-045-lighting-spec` · 2026-11-22] · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [x] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
 - [x] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
 - [x] **T01-048** · SPEC boss fights (per boss) · `L` each · `P2`
