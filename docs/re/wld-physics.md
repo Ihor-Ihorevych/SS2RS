@@ -61,7 +61,7 @@ CHull (CModelHull | CPrimitiveHull | CFluidHull | CForceFieldHull | CDummyHull)
   .9  -> the mechanism;  .10 INDEX the hull's part position;  .8 BOOL 0
 CModelHull.1      -> CModelInstance naming the model whose mesh is the collision shape (wld-geometry.md)
 CPrimitiveHull    .1 CPrimitiveDesc (PrimitiveType 0 to 3 + three floats), .2 material attributes (external .mat 3,538, embedded 373), .3 FLOAT, .4 BOOL
-CFluidHull        .1 density-like float (1000 or 500), .2 0.85, .3 Box3f;   CForceFieldHull  .4 3000 to 6000, .5 FLOAT, .6 Vector3f, .2, .3 as the fluid
+CFluidHull        .1 density-like float (1000, 500 or 980), .2 (0.85 or 1.25), .3 Box3f;   CForceFieldHull  .4 2,000 to 100,000, .5 20 to 500, .6 Vector3f, .2 (0.5 or 0.85), .3 Box3f   (`environment.md`)
 ```
 
 - **A body carries one or several hulls.** 3,806 of 4,529 bodies have exactly one hull pointing at them; the other 723 carry several (6,683 hulls name a body). The body's first child aspect is the hull in 928 of the single-hull cases only: do not use `CAspect.2` to find the hulls; use `CHull.1`.
