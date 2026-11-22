@@ -89,3 +89,9 @@ python -I tools/re/fnt_verify.py "C:\path\to\Serious Sam 2" [--png OUT_DIR]    #
 ```
 
 `texpng.py` decodes a `CStaticTexture` (tex.md) to RGBA and writes PNG files; the other scripts import it.
+
+Physical material and scheme evidence (docs/re/mat.md):
+
+```
+python -I tools/re/mat_verify.py "C:\path\to\Serious Sam 2"    # .mat, .scs, .scp, .sca, .mas and who refers to them
+```
