@@ -210,3 +210,9 @@ World navigation evidence (docs/re/wld-navigation.md, wld-navigation-schema.md):
 python -I tools/re/wld_nav_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # nav mesh nodes, links and grid, path marker chains, tactics and movers, formations (about 15 minutes)
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-navigation-schema.md --match "NavMesh|PathFinding|PathMarker|Formation|Beacon|MarkersMoving|CMC[A-Z]|Nav[A-Z]|SMoveCharacter|Locator|SpawnMarker|Tactic" --title "..."    # the class reference
 ```
+
+Level logic evidence (docs/re/level-logic.md, level-logic-api.md):
+
+```
+python -I tools/re/wld_logic_verify.py "C:\path\to\Serious Sam 2" [--api docs/re/level-logic-api.md] [LIMIT]    # what scripts do to which entity class, chapter chain, variable names (about 20 minutes)
+```
