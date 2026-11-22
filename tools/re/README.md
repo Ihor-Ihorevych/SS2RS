@@ -189,3 +189,10 @@ World and `.mac` scripting evidence (docs/re/wld-macro.md, wld-macro-schema.md, 
 python -I tools/re/wld_macro_verify.py "C:\path\to\Serious Sam 2" [--vocab docs/re/wld-macro-vocab.md] [LIMIT]    # programs, trees, text, entities, variables (about 15 minutes)
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-macro-schema.md --match "Macro|OnHandler|Variant|HintedVar|LatentID|SingleEvent|EntityVariable|EntityPropertyVariable|Expression|VarAssignment|VarTypeHint|ObjectAction" --also-ext .mac --title "..."    # the class reference
 ```
+
+World physics evidence (docs/re/wld-physics.md, wld-physics-schema.md):
+
+```
+python -I tools/re/wld_physics_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # mechanisms, parts, bodies, hulls, collision grid cells, joints, motion handlers (about 15 minutes)
+python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-physics-schema.md --match "Mechanism|Body|Hull|Joint|MotionHandler|CMotionHandler|CollisionMesh|CollisionLayer|CollisionDomain|CollisionGrid|PhysicsDomain|FluidHull|ForceField|JointLimit|JointValues|PrimitiveDesc" --title "..."    # the class reference
+```
