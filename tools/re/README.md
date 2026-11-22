@@ -241,3 +241,9 @@ Camera and weapon view evidence (docs/re/camera-view.md, camera-tables.md):
 ```
 python -I tools/re/camera_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/camera-tables.md]    # the 18-camera database, the 16 weapon view placements, camera names used by puppets, the player's view parameters (about 3 minutes)
 ```
+
+Hit effects, blood and gib evidence (docs/re/effects-pipeline.md, effects-tables.md):
+
+```
+python -I tools/re/effects_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/effects-tables.md] [LIMIT]    # material particle schemes, puppet death parameters, prop and placed effects, decal/gib name search (about 15 minutes)
+```
