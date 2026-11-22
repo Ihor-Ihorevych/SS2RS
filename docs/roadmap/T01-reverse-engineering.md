@@ -65,7 +65,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-041** · SPEC localization: languages shipped, string tables, subtitle sync · `M` · `P2`
 - [ ] **T01-042** · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
 - [ ] **T01-043** · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
-- [~] **T01-044** [INPRG @Ihor-Ihorevych/agent · branch `re-env` · 2026-11-22] · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
+- [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [ ] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
 - [ ] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
@@ -95,3 +95,4 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-067** · SPEC `.wld` sound and effect leftovers: which sound fills a reserved slot and when, the attenuation curve between hot spot and fall-off, `SndFlags` bits, `en_pesEffectState`/`en_bEmitting` semantics, the 172 unheld and 708 ownerless sources, the 53 effect instances without a `.pfx`, `CEffectInstance.2/.8/.10`, `CSoundSyncList.5/.6/.8` and the number-only members of `SStaticSoundProperties` · `S` · `P2` · Deps: T01-034
 - [ ] **T01-068** · SPEC `.wld` navigation leftovers: the roles of `CNMNode.2/.4/.9/.10/.11` and `CNMLink.3`, the length of `CNavigationGrid.4`, the entry level rule of node entries, how formations pick members, the three tactics without a mover and what `SNavigationalBeaconEntity` is for; the search algorithm is T01-038/039 · `S` · `P1` · Deps: T01-038
 - [ ] **T01-069** · SPEC level logic leftovers: timing and ordering of events and actions (detector re-arm by `Recharge`, `Assure…` doors, `macDestroyOnePhase`, how `Wait` conditions are re-evaluated), what ends a level (`StartNextLevelLink`, portals), the 11 chapters off the chain, the unresolved actions and runs, boss logic · `M` · `P1` · Deps: T01-038, T01-039
+- [ ] **T01-070** · SPEC environment leftovers: the roles and formulas of the haze members `.5/.6/.7/.10` and the bloom members, how the renderer blends several hazes and the bloom, where underwater and fog overlays come from, which models use the water shader per level, the three skies without textures · `S` · `P2` · Deps: T01-020
