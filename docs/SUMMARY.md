@@ -20,6 +20,7 @@
 - [Time synchronization](TIMESYNC.md)
 - [Input command stream](INPUTSTREAM.md)
 - [Snapshot buffer](SNAPSHOTS.md)
+- [Reliable events](EVENTS.md)
 - [Network protocol versioning](PROTOCOL.md)
 - [Testing strategy](TESTING.md)
 - [Data-gated CI design](DATA_GATED_CI.md)
