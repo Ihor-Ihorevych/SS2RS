@@ -16,6 +16,7 @@
 - [Publishing crates](PUBLISHING.md)
 - [PC 1.0 release checklist](PC_1_0_CHECKLIST.md)
 - [Bug triage](TRIAGE.md)
+- [Accessibility review and checklist](ACCESSIBILITY.md)
 - [Modding policy](MODDING_POLICY.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
 
