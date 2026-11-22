@@ -5,6 +5,7 @@ pub mod console;
 pub mod crash;
 pub mod error;
 pub mod input;
+pub mod jobs;
 pub mod logfile;
 pub mod logging;
 pub mod math;
