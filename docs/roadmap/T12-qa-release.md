@@ -6,7 +6,7 @@ PC first. Mobile budgets/devices/packaging are Phase 2.
 - [x] **T12-002** · Data-gated CI design: self-hosted runner(s) operated by contributors with legal copies; data never leaves the machine; results only (pass/fail/coverage); trust model for fork PRs · `M` · `P0`
 - [x] **T12-003** · Parity checklist template per level/weapon/enemy; signed off in the PR that completes the task; evidence stored as text/CSV, not game assets · `S` · `P1` · 🟢
 - [x] **T12-004** · PC performance budgets (frame ms, draw calls, memory, load time) on 2–3 reference PCs (low/mid/high); automated perf runs on fixed scenes, regression alerts · `M` · `P1`
-- [~] **T12-007** [INPRG @Ihor-Ihorevych/agent · branch `T12-007-fuzzing` · 2026-11-22] · Nightly fuzz + sanitizer jobs (ASan/UBSan for any `unsafe`, Miri on selected crates) · `M` · `P1`
+- [x] **T12-007** · Nightly fuzz + sanitizer jobs: `fuzz/` (8 targets) and `.github/workflows/nightly.yml` (fuzz and Miri jobs; `docs/FUZZING.md`). ASan/UBSan have no `unsafe` of ours to check (`unsafe_code` is denied); the workflow has not run in CI yet · `M` · `P1`
 - [ ] **T12-008** · Nightly/release artifacts for Windows/Linux/macOS; reproducible builds; checksums; changelog · `M` · `P1`
 - [x] **T12-009** · PC packaging & distribution: GitHub Releases, Windows zip/installer, AppImage/Flatpak, macOS `.app`; no game assets in any package · `M` · `P2`
 - [x] **T12-010** · Compliance: license audit/SBOM per release, clean-room audit log (RE spec ↔ implementer), DCO check · `M` · `P1`

@@ -1,0 +1,83 @@
+name: nightly
+
+# Nightly robustness runs (T12-007; docs/FUZZING.md):
+#  - fuzz: every cargo-fuzz target in fuzz/ runs for a few minutes (libFuzzer with AddressSanitizer);
+#    a crash uploads the input that caused it as an artifact and fails the job, which notifies the
+#    repository owner through GitHub.
+#  - miri: the unit tests of the pure crates under Miri (undefined-behaviour detector). The
+#    workspace denies `unsafe_code`, so Miri mostly guards the logic against UB in dependencies.
+#
+# These are not pull-request checks: they are slow and nondeterministic. A crash found here is
+# turned into a regression test (docs/FUZZING.md section 4).
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Seconds to run each fuzz target"
+        default: "300"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - console_line
+          - launch_options
+          - settings_file
+          - bindings_toml
+          - vfs_path
+          - gro_archive
+          - install_check
+          - archive_names
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          # The fuzz crate has its own lock file and target directory.
+          cache-workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        run: |
+          cargo +nightly fuzz run ${{ matrix.target }} -- \
+            -max_total_time=${{ github.event.inputs.seconds || '300' }} -max_len=4096
+      - name: Upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: warn
+
+  miri:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Not yet run on Linux by a maintainer (only ss2-game was run under Miri, on Windows, where
+    # file-system calls are unsupported): do not let a first failure hide the fuzz result.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: miri, rust-src
+      - name: Miri
+        env:
+          # The tests that use temporary files need the real file system.
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo +nightly miri test -p ss2-game -p ss2-platform-api -p ss2-core --lib
