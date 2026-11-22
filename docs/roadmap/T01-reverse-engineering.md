@@ -32,13 +32,13 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-012g** · SPEC `.wld` part g — scripting: the macro language (`CMacroProgram`, `CMacroFunction`, statements, expressions, `CVariantImp*` values, `COnHandler`, `CMacroSourceMarker`, 75,700 markers) as stored in worlds; feeds T01-030 · `L` · `P0` · Deps: T01-012f
 - [ ] **T01-012h** · SPEC `.wld` part h — sound and effects in worlds: `CSoundSource`/`CSoundChannel` (71,991), `SStaticSoundEntity`, `CStaticSoundFeeder`, particle effect instances and effect entities/renderables · `M` · `P1` · Deps: T01-012f
 - [ ] **T01-012i** · SPEC `.wld` part i — physics in worlds: `CMechanism` (24,651), `CDynamicBody`, `CHybridBody`, `CKinematicBody`, `CMechanismMotionHandler`, link to the model mechanism templates (T01-057) · `M` · `P1` · Deps: T01-012f, T01-023
-- [~] **T01-013** [INPRG @Ihor-Ihorevych/agent · branch `re-mat` · 2026-11-22] · SPEC `.mat` physical materials & `.scs` sound collections (impact/footstep mapping) · `M` · `P1`
+- [x] **T01-013** · SPEC `.mat` physical materials & `.scs` sound collections (impact/footstep mapping) · `M` · `P1`
 - [x] **T01-014** · SPEC `.ep` entity params: schema per entity class, inheritance/overrides, how classes are named · `L` · `P0`
 - [ ] **T01-015** · SPEC `.rsc` resource databases (e.g. `HudParams.rsc`) and `.ctl` control/tool definitions · `M` · `P1`
 - [ ] **T01-016** · SPEC `.pfx` particle effects: emitters, curves, forces, rendering modes, LOD/budget · `L` · `P1`
 - [ ] **T01-017** · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
 - [x] **T01-018** · SPEC `.fnt` fonts (+ `Content/Fonts`): glyph metrics, atlases, encodings/languages · `M` · `P1`
-- [ ] **T01-019** · Identify unknown types: `.cb .srt .sfc .crt .mac .mch .scp .pss .sca .mas .ctr .preload .bin .dsc .nfo` → one-page spec each as discovered (`.dsc`/`.nfo` look like plain text) · `L` · `P1`
+- [ ] **T01-019** · Identify unknown types: `.cb .srt .sfc .crt .mac .mch .scp .pss .sca .mas .ctr .preload .bin .dsc .nfo` → one-page spec each as discovered (`.dsc`/`.nfo` look like plain text). **Identified so far** (`mat.md`, `ep.md`): `.scp` = particle scheme (`CParticleScheme`), `.sca` = animation scheme (`CAnimationScheme`), `.mas` = moving animation scheme (`CMovingAnimationScheme`), `.pss` = puppet spine data (referenced by `SLeggedPuppetBodyParams.lpbp_psdPuppetSpineData`); their internal layouts are still to be specified · `L` · `P1`
 - [ ] **T01-020** · SPEC Shader system: `Bin/Shaders.module`, `GPU-Programs.asm`, `Sources/Shaders`; how materials pick programs, permutations, constants, vertex formats · `L` · `P0`
 
 ## Engine behavior (from `Engine.dll`/`Core.dll`)
