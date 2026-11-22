@@ -1,6 +1,7 @@
 """Generates the archive/file-type inventory (docs/re/inventory.md): paths, sizes and counts only.
 
-Usage: python -I inventory.py [DATA_DIR]   (DATA_DIR defaults to $SS2_DATA_DIR; read-only, no game content is written)
+Usage: python -I inventory.py [DATA_DIR] [OUT.md]   (DATA_DIR defaults to $SS2_DATA_DIR; OUT.md defaults to docs/re/inventory.md of this
+repository; read-only on the install, no game content is written)
 """
 import os, sys
 import zipfile, os, collections, struct, re
@@ -50,5 +51,6 @@ if rest: w(f"\n(+{len(rest)} rarer extensions, {sum(v[0] for k,v in rest)} files
 w("\n## Directory layout (depth 3, entries)\n")
 w("| Folder | Entries |\n|---|---:|")
 for d, c in dirs.most_common(25): w(f"| `{d}` | {c:,} |")
-open(r"C:\Games\SS2Rewrite\docs\re\inventory.md","w",encoding="utf-8",newline="\n").write("\n".join(out)+"\n")
+out_path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "docs", "re", "inventory.md")
+open(out_path, "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n")
 print("written; archives", len(rows), "total", total, "unique", unique, "overridden", overridden)
