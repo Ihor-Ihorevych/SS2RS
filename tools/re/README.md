@@ -152,6 +152,12 @@ Player and global rules (docs/re/player-rules.md):
 python -X utf8 tools/re/rules_verify.py "C:\path\to\Serious Sam 2"    # difficulty tables, power-up durations, damage multipliers, item numbers, player puppet values
 ```
 
+Audio assets (docs/re/audio.md):
+
+```
+python -X utf8 tools/re/audio_verify.py "C:\path\to\Serious Sam 2"    # .wav and .ogg formats, rates, channels, folders (about a minute)
+```
+
 World entity evidence (docs/re/wld-entities.md, docs/re/wld-entity-schema.md):
 
 ```
