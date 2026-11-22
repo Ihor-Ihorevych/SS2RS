@@ -158,6 +158,12 @@ Audio assets (docs/re/audio.md):
 python -X utf8 tools/re/audio_verify.py "C:\path\to\Serious Sam 2"    # .wav and .ogg formats, rates, channels, folders (about a minute)
 ```
 
+Movies (docs/re/cutscenes.md):
+
+```
+python -X utf8 tools/re/movie_verify.py "C:\path\to\Serious Sam 2"    # Theora/Vorbis headers of all movies, .nfo references, .srt pairing (about a minute)
+```
+
 World entity evidence (docs/re/wld-entities.md, docs/re/wld-entity-schema.md):
 
 ```
