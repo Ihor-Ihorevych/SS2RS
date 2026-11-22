@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+png.workspace = true
 regex.workspace = true
 ss2-testkit = { path = "../crates/ss2-testkit" }
 

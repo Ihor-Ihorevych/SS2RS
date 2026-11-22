@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use xtask::claim;
 use xtask::claim_check;
 use xtask::doctor;
+use xtask::golden;
 use xtask::guard::{self, Mode};
 use xtask::roadmap;
 
@@ -14,6 +15,15 @@ use xtask::roadmap;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// What `cargo xtask golden` does.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum GoldenAction {
+    /// Regenerate the golden files (runs the golden tests with UPDATE_GOLDEN=1), then report.
+    Update,
+    /// Only report how the golden files differ from git HEAD.
+    Report,
 }
 
 #[derive(Subcommand)]
@@ -75,6 +85,15 @@ enum Command {
         #[arg(long = "role", value_name = "TRACK")]
         roles: Vec<String>,
     },
+    /// Golden files: regenerate them and review what changed against git HEAD.
+    Golden {
+        /// `update` regenerates then reports; `report` only reports.
+        #[arg(value_enum)]
+        action: GoldenAction,
+        /// Exit with status 1 when any golden file differs from git HEAD.
+        #[arg(long)]
+        fail_on_change: bool,
+    },
     /// Mirror docs/roadmap/*.md as GitHub issues (dry run unless --apply).
     RoadmapSync {
         /// Actually create the missing labels and issues.
@@ -86,6 +105,27 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
+        Command::Golden {
+            action,
+            fail_on_change,
+        } => {
+            let result = guard::repo_root().and_then(|root| {
+                if matches!(action, GoldenAction::Update) {
+                    golden::update(&root)?;
+                }
+                let rows = golden::changes(&root)?;
+                print!("{}", golden::render_report(&rows));
+                Ok(rows.len())
+            });
+            match result {
+                Ok(changed) if fail_on_change && changed > 0 => ExitCode::from(1),
+                Ok(_) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("golden: {e:#}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         Command::RoadmapSync { apply } => {
             let result = guard::repo_root().and_then(|root| {
                 roadmap::sync(&std::path::Path::new(&root).join("docs/roadmap"), apply)

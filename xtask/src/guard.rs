@@ -126,7 +126,7 @@ pub enum Mode {
     Staged,
 }
 
-fn git(root: Option<&str>, args: &[&str]) -> anyhow::Result<Vec<u8>> {
+pub(crate) fn git(root: Option<&str>, args: &[&str]) -> anyhow::Result<Vec<u8>> {
     let mut cmd = Command::new("git");
     cmd.args(args);
     if let Some(root) = root {

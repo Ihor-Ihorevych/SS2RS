@@ -123,7 +123,13 @@ test workflow yet.
   ```
   cargo test -p ss2-render --test golden_menu
   UPDATE_GOLDEN=1 cargo test -p ss2-render --test golden_menu   # rewrite goldens; review the diff
+  cargo xtask golden update    # the same for every golden test target, then a review report
+  cargo xtask golden report    # only report how the goldens differ from git HEAD
   ```
+  The report (T11-015) lists each added, modified and deleted golden file with, for images, the
+  size change or the mean and maximum channel difference and the share of changed pixels; with
+  `--fail-on-change` the command exits 1 when anything differs. Restore the goldens you do not
+  accept with `git checkout -- testdata/golden`.
 - **Game data:** no. The menu is placeholder art, not game content.
 - **Adapter:** the test asks `Renderer::new_offscreen` for a GPU adapter. Without one it prints
   `SKIPPED (no GPU adapter): ...` and passes. Whether the hosted CI runners expose an adapter is not
@@ -215,6 +221,6 @@ the weekly advisory check only.
   builder can produce it, and add its provenance line to `testdata/README.md`.
 - **Data-gated:** start with `let dir = ss2_testkit::require_game_data!();`, assert only facts stated in
   `docs/re/`, and never print or save game content.
-- **Golden image:** generate the PNG with `UPDATE_GOLDEN=1`, look at it, and explain the change in the PR.
+- **Golden image:** generate the PNG with `cargo xtask golden update` (or `UPDATE_GOLDEN=1`), look at it, and explain the change in the PR.
 - **Fuzz, scenario, netsim or soak:** no tooling exists yet. Take the matching `T` task (section 3)
   rather than adding it inside an unrelated PR.
