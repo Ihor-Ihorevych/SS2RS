@@ -253,3 +253,9 @@ Weapon evidence (docs/re/weapons.md, weapons-tables.md):
 ```
 python -I tools/re/weapons_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/weapons-tables.md]    # the 17 weapon parameter files (single player and deathmatch) and the projectile files they use (about 1 minute)
 ```
+
+Character evidence (docs/re/enemies.md, enemies-tables.md):
+
+```
+python -I tools/re/enemies_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/enemies-tables.md]    # the 124 puppet parameter files: health, score, speeds, attacks, and the 73 projectile files of the shooting blasts (about 1 minute)
+```
