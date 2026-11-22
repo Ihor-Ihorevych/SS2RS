@@ -58,7 +58,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-034** · SPEC audio semantics: 3D attenuation curves, priorities, music system, EAX/reverb zones · `M` · `P1`
 - [x] **T01-035** · SPEC cutscene/movie system: how in-engine cutscenes and `.ogv` are triggered/skipped · `M` · `P2`
 - [ ] **T01-036** · SPEC GUI system (`EngineGui.dll`): widget model, layout, skin, input focus rules; menu flow from `Content/SeriousSam2/Menus` · `L` · `P1`
-- [ ] **T01-037** · SPEC game modes, difficulty tables, scoring, co-op/MP rules as shipped · `M` · `P1`
+- [~] **T01-037** [INPRG @lxstyo · branch `T01-037-game-modes` · 2026-11-22] · SPEC game modes, difficulty tables, scoring, co-op/MP rules as shipped · `M` · `P1`
 - [ ] **T01-038** · Oracle capture: record reference gameplay (screen + frame times + known actions) for movement/weapon/enemy validation; store **numbers only** · `L` · `P0`
 - [ ] **T01-039** · Instrumentation harness for the original game (debugger/Frida-style scripts reading positions, velocities, health, tick) → CSV oracle data · `L` · `P0` · Deps: T11-008
 - [ ] **T01-040** · SPEC mod interface: how `.mod`/`.nfo`, game DLL replacement, content overlays work; what `Sam2Renovation` and `InSamnity2` change · `M` · `P2`
