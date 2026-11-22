@@ -74,3 +74,11 @@ World lighting evidence (docs/re/wld-lighting.md):
 ```
 python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
 ```
+
+Font evidence (docs/re/fnt.md):
+
+```
+python -I tools/re/fnt_verify.py "C:\path\to\Serious Sam 2" [--png OUT_DIR]    # glyph tables, code coverage; optional rendered samples
+```
+
+`texpng.py` decodes a `CStaticTexture` (tex.md) to RGBA and writes PNG files; the other scripts import it.
