@@ -2497,6 +2497,9 @@ version = "0.0.0"
 [[package]]
 name = "ss2-server"
 version = "0.0.0"
+dependencies = [
+ "ss2-core",
+]
 
 [[package]]
 name = "ss2-shaderxlat"
