@@ -11,7 +11,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [ ] **T03-003** · Gamepad via `gilrs` (+ Android native pads): mapping DB, dead zones, triggers, rumble · `M` · `P1` · 🟢
 - [ ] **T03-004** · Touch input layer: multi-touch tracking, gesture primitives, per-finger ownership (look vs move) · `M` · `PHASE 2`
 - [ ] **T03-005** · Input action system: data-driven action maps, contexts (menu/game/console), rebinding, serialization · `M` · `P0`
-- [~] **T03-012** [INPRG @Ihor-Ihorevych/agent · branch `T03-012-platform-paths` · 2026-11-22] · Platform paths: config/save/cache/data dirs per OS (`directories`), portable mode flag · `S` · `P0` · 🟢
+- [x] **T03-012** · Platform paths: config/save/cache/data dirs per OS (`directories`), portable mode flag · `S` · `P0` · 🟢
 - [ ] **T03-013** · Fixed-timestep driver + frame pacing: accumulator, max catch-up, interpolation alpha, vsync/uncapped, busy-wait policy · `M` · `P0`
 - [ ] **T03-014** · Settings/config: TOML profile, schema + migration, per-platform defaults, CLI overrides · `M` · `P0`
 - [ ] **T03-015** · Console backend: cvars/commands registry, history, autocomplete (UI in T10-007) · `M` · `P1`

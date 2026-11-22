@@ -2460,6 +2460,7 @@ dependencies = [
 name = "ss2-platform-api"
 version = "0.0.0"
 dependencies = [
+ "directories",
  "serde",
  "ss2-core",
  "tempfile",

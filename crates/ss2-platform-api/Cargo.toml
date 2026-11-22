@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 ss2-core = { path = "../ss2-core" }
 serde.workspace = true
+directories.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
