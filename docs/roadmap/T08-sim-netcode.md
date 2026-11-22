@@ -23,7 +23,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 ## Replication & prediction
 - [ ] **T08-007** · Replication framework: per-component/field replication attributes, delta compression vs last-acked snapshot, quantization (positions, angles), relevancy/interest management, priority & bandwidth budget (hordes!) · `XL` → split · `P0`
 - [ ] **T08-008** · Snapshot buffer + interpolation/extrapolation for remote entities; adaptive interp delay; teleport/despawn handling · `L` · `P0`
-- [~] **T08-011** [INPRG @Ihor-Ihorevych/agent · branch `T08-011-input-stream` · 2026-11-22] · Input command stream: tick-stamped, batched with redundancy, server-side validation/rate limiting, input buffering on server · `M` · `P0`
+- [x] **T08-011** · Input command stream: tick-stamped, batched with redundancy, server-side validation/rate limiting, input buffering on server: `ss2_net::inputstream` (`docs/INPUTSTREAM.md`); wire format T08-030, session T08-006 · `M` · `P0`
 - [ ] **T08-009** · Client-side prediction + reconciliation of the local player using T07-005 controller; smooth error correction; misprediction metrics · `XL` → split · `P0` · Deps: T07-005, T08-011
 - [ ] **T08-010** · Server-side lag compensation for hitscan/melee (history of hitboxes, max rewind window, fairness limits) · `L` · `P1`
 - [ ] **T08-012** · Reliable events/RPC: explosions, pickups, chat, audio events, with dedupe across redundant snapshots, late-join suppression · `L` · `P0`

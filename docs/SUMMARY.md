@@ -18,6 +18,7 @@
 - [Cheat commands](CHEATS.md)
 - [Fuzzing and Miri](FUZZING.md)
 - [Time synchronization](TIMESYNC.md)
+- [Input command stream](INPUTSTREAM.md)
 - [Testing strategy](TESTING.md)
 - [Data-gated CI design](DATA_GATED_CI.md)
 - [Parity with the original game](PARITY.md)
