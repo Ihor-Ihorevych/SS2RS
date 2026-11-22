@@ -97,11 +97,12 @@ Source of the process: [RELEASING.md](RELEASING.md). Per-platform formats and th
 - [ ] `SHA256SUMS` matches the archives (T12-008).
 - [ ] Each archive starts and runs `ss2-app --smoke-frames 5` on a clean machine (RELEASING section 3, step 6).
 - [ ] Windows: installer or portable zip, DPI-awareness manifest, Windows 10 or later as the baseline
-  (T03-026). The baseline is recorded in the release notes.
+  (T03-026: the portable zip and the manifest exist; the installer is T03-035). The baseline is recorded in the
+  release notes.
 - [ ] Linux and macOS packages as decided by T12-009, T03-011 and T03-010. If a platform is not packaged
   for 1.0, the release notes say so.
 - [ ] Unsigned binaries are stated in the release notes until code signing is done (RELEASING section 6;
-  T03-026, T03-010).
+  T03-035, T03-010).
 - [ ] Players are told how to point the engine at their own install (`SS2_DATA_DIR`) in the packaged
   README and the user docs (section 9).
 

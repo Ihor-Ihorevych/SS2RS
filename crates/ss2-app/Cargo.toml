@@ -33,6 +33,10 @@ profile = ["dep:puffin", "dep:puffin_http"]
 [dev-dependencies]
 tempfile.workspace = true
 
+# Embeds the Windows application manifest (DPI awareness, Windows 10 baseline; build.rs, T03-026).
+[target.'cfg(windows)'.build-dependencies]
+embed-manifest = "1.5"
+
 # Rolls CHANGELOG.md forward on `cargo release replace` (only this crate does it, so it runs once).
 [package.metadata.release]
 pre-release-replacements = [

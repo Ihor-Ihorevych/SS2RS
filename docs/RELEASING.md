@@ -137,7 +137,7 @@ builds stay fast.
 ## 6. Not yet covered
 
 - **Code signing and notarization** (Windows SmartScreen, macOS Gatekeeper): until M8 the binaries
-  are unsigned and the OS will warn; the release notes say so. Tracked with T03-026 and T03-010.
+  are unsigned and the OS will warn; the release notes say so. Tracked with T03-035 and T03-010.
 - **Linux packaging** (AppImage/Flatpak, Steam Deck): T03-011.
 - **Android** (signed APK/AAB, store policies): Phase 2, T12-018.
 - **Publishing crates to crates.io**: T00-025 decides which crates, if any; see [PUBLISHING.md](PUBLISHING.md).
