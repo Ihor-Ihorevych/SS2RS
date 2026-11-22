@@ -15,4 +15,4 @@ Data-only mods (textures, models, `.ep` tweaks) should load directly through the
 - [ ] **T13-008** · Port `InSamnity2` gameplay (classes inventoried from its DLL via T01-040/T01-026-style specs) onto Mod API or core · `XL` · `P2`
 - [ ] **T13-009** · Mod validation tool: lints for missing assets, bad references, version mismatch (`ss2-doctor` extension) · `M` · `P2` · 🟢
 - [ ] **T13-010** · Modder docs: file formats (from `ss2-format-*`), Mod API reference, example mod · `M` · `P2` · 🟢
-- [ ] **T13-011** · Policy: what mod content may be redistributed (no Croteam assets), mod licensing guidance · `S` · `P2` · 🟢
+- [~] **T13-011** [INPRG @Ihor-Ihorevych/agent · branch `T13-011-mod-policy` · 2026-11-22] · Policy: what mod content may be redistributed (no Croteam assets), mod licensing guidance · `S` · `P2` · 🟢
