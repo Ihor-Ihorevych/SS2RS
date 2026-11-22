@@ -133,7 +133,9 @@ spawns, despawns and component changes) so that a library upgrade that changes i
 ## Compatibility and migration
 
 New in `ss2-sim` only: no existing code uses an entity store. `ss2-sim` gains the `hecs` dependency (a four-crate tree, permissive
-licence, `cargo deny` to be run when it is added). `spikes/ecs/` is not part of the workspace or CI and can be deleted once the
+licence). It must follow `docs/DEPENDENCIES.md`: declared once in `[workspace.dependencies]` with default features off, `cargo deny check`
+run when it is added, and, because `ss2-sim` is sim-safe, **no hash-order iteration in the code path it uses**: the spike fingerprinted the
+iteration order only for one operation sequence, so the facade's determinism test (above) is a condition of accepting this choice. `spikes/ecs/` is not part of the workspace or CI and can be deleted once the
 facade exists; its `Cargo.lock` is committed so the numbers can be reproduced. If the store is ever swapped, only the facade and
 the registry's reader/writer glue change; the wire format uses the registry's numeric ids, not Rust types.
 
