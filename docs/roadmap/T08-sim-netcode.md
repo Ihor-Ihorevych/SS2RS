@@ -7,7 +7,7 @@ server + one client over an in-process loopback transport (same code path = co-o
 Not goals: original protocol compatibility, lockstep determinism.
 
 ## Sim core
-- [~] **T08-001** [INPRG @Ihor-Ihorevych/agent · branch `T08-001-ecs-spike` · 2026-11-22] · **SPIKE** ECS choice: custom minimal ECS vs `hecs`/`legion`-style crate; requirements: stable entity IDs w/ generations, per-component replication flags, reflection hooks, cheap snapshot of state; RFC · `M` · `P0`
+- [x] **T08-001** · **SPIKE** ECS choice: custom minimal ECS vs `hecs`/`legion`-style crate; requirements: stable entity IDs w/ generations, per-component replication flags, reflection hooks, cheap snapshot of state; RFC: `docs/rfcs/0005-ecs-choice.md` (in review; proposes `hecs` behind an `ss2-sim` facade, with benchmark in `spikes/ecs/`) · `M` · `P0`
 - [ ] **T08-002** · Entity/class model: class registry, property reflection compatible with `.ep`/`.wld` records, spawn-from-record, lifecycle (spawn/init/tick/destroy), parenting · `L` · `P0` · Deps: T08-001, T01-014/026
 - [ ] **T08-003** · Fixed-timestep sim loop: tick rate from T01-022, pause, time scale, slow-mo, deterministic ordering of systems, phases (input→AI→move→physics→damage→cleanup→replicate) · `M` · `P0`
 - [ ] **T08-004** · Server/client split: `ServerSim`, `ClientSim`, shared game code, loopback transport for SP, listen server (host plays) and dedicated server · `L` · `P0`
