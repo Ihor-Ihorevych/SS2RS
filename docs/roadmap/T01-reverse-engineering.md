@@ -44,7 +44,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 ## Engine behavior (from `Engine.dll`/`Core.dll`)
 - [x] **T01-021** · Recover C++ class hierarchy & vtables via MSVC RTTI for all three game DLLs → `docs/re/classes.md` (names, inheritance, sizes) · `L` · `P0` · *Delivered: RTTI is compiled out of the DLLs, so the hierarchy of the 1,043 serialized classes comes from the type tables of the data (`classes.md`, `classes-catalog.md`); sizes and vtables split into T01-063.*
 - [ ] **T01-022** · SPEC main loop & time: tick rate, fixed/variable step, interpolation, timers, pause semantics · `M` · `P0`
-- [~] **T01-023** [INPRG @lxstyo · branch `T01-023-physics-middleware` · 2026-11-22] · Identify physics/collision middleware from imports/strings; list features used (rigid bodies, ragdolls, destruction) · `S` · `P0`
+- [x] **T01-023** · Identify physics/collision middleware from imports/strings; list features used (rigid bodies, ragdolls, destruction) · `S` · `P0`
 - [ ] **T01-024** · SPEC player movement: speeds, acceleration, friction, air control, jump, gravity, step height, slope limit, crouch, swim, ladders — as **measured numbers + test vectors** · `L` · `P0` · Deps: T01-038/039
 - [ ] **T01-025** · SPEC AI/navigation: perception, pathfinding (navmesh/waypoints), steering, group behavior, spawners · `L` · `P1`
 - [ ] **T01-026** · SPEC entity class inventory of `Sam2Game.dll`: every class, its properties, events, relation to `.ep` · `XL` · `P0`
