@@ -49,7 +49,12 @@ pub struct Profiler {
 pub fn start() -> Option<Profiler> {
     match profile_address(std::env::var(PROFILE_ENV).ok().as_deref()) {
         Ok(None) => None,
-        Ok(Some(addr)) => serve(addr),
+        Ok(Some(addr)) => {
+            if !is_local_only(addr) {
+                tracing::warn!("profiling: {addr} is reachable from the network");
+            }
+            serve(addr)
+        }
         Err(message) => {
             tracing::warn!("{message}; profiling stays off");
             None
@@ -63,9 +68,6 @@ fn serve(addr: SocketAddr) -> Option<Profiler> {
     match puffin_http::Server::new(&addr.to_string()) {
         Ok(server) => {
             tracing::info!("profiling: serving puffin data on {addr} (connect puffin_viewer)");
-            if !is_local_only(addr) {
-                tracing::warn!("profiling: {addr} is reachable from the network");
-            }
             Some(Profiler { _server: server })
         }
         Err(e) => {
