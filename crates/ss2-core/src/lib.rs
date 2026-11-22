@@ -6,6 +6,7 @@ pub mod logfile;
 pub mod logging;
 pub mod math;
 pub mod settings;
+pub mod time;
 
 pub use error::{Error, Result};
 
