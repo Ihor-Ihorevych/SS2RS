@@ -78,7 +78,7 @@ Only figures in the cited documents. "derived" means arithmetic on them.
 - **Install:** 14 `.gro` archives, 3,012 MB on disk (derived from `docs/re/inventory.md`); the design spec says
   about 3.5 GB (§8). Largest groups: `.wld` 1,059.0 MB (107 files), `.tex` 543.7 MB (3,281), `.mdl` 229.6 MB
   (3,827). Video (`.ogv`, 1,310.8 MB) is streamed, not budgeted (`docs/re/inventory.md`).
-- **Worlds:** 59 (`docs/re/wld-root.md`). The parser caps a world at 20,000 entities; that is a cap, not a
+- **Worlds:** 59 (`docs/re/wld-root.md`). The reader rules bound a world at 20,000 entities (`docs/re/wld-root.md`, rule 6); that is a bound, not a
   census. All worlds: 73,098 entities, about 1,240 per world (derived; `docs/re/wld-entities.md`).
 - **Renderables:** 99,187 in all worlds, about 1,680 per world (derived; `docs/re/wld-visibility.md`).
   The campaign village `1_3_village` has 895 (`docs/re/wld-root.md`).
@@ -100,8 +100,8 @@ Only figures in the cited documents. "derived" means arithmetic on them.
 - **Micro-benchmarks** (criterion), `crates/ss2-bench`: `src/lib.rs` holds synthetic fixtures (no game data);
   `benches/` covers assets (VFS and loads), render extract and math, platform actions and lifecycle, and the
   audio voice limit. Run `cargo bench -p ss2-bench`. CI compiles them but does not time them (`docs/TESTING.md` §4).
-- **`ss2-app`:** `--smoke-frames <N>` renders N frames and exits (`crates/ss2-app/src/cli.rs`); it prints no
-  frame times. `--screenshot` writes a menu screen.
+- **`ss2-app`:** `--smoke-frames <N>` renders N frames and exits (`crates/ss2-app/src/cli.rs`); no frame-time output was found in its source;
+  `--screenshot` writes a menu screen.
 - **Missing:** scene runs, frame-time capture, GPU timing, memory counters, load-time logs. The only scene
   is a placeholder (T03-032).
 
