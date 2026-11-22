@@ -18,7 +18,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [ ] **T03-016** · Crash/panic handler: minidump-like report, last log tail, "copy to clipboard" · `S` · `P2` · 🟢
 - [ ] **T03-017** · Display modes: windowed/borderless/exclusive, resolution list, HiDPI scale, vsync, monitor selection · `M` · `P1`
 - [ ] **T03-018** · Job system/thread policy (rayon or custom): worker count, big.LITTLE affinity hints, named threads, tracing spans · `M` · `P1`
-- [~] **T03-019** [INPRG @Ihor-Ihorevych/agent · branch `T03-019-logging-backends` · 2026-11-22] · Logging backends: stdout/file rotate/`logcat`/Oslog · `S` · `P0` · 🟢
+- [x] **T03-019** · Logging backends: stdout and size-rotated file (`ss2_core::logfile`, `init_logging_with_file`); `logcat`/Oslog split into T03-034 · `S` · `P0` · 🟢
 - [ ] **T03-020** · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
 
 ## Other PC platforms (after Windows works; before M8)
@@ -47,3 +47,4 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-031** · Navigation input mapping: keyboard (arrows/WASD/Enter/Esc) and gamepad (D-pad, buttons, stick with dead zone + repeat) → `NavInput` · `M` · `P1` · Deps: T10-030
 - [x] **T03-032** · `ss2-app` window loop and menu wiring (winit 0.30): CLI (`--screenshot`, `--smoke-frames`), scenes (menu/placeholder game), live vsync/fullscreen, minimize-safe · `M` · `P1` · Deps: T04-036, T03-031, T03-030
 - [ ] **T03-033** · Move `ss2-app` onto `ss2_platform::window::run`: the app implements `PlatformApp` (renderer created in `window_ready`, dropped in `window_lost`) and reads input as `PlatformEvent`s instead of raw `winit`/`gilrs` calls (split from T03-001, which delivered the loop and lifecycle; the input events are T03-002/T03-003) · `M` · `P1` · Deps: T03-001, T03-002, T03-003
+- [ ] **T03-034** · Platform log backends: Android `logcat` and macOS `OSLog` layers for `tracing` (behind `cfg(target_os)`; needs the `tracing-android` / `tracing-oslog` crates and the target toolchains for the portability check; the workspace forbids `unsafe`) · `S` · `P2` · Deps: T03-019

@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod input;
+pub mod logfile;
 pub mod logging;
 pub mod math;
 pub mod settings;
