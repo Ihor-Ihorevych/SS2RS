@@ -41,7 +41,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [x] **T08-017** · Network simulator (latency, jitter, loss, duplication, reorder, bandwidth cap with a tail-drop queue): `ss2_net::netsim`, deterministic and in-process; the socket-level conditioner is T08-017b and the scenario runner is T11-010 · `M` · `P0`
 - [ ] **T08-017b** · Socket-level network conditioner: a UDP proxy tool that applies the `ss2_net::netsim::LinkConfig` presets to real traffic (it needs a real clock, so it lives in a tool crate or `xtask`, not in the sim-safe `ss2-net`); lets a real client and server be tried at 100 ms and 2 % loss · `M` · `P1` · Deps: T08-005
 - [ ] **T08-029** · Headless bot clients for soak tests (N bots × M minutes); assertions on desync/divergence/bandwidth · `L` · `P1`
-- [ ] **T08-018** · Net profiling: bytes/tick per component, RTT/loss graph, prediction error HUD (`net_graph`), Tracy spans · `M` · `P1`
+- [~] **T08-018** [INPRG @Ihor-Ihorevych/agent · branch `T08-018-net-stats` · 2026-11-22] · Net profiling: bytes/tick per component, RTT/loss graph, prediction error HUD (`net_graph`), Tracy spans · `M` · `P1`
 - [ ] **T08-021** · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
 - [ ] **T08-025** · Replay recording (inputs + snapshots) and playback for bug reports · `L` · `P2`
 - [ ] **T08-026** · Prediction error test across x86_64/aarch64 clients vs server (T07-026) · `M` · `P1`
