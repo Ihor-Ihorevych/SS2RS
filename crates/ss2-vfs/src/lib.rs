@@ -22,6 +22,7 @@
 //! ```
 
 mod archive;
+mod check;
 mod install;
 mod layered;
 mod memory;
@@ -32,6 +33,7 @@ use std::io::{Read, Seek};
 use ss2_core::{Error, Result};
 
 pub use archive::ArchiveVfs;
+pub use check::{ArchiveInfo, Finding, InstallReport, PatchLevel, Severity, check_install};
 pub use install::{archive_load_order, mount_install};
 pub use layered::LayeredVfs;
 pub use memory::MemoryVfs;

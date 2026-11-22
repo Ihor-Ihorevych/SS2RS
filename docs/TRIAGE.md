@@ -64,8 +64,7 @@ A maintainer, or any contributor acting as triager, works through these steps:
    once (§8) and tell the reporter why. Do not re-share it.
 3. **Classify the cause.** Decide whether this is an engine bug, a problem with the installed data
    (wrong version, modified files, missing files), or a difference that the original game shares.
-   For data problems, ask the reporter to check the install (`ss2-doctor` once it exists, see
-   T11-013).
+   For data problems, ask the reporter to run `ss2-doctor <folder>` (T11-013; from a source checkout: `cargo run -p ss2-vfs --bin ss2-doctor -- <folder>`) and paste its output.
 4. **Reproduce if you can.** Note the result in the issue. A report that cannot be reproduced after
    two requests for information is closed as `not-reproduced`.
 5. **Label and prioritise** as in §2 and §3.
