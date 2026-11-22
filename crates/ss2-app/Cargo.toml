@@ -21,6 +21,9 @@ gilrs.workspace = true
 png.workspace = true
 tracing.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 # Rolls CHANGELOG.md forward on `cargo release replace` (only this crate does it, so it runs once).
 [package.metadata.release]
 pre-release-replacements = [

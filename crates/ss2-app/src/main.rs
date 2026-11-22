@@ -29,7 +29,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         cli::Mode::Window(options) => launch(&options),
-        cli::Mode::Smoke { frames } => app::run(Some(frames)),
+        cli::Mode::Smoke { frames } => app::run(Some(frames), &[]),
         cli::Mode::Screenshot { screen, out, size } => screenshot::take(screen, &out, size),
     };
     match result {
@@ -56,5 +56,5 @@ fn launch(options: &ss2_core::cli::LaunchOptions) -> Result<(), String> {
     if options.portable {
         tracing::info!("portable mode requested (not wired into the app yet)");
     }
-    app::run(None)
+    app::run(None, &options.set)
 }

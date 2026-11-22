@@ -2377,6 +2377,7 @@ dependencies = [
  "ss2-platform",
  "ss2-render",
  "ss2-ui",
+ "tempfile",
  "tracing",
  "winit",
 ]
