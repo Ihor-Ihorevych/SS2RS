@@ -15,7 +15,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-013** · Fixed-timestep driver + frame pacing: accumulator, max catch-up, interpolation alpha, vsync/uncapped, busy-wait policy · `M` · `P0`
 - [ ] **T03-014** · Settings/config: TOML profile, schema + migration, per-platform defaults, CLI overrides · `M` · `P0`
 - [ ] **T03-015** · Console backend: cvars/commands registry, history, autocomplete (UI in T10-007) · `M` · `P1`
-- [ ] **T03-016** · Crash/panic handler: minidump-like report, last log tail, "copy to clipboard" · `S` · `P2` · 🟢
+- [~] **T03-016** [INPRG @Ihor-Ihorevych/agent · branch `T03-016-crash-handler` · 2026-11-22] · Crash/panic handler: minidump-like report, last log tail, "copy to clipboard" · `S` · `P2` · 🟢
 - [ ] **T03-017** · Display modes: windowed/borderless/exclusive, resolution list, HiDPI scale, vsync, monitor selection · `M` · `P1`
 - [ ] **T03-018** · Job system/thread policy (rayon or custom): worker count, big.LITTLE affinity hints, named threads, tracing spans · `M` · `P1`
 - [x] **T03-019** · Logging backends: stdout and size-rotated file (`ss2_core::logfile`, `init_logging_with_file`); `logcat`/Oslog split into T03-034 · `S` · `P0` · 🟢
