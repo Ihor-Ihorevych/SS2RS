@@ -247,3 +247,9 @@ Hit effects, blood and gib evidence (docs/re/effects-pipeline.md, effects-tables
 ```
 python -I tools/re/effects_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/effects-tables.md] [LIMIT]    # material particle schemes, puppet death parameters, prop and placed effects, decal/gib name search (about 15 minutes)
 ```
+
+Weapon evidence (docs/re/weapons.md, weapons-tables.md):
+
+```
+python -I tools/re/weapons_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/weapons-tables.md]    # the 17 weapon parameter files (single player and deathmatch) and the projectile files they use (about 1 minute)
+```
