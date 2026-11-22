@@ -111,23 +111,23 @@ Never attach or paste game files (`*.gro`, `*.wld`, `*.tex`, `*.mdl`, `*.exe`, `
 folder), game dialogue or menu text, or decompiler output. Rules: [TRIAGE section 8](TRIAGE.md#8-game-content-in-reports).
 ````
 
-**Where logs go today.** `ss2-app` calls `init_logging`, which writes to the terminal only. No log file is created.
-Capture it yourself:
+**Where logs and crash reports go.** An interactive `ss2-app` run (`crates/ss2-app/src/diagnostics.rs`) writes
+`ss2-app.log` (rotated at 5 MiB, five old files kept; the file of the previous run becomes `ss2-app.1.log`) and also prints the
+same text to the terminal. A panic writes `crash-<unix time>.txt` with the panic, a backtrace, the version and the last 50
+log lines to the `crashes` folder inside the log folder (`ss2_core::crash`, tested in `crates/ss2-core/tests/crash_hook.rs`).
 
-- Linux, macOS: `SS2_LOG=debug ./ss2-app 2>&1 | tee ss2.log`
-- Windows PowerShell: `$env:SS2_LOG = "debug"; .\ss2-app.exe *>&1 | Tee-Object -FilePath ss2.log`
-
-**Designed, not wired** (no binary calls these):
-
-- `ss2_core::logfile` writes `ss2.log` (rotated at 5 MiB, five old files kept) through `init_logging_with_file`.
-- `ss2_core::crash` writes `crash-<unix time>.txt` on panic with the last 50 log lines, through `install_panic_hook`
-  (tested in `crates/ss2-core/tests/crash_hook.rs`). Today a panic prints to stderr only; a backtrace needs `RUST_BACKTRACE=1`.
-- The folder is `PlatformPaths::log_dir` (`crates/ss2-platform-api/src/paths.rs`): `%LOCALAPPDATA%\SS2RS\logs` on Windows,
+- **Folder:** `PlatformPaths::log_dir` (`crates/ss2-platform-api/src/paths.rs`): `%LOCALAPPDATA%\SS2RS\logs` on Windows,
   `~/.local/state/SS2RS/logs` on Linux (on Windows and macOS the `directories` crate has no state directory, so the code
-  falls back to the local data directory). `PlatformPaths::resolve` is called by no binary, so portable mode is inactive.
+  falls back to the local data directory).
+- **Portable mode:** with `--portable`, or an empty file `ss2-portable` next to the executable, everything is written to
+  `ss2-data/` next to the executable (`ss2-data/logs`, `ss2-data/config`) instead.
+- **Not covered:** `--help`, `--version`, `--smoke-frames` and `--screenshot` create no files; a crash that is not a Rust
+  panic (an access violation inside a driver, for example) writes no report.
+- To capture the terminal output of a run as well: Linux and macOS `SS2_LOG=debug ./ss2-app 2>&1 | tee run.log`; Windows
+  PowerShell `$env:SS2_LOG = "debug"; .\ss2-app.exe *>&1 | Tee-Object -FilePath run.log`.
 
-**Wired:** `settings.toml` at `Settings::default_path()` (`%APPDATA%\SS2RS\settings.toml` on Windows,
-`crates/ss2-core/src/settings.rs`), read by the app and written when the Options screen saves.
+**Settings:** `settings.toml` in the config folder (`%APPDATA%\SS2RS\settings.toml` on Windows, `ss2-data/config` in portable
+mode; `crates/ss2-core/src/settings.rs`), read by the app and written when the Options screen saves.
 
 ## 4. Privacy
 
@@ -222,8 +222,8 @@ Roles, not people. One person may hold several.
 ## 9. Gaps and open questions
 
 1. No channel is built by CI (Actions blocked); no scheduled `nightly` exists (T12-008).
-2. No binary writes a log file or crash report, and portable mode is inactive (section 3). The roadmap marks T03-016, T03-019,
-   T03-012 and T03-020 done, but their code is not called by the binaries.
+2. Only the interactive `ss2-app` writes a log file and crash reports (section 3); `ss2-server` is a stub and the developer
+   modes create no files; native crashes are not reported.
 3. `--version` omits the commit; pre-release version strings are untested.
 4. No playtest label, template or board exists; TRIAGE and the templates use labels that do not exist (section 6), and
    `wont-fix` and `wontfix` differ.

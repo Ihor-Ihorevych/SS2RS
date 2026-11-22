@@ -24,9 +24,11 @@ built yet, so the fix is to wait for them. For the install steps, see
 
 ## Where to see the log
 
-Logs are printed in the terminal where you start the program. There is no log file yet. Set the
-`SS2_LOG` variable to change the detail, for example `SS2_LOG=debug`. Copy the text from the terminal
-into your report. A crash handler that writes a report file is **planned** (T03-016).
+The program writes a log file `ss2-app.log` and prints the same text in the terminal where you start it. On Windows the
+file is `%LOCALAPPDATA%\SS2RS\logs\ss2-app.log`; on Linux `~/.local/state/SS2RS/logs/ss2-app.log`; in portable mode (`--portable`,
+or an empty file `ss2-portable` next to the program) it is in `ss2-data/logs` next to the program. Set the `SS2_LOG` variable to
+change the detail, for example `SS2_LOG=debug`. If the program panics it also writes a crash report, `crash-<number>.txt`, to
+the `crashes` folder inside the log folder: attach it to your report (see the next section).
 
 ## What to include in a report
 

@@ -55,9 +55,14 @@ pub(crate) fn effective_settings(
 }
 
 /// Run the interactive app. With `smoke_frames`, exits after that many frames. `overrides` are
-/// the `--set KEY=VALUE` settings overrides of this run.
-pub fn run(smoke_frames: Option<u32>, overrides: &[String]) -> Result<(), String> {
-    let settings_path = Settings::default_path();
+/// the `--set KEY=VALUE` settings overrides of this run; `settings_path` is where the settings
+/// are read and saved (the OS default when `None`).
+pub fn run(
+    smoke_frames: Option<u32>,
+    overrides: &[String],
+    settings_path: Option<PathBuf>,
+) -> Result<(), String> {
+    let settings_path = settings_path.or_else(Settings::default_path);
     let settings = effective_settings(settings_path.as_deref(), overrides)?;
     let gilrs = match Gilrs::new() {
         Ok(g) => Some(g),

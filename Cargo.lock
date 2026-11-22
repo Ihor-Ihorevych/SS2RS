@@ -2375,6 +2375,7 @@ dependencies = [
  "png",
  "ss2-core",
  "ss2-platform",
+ "ss2-platform-api",
  "ss2-render",
  "ss2-ui",
  "tempfile",

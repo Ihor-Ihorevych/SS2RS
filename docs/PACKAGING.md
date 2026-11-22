@@ -119,7 +119,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 - **Install:** extract the archive anywhere and run the binary. No installer, shortcut, file association or PATH entry (section 2).
 - **Settings (IMPLEMENTED):** `Settings::default_path` (`crates/ss2-core/src/settings.rs`) puts `settings.toml` in the OS config directory under `SS2RS/`, found with the `directories` crate (for example `%APPDATA%\SS2RS\settings.toml` on Windows). Saved through a temporary file; a missing or broken file gives defaults (T03-030, done). Schema and migration: T03-014 (`P0`, open).
 - **Key bindings:** `bindings_file` in `crates/ss2-platform-api/src/paths.rs` is planned; the feature is T03-005 (open).
-- **Saves (OPEN):** `PlatformPaths` has a `save_dir` and, since T03-012, resolves the per-OS directories (`PlatformPaths::resolve` with `UserDirs::detect()`: `%APPDATA%\SS2RS`, `~/.config/SS2RS` and so on) and a **portable mode** (a file `ss2-portable` next to the executable, or an explicit flag: everything below `ss2-data/` next to the executable); the app does not call it yet and no save is written yet. Save format versioning follows RELEASING section 1.
+- **Saves (OPEN):** `PlatformPaths` has a `save_dir` and, since T03-012, resolves the per-OS directories (`PlatformPaths::resolve` with `UserDirs::detect()`: `%APPDATA%\SS2RS`, `~/.config/SS2RS` and so on) and a **portable mode** (a file `ss2-portable` next to the executable, or an explicit flag: everything below `ss2-data/` next to the executable); `ss2-app` uses it for its log, crash reports and settings (`crates/ss2-app/src/diagnostics.rs`); no save is written yet. Save format versioning follows RELEASING section 1.
 - **Data location (OPEN):** `SS2_DATA_DIR` today; the remembered choice is T10-019; a `--data` option is T03-020. None exists.
 - **Logs and crash reports (OPEN):** T03-019 and T03-016. The log location is not decided.
 - **Updates (OPEN):** new versions are announced on GitHub Releases only. No roadmap task adds an updater or update check, so the engine does not check for updates. An automatic update would need a new task.
@@ -146,7 +146,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 9. Provenance, attestations and signing of `SHA256SUMS` are undecided.
 10. Reproducible builds (T12-008) and nightly artifacts are not built; `release.yml` has no schedule.
 11. No SBOM generator and no third-party notices file (COMPLIANCE sections 3 and 8).
-12. Saves are open; the launch options (`--data`, `--level`, `--portable`, and `--connect`/`--listen` for the app, `--bind` for the server) are parsed (`ss2_core::cli`, T03-020), the rotating log file (`ss2_core::logfile`, T03-019) and the per-OS directories (T03-012) exist, but the app does not use any of them yet (`--connect`/`--listen` report that multiplayer is not implemented); uninstall text depends on them.
+12. Saves are open. The app uses the per-OS folders (T03-012), writes a rotating log file (T03-019) and crash reports (T03-016) and honors `--portable` (T03-020); `--data` and `--level` are parsed but not used yet, and `--connect`/`--listen` report that multiplayer is not implemented. Deleting the program folder leaves the per-user folders (settings, logs, crash reports) in place; portable mode keeps them next to the executable.
 13. No update check exists and none is in the roadmap.
 14. Actions is blocked, so `release.yml` has never run on a tag; the first archives are untested.
 15. Package channels and store questions (section 6) have no owner.
