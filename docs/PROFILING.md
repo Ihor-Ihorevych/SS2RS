@@ -60,6 +60,13 @@ With the app running (`SS2_PROFILE=1 cargo run -p ss2-app --features profile -- 
 connection to `127.0.0.1:8585` returns a stream that starts with the bytes `02 00 50 46 44 34` (`PFD4`, the puffin
 data packet) and contains the scope names `redraw` and `render`. This is how the integration was checked on Windows.
 
+## Dependencies
+
+`puffin` and `puffin_http` are optional dependencies of `ss2-app`, compiled only with `--features profile`, so
+they are not in a default or release build. They pull in `bincode` 1.3.3, which RustSec lists as unmaintained (not
+vulnerable); `deny.toml` ignores that advisory with the reason and the condition for revisiting it. To check the
+feature's dependencies, run `cargo deny --all-features check` (the CI run does not enable the feature).
+
 ## Not covered
 
 - GPU timings (T04-019) and the in-game overlay (T10-007) are separate tasks.
