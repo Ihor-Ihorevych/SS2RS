@@ -130,7 +130,7 @@ builds stay fast.
 ## 5. Pre-releases and hotfixes
 
 - A pre-release uses a `-alpha.N` / `-beta.N` / `-rc.N` version and the same steps; mark the GitHub
-  release as a pre-release when publishing.
+  release as a pre-release when publishing. Playtest channels and the feedback form: [PLAYTEST.md](PLAYTEST.md).
 - A hotfix is a patch release from `main`. While there are no long-lived release branches (true
   until 1.0), a fix goes to `main` first and is released from there.
 
