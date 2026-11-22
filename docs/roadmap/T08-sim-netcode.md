@@ -43,7 +43,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-029** · Headless bot clients for soak tests (N bots × M minutes); assertions on desync/divergence/bandwidth · `L` · `P1`
 - [x] **T08-018** · Net profiling data: bytes per tick by kind of traffic, RTT, jitter and loss over sliding windows, summarized for a `net_graph`: `ss2_net::netstats` (`docs/NETSTATS.md`); the overlay, the prediction error, per-component breakdown and profiler scopes are T08-018b · `M` · `P1`
 - [ ] **T08-018b** · `net_graph` overlay drawing the `NetGraph` figures (needs the overlay of T10-007), prediction error display (needs T08-009), per-component traffic breakdown (needs T08-007) and profiler scopes around the send and receive paths (in the transport crate, RFC 0006) · `M` · `P1` · Deps: T08-018, T10-007, T08-009
-- [ ] **T08-021** · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
+- [~] **T08-021** [INPRG @Ihor-Ihorevych/agent · branch `T08-021-threat-model` · 2026-11-22] · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
 - [ ] **T08-025** · Replay recording (inputs + snapshots) and playback for bug reports · `L` · `P2`
 - [ ] **T08-026** · Prediction error test across x86_64/aarch64 clients vs server (T07-026) · `M` · `P1`
 - [x] **T08-030** · Protocol versioning & compatibility policy, schema hash, changelog for wire format: `ss2_net::protocol` and `docs/PROTOCOL.md` (there is no wire format yet, so the changelog starts empty) · `S` · `P1` · 🟢
