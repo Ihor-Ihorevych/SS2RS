@@ -45,6 +45,6 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-021** · Server validation & anti-cheat basics: sanity bounds on input, rate limits, authority checks; threat model doc · `M` · `P2`
 - [ ] **T08-025** · Replay recording (inputs + snapshots) and playback for bug reports · `L` · `P2`
 - [ ] **T08-026** · Prediction error test across x86_64/aarch64 clients vs server (T07-026) · `M` · `P1`
-- [ ] **T08-030** · Protocol versioning & compatibility policy, schema hash, changelog for wire format · `S` · `P1` · 🟢
+- [~] **T08-030** [INPRG @Ihor-Ihorevych/agent · branch `T08-030-protocol-version` · 2026-11-22] · Protocol versioning & compatibility policy, schema hash, changelog for wire format · `S` · `P1` · 🟢
 - [ ] **T08-031** · Mobile networking: Wi-Fi↔cellular handoff, background/suspend reconnect, battery-aware tick/snapshot rate for clients · `M` · `PHASE 2`
 - [ ] **T08-032** · Documentation: netcode architecture guide (for gameplay devs: what to mark replicated, how to write predicted code) · `M` · `P1`
