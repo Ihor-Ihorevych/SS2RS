@@ -138,5 +138,5 @@ builds stay fast.
   are unsigned and the OS will warn; the release notes say so. Tracked with T03-026 and T03-010.
 - **Linux packaging** (AppImage/Flatpak, Steam Deck): T03-011.
 - **Android** (signed APK/AAB, store policies): Phase 2, T12-018.
-- **Publishing crates to crates.io**: T00-025 decides which crates, if any.
+- **Publishing crates to crates.io**: T00-025 decides which crates, if any; see [PUBLISHING.md](PUBLISHING.md).
 - **SBOM and license audit per release**: T12-010; `cargo deny check` already gates every PR.
