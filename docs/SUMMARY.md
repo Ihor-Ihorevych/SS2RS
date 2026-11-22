@@ -66,6 +66,7 @@
 - [0003 Platform API](rfcs/0003-platform-api.md)
 - [0004 Audio API](rfcs/0004-audio-api.md)
 - [0005 ECS choice](rfcs/0005-ecs-choice.md)
+- [0006 Network transport](rfcs/0006-network-transport.md)
 
 # Reverse-engineering specs
 
