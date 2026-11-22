@@ -64,7 +64,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-040** · SPEC mod interface: how `.mod`/`.nfo`, game DLL replacement, content overlays work; what `Sam2Renovation` and `InSamnity2` change · `M` · `P2`
 - [x] **T01-041** · SPEC localization: languages shipped, string tables, subtitle sync · `M` · `P2`
 - [x] **T01-042** · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
-- [~] **T01-043** [INPRG @Ihor-Ihorevych/agent · branch `re-fx` · 2026-11-22] · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
+- [x] **T01-043** · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
 - [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [x] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
@@ -99,3 +99,4 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-071** · SPEC destruction leftovers: the run-time break rule (health versus accumulated damage, damage type match, phase transition), debris simulation (collision modes, toughness, speeds), the names of `ModelBodyType`, `EDamageType` and the `EPlatform` bits and how the platform configuration is chosen, the 769 models without a holder · `S` · `P2` · Deps: T01-038
 - [ ] **T01-072** · SPEC vehicle/turret run-time rules: movement units and input mapping (`SAircraftPlayerControls`), boarding and leaving a ride (`en_iWayToSeat`, `macMountRide`, `RiderLost`), vehicle damage and collision, turret gun limits (`STurretPuppetParams.1`) · `S` · `P2` · Deps: T01-038
 - [ ] **T01-073** · SPEC camera and view run-time rules: projection set-up (horizontal or vertical 80 degrees, weapon field of view and near plane), view spring and banking, head bob, sway, recoil and idle motion (absent from the data), the death camera, zoom interpolation, and which code selects the seven unused cameras · `S` · `P2` · Deps: T01-038
+- [ ] **T01-074** · SPEC hit-effect run-time rules: which code raises `Thrust` and `Dust`, effect lifetime and limits, orientation of hit effects, the damage thresholds and units of the puppet death parameters (`SPuppetDeathParams.2` to `.4`), the source of projectile explosion effects, and what the player's own hits show · `S` · `P2` · Deps: T01-038
