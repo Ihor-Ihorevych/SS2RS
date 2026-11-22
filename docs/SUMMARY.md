@@ -42,6 +42,7 @@
 # Reverse-engineering specs
 
 - [Overview and template](re/README.md)
+- [Spec conventions](re/conventions.md)
 - [Install inventory](re/inventory.md)
 - [CTSEMETA container](re/ctsemeta-container.md)
 - [CTSEMETA type tables](re/ctsemeta-types.md)
