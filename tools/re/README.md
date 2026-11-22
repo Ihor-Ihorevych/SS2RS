@@ -196,3 +196,10 @@ World physics evidence (docs/re/wld-physics.md, wld-physics-schema.md):
 python -I tools/re/wld_physics_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # mechanisms, parts, bodies, hulls, collision grid cells, joints, motion handlers (about 15 minutes)
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-physics-schema.md --match "Mechanism|Body|Hull|Joint|MotionHandler|CMotionHandler|CollisionMesh|CollisionLayer|CollisionDomain|CollisionGrid|PhysicsDomain|FluidHull|ForceField|JointLimit|JointValues|PrimitiveDesc" --title "..."    # the class reference
 ```
+
+World sound and effect evidence (docs/re/wld-sound-effects.md, wld-sound-effects-schema.md):
+
+```
+python -I tools/re/wld_sound_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # sources, channels, sync list, environments, effect instances against the .pfx (about 15 to 30 minutes)
+python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-sound-effects-schema.md --match "Sound|Feeder|DynamicMusic|SfxEnv|EffectInstance|EffectRenderable|ParticleEffectInstance|ParticleEffectSound|EffectEntity|EffectProperties|EnvSFX|ShakerEffect|ShakerRenderable|TextEffect" --title "..."    # the class reference
+```
