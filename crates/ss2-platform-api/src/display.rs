@@ -162,13 +162,13 @@ pub fn best_video_mode(
 pub fn plan_display(request: &DisplayRequest, monitors: &[MonitorInfo]) -> DisplayPlan {
     let mut notes = Vec::new();
     let monitor = select_monitor(monitors, request.monitor.as_deref());
-    if let (Some(name), Some(index)) = (&request.monitor, monitor) {
-        if !monitors[index].name.eq_ignore_ascii_case(name) {
-            notes.push(format!(
-                "monitor {name:?} was not found; using {:?}",
-                monitors[index].name
-            ));
-        }
+    if let (Some(name), Some(index)) = (&request.monitor, monitor)
+        && !monitors[index].name.eq_ignore_ascii_case(name)
+    {
+        notes.push(format!(
+            "monitor {name:?} was not found; using {:?}",
+            monitors[index].name
+        ));
     }
     let mode = match request.mode {
         WindowMode::Windowed => ResolvedMode::Windowed,
