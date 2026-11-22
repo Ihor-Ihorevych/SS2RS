@@ -525,12 +525,11 @@ mod tests {
             for (at, (t0, server_clock)) in link.b_to_a.poll(now) {
                 sync.on_pong(t0, server_clock, at).unwrap();
             }
-            if now > 20_000_000 {
-                if let Some(estimate) = sync.server_time_us(now) {
-                    let truth = now + now / 10_000 + TRUE_OFFSET as u64;
-                    worst_after_warmup =
-                        worst_after_warmup.max((estimate as i64 - truth as i64).abs());
-                }
+            if now > 20_000_000
+                && let Some(estimate) = sync.server_time_us(now)
+            {
+                let truth = now + now / 10_000 + TRUE_OFFSET as u64;
+                worst_after_warmup = worst_after_warmup.max((estimate as i64 - truth as i64).abs());
             }
             now += step;
         }
