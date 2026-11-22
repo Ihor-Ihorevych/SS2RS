@@ -13,7 +13,7 @@ turns opaque `CTSEMETA` files into readable text so RE and loader work can move 
 - [ ] **T11-008** · Original-game instrumentation harness (debugger/Frida-style, run locally): dump entity positions/velocities/health/tick to CSV for fixed scenarios · `L` · `P0`
 - [ ] **T11-009** · Cooker CLI: convert an install into the cooked cache (PC profile now; mobile profile in Phase 2), texture transcode, mesh repack · `L` · `P1` · Deps: T02-011
 - [ ] **T11-010** · Replay/netsim CLIs: record, inspect, replay sessions; scenario runner front-end (T08-017/025) · `M` · `P2`
-- [~] **T11-011** [INPRG @Ihor-Ihorevych/agent · branch `T11-011-profiling` · 2026-11-22] · Tracy/puffin profiling integration and capture scripts · `S` · `P1` · 🟢
+- [x] **T11-011** · Tracy/puffin profiling integration and capture scripts · `S` · `P1` · 🟢
 - [ ] **T11-012** · Progress dashboard: auto-generated coverage page — file types loadable, % of levels loading, weapons/enemies implemented; fed by the data-gated runner · `M` · `P2`
 - [ ] **T11-013** · `ss2-doctor`: validates an install (completeness, version, patch level), prints actionable errors for end users · `S` · `P1` · 🟢
 - [ ] **T11-014** · Texture/model exporters (PNG/glTF) for modders and spec reviewers · `M` · `P2`

@@ -17,6 +17,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
+use crate::profiling;
 use crate::state::{AppState, Effects, Scene};
 
 /// Clear color of the placeholder "game" scene.
@@ -166,13 +167,19 @@ impl App {
     }
 
     fn redraw(&mut self, event_loop: &ActiveEventLoop) {
+        profiling::frame();
+        profiling::profile_scope!("redraw");
         let (list, clear) = match self.state.scene {
             Scene::Menu => (self.menu.draw(), theme::BACKGROUND),
             Scene::Playing => (DrawList::default(), PLAYING_CLEAR),
         };
-        if let Some(renderer) = self.renderer.as_mut()
-            && let Err(e) = renderer.render(&list, clear)
-        {
+        let rendered = {
+            profiling::profile_scope!("render");
+            self.renderer
+                .as_mut()
+                .map(|renderer| renderer.render(&list, clear))
+        };
+        if let Some(Err(e)) = rendered {
             self.failure = Some(format!("rendering failed: {e}"));
             event_loop.exit();
             return;

@@ -44,7 +44,7 @@ track's work · **Optional** = nice to have.
 | T04/T05 | Vulkan runtime/SDK tools (`vulkaninfo`), GPU vendor tools (optional) | adapter/limits inspection | Role |
 | T05 | `naga-cli` (`cargo install --locked naga-cli`) | validate/convert shaders by hand | Role |
 | **T06 audio/video** | **FFmpeg** | inspect/convert `.ogv`/audio when writing and verifying decoders | Role |
-| **T07/T08 physics/net** | Tracy profiler (T11-011) | frame/tick profiling | Optional |
+| **T07/T08 physics/net** | `puffin_viewer` (`cargo install --locked puffin_viewer`, T11-011, see `docs/PROFILING.md`) | frame/tick profiling | Optional |
 | T08 | A network conditioner (the repo's own netsim, T08-017) | no external tool needed | — |
 | **T00/T12 infra & docs** | **`mdbook`** (`cargo install --locked mdbook`) | docs site (T00-020) | Role |
 | T12 | `cargo-miri` (nightly) | UB checks on any `unsafe` | Optional |
