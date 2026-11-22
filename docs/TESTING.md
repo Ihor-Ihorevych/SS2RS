@@ -101,7 +101,7 @@ test workflow yet.
 - **Game data:** yes. Never commit the data or any output derived from it.
 - **When:** pull requests run these tests, but hosted runners have no game data, so they skip. Real
   coverage needs a machine with a legal copy. The planned self-hosted runner design (where data never
-  leaves the machine and only pass/fail is reported) is **planned, see T12-002**.
+  leaves the machine and only pass/fail is reported) is **planned, see T12-002**; the design is in [DATA_GATED_CI.md](DATA_GATED_CI.md).
 - **Scripts that read the install** (not cargo tests): the Python checks in `tools/re/` take the
   install path as an argument and read `.gro` files read-only, to re-check numbers quoted in
   `docs/re/`. Example:
