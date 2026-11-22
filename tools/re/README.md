@@ -259,3 +259,9 @@ Character evidence (docs/re/enemies.md, enemies-tables.md):
 ```
 python -I tools/re/enemies_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/enemies-tables.md]    # the 124 puppet parameter files: health, score, speeds, attacks, and the 73 projectile files of the shooting blasts (about 1 minute)
 ```
+
+Boss fight evidence (docs/re/bosses.md, bosses-tables.md):
+
+```
+python -I tools/re/bosses_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/bosses-tables.md] [LIMIT]    # the seven boss characters, their behavior states and the events, actions and calls the arena scripts address to each boss (about 15 minutes)
+```
