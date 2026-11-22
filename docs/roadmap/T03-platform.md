@@ -14,7 +14,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [x] **T03-012** · Platform paths: config/save/cache/data dirs per OS (`directories`), portable mode flag · `S` · `P0` · 🟢
 - [x] **T03-013** · Fixed-timestep driver + frame pacing: accumulator, max catch-up, interpolation alpha, vsync/uncapped, busy-wait policy · `M` · `P0`
 - [ ] **T03-014** · Settings/config: TOML profile, schema + migration, per-platform defaults, CLI overrides · `M` · `P0`
-- [~] **T03-015** [INPRG @Ihor-Ihorevych/agent · branch `T03-015-console-backend` · 2026-11-22] · Console backend: cvars/commands registry, history, autocomplete (UI in T10-007) · `M` · `P1`
+- [x] **T03-015** · Console backend: cvars/commands registry, history, autocomplete (UI in T10-007) · `M` · `P1`
 - [x] **T03-016** · Crash/panic handler: minidump-like report, last log tail, "copy to clipboard" · `S` · `P2` · 🟢
 - [ ] **T03-017** · Display modes: windowed/borderless/exclusive, resolution list, HiDPI scale, vsync, monitor selection · `M` · `P1`
 - [ ] **T03-018** · Job system/thread policy (rayon or custom): worker count, big.LITTLE affinity hints, named threads, tracing spans · `M` · `P1`
