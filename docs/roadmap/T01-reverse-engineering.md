@@ -62,7 +62,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-038** · Oracle capture: record reference gameplay (screen + frame times + known actions) for movement/weapon/enemy validation; store **numbers only** · `L` · `P0`
 - [ ] **T01-039** · Instrumentation harness for the original game (debugger/Frida-style scripts reading positions, velocities, health, tick) → CSV oracle data · `L` · `P0` · Deps: T11-008
 - [x] **T01-040** · SPEC mod interface: how `.mod`/`.nfo`, game DLL replacement, content overlays work; what `Sam2Renovation` and `InSamnity2` change · `M` · `P2`
-- [~] **T01-041** [INPRG @lxstyo · branch `T01-041-localization` · 2026-11-22] · SPEC localization: languages shipped, string tables, subtitle sync · `M` · `P2`
+- [x] **T01-041** · SPEC localization: languages shipped, string tables, subtitle sync · `M` · `P2`
 - [ ] **T01-042** · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
 - [ ] **T01-043** · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
 - [ ] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`

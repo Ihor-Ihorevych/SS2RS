@@ -176,3 +176,9 @@ Per-character health and score table (docs/re/puppet-stats.md, game-modes.md):
 ```
 python -X utf8 tools/re/puppet_stats.py "C:\path\to\Serious Sam 2" --markdown docs/re/puppet-stats.md
 ```
+
+Localization (docs/re/localization.md):
+
+```
+python -X utf8 tools/re/l10n_verify.py "C:\path\to\Serious Sam 2"    # CTransString counts and key styles, Locales/ files (about a minute)
+```
