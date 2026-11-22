@@ -42,7 +42,8 @@ changelog entry:
 - **Save-game format version** (T09, T03-014): old saves must load or fail with a clear message.
 - **Settings/bindings schema version** (T03-014): migrated, never silently dropped.
 - **Network protocol version** (T08): a client and server must refuse each other cleanly when it
-  differs, regardless of product version.
+  differs, regardless of product version. The rules, the schema hash and the wire-format changelog are in
+  `docs/PROTOCOL.md` (`ss2_net::protocol`).
 - **Cooked-cache version** (T02-011): a mismatch simply rebuilds the cache.
 
 ## 2. Changelog
