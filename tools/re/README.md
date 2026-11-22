@@ -122,3 +122,9 @@ Smaller file types (docs/re/misc-types.md, misc-schema.md):
 python -X utf8 tools/re/misc_verify.py "C:\path\to\Serious Sam 2"    # .nfo .dsc .srt .crt .preload .cfg .bin and the .cb .sfc .pss .ctr .mch .mac files
 python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/misc-schema.md --ext .cb,.sfc,.pss,.ctr,.mch,.mac,.sca,.mas --title "..."
 ```
+
+Shader program evidence (docs/re/shaders.md):
+
+```
+python -X utf8 tools/re/shader_verify.py "C:\path\to\Serious Sam 2"    # GPU-Programs.asm: programs, families, version tags, fragments (prints numbers only)
+```
