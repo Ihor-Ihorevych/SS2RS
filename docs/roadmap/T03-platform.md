@@ -18,7 +18,7 @@ handle suspend/surface-loss in the lifecycle contract; no mouse-only assumptions
 - [ ] **T03-016** · Crash/panic handler: minidump-like report, last log tail, "copy to clipboard" · `S` · `P2` · 🟢
 - [ ] **T03-017** · Display modes: windowed/borderless/exclusive, resolution list, HiDPI scale, vsync, monitor selection · `M` · `P1`
 - [ ] **T03-018** · Job system/thread policy (rayon or custom): worker count, big.LITTLE affinity hints, named threads, tracing spans · `M` · `P1`
-- [ ] **T03-019** · Logging backends: stdout/file rotate/`logcat`/Oslog · `S` · `P0` · 🟢
+- [~] **T03-019** [INPRG @Ihor-Ihorevych/agent · branch `T03-019-logging-backends` · 2026-11-22] · Logging backends: stdout/file rotate/`logcat`/Oslog · `S` · `P0` · 🟢
 - [ ] **T03-020** · CLI & modes: `ss2-app [--connect host] [--listen] [--level X] [--data DIR]`, `ss2-server` headless (no window/GPU/audio) · `M` · `P1`
 
 ## Other PC platforms (after Windows works; before M8)
