@@ -69,7 +69,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
 - [x] **T01-046** · SPEC destruction system (`EditKit_Destruction` hint): breakable objects, debris · `M` · `P2`
 - [x] **T01-047** · SPEC vehicles/turrets/special mechanics if present · `M` · `P2`
-- [ ] **T01-048** · SPEC boss fights (per boss) · `L` each · `P2`
+- [~] **T01-048** [INPRG @Ihor-Ihorevych/agent · branch `re-boss` · 2026-11-22] · SPEC boss fights (per boss) · `L` each · `P2`
 - [ ] **T01-049** · Review & QA of specs: independent re-read, cross-check test vectors against `meta-dump` output · rolling · `P0`
 - [ ] **T01-050** · SPEC CTSEMETA object data: layout of `OBJS`, the `DCON`/`STAR`/`SSAR`/`BOOL`/`UUUU` markers, how each member type selects its value encoding (primitives, containers, references to `IDNT`/`RFIL`/objects), with test vectors; start with the small `.ep` and `.rsc` files · `XL` — **umbrella, split into T01-050a…d below; do not claim this line** · `P0` · Deps: T01-005 · **this unblocks every loader**
 - [x] **T01-050a** · SPEC CTSEMETA object data, part 1 — `OBJS` framing and the object header table; value encoding of primitives (integers, floats, bools, strings, `INDEX`) and of plain class instances (member order, inheritance), validated on the small `.ep`/`.rsc`/`.ctl` files · `L` · `P0` · Deps: T01-005
