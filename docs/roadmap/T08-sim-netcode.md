@@ -47,4 +47,4 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-026** · Prediction error test across x86_64/aarch64 clients vs server (T07-026) · `M` · `P1`
 - [x] **T08-030** · Protocol versioning & compatibility policy, schema hash, changelog for wire format: `ss2_net::protocol` and `docs/PROTOCOL.md` (there is no wire format yet, so the changelog starts empty) · `S` · `P1` · 🟢
 - [ ] **T08-031** · Mobile networking: Wi-Fi↔cellular handoff, background/suspend reconnect, battery-aware tick/snapshot rate for clients · `M` · `PHASE 2`
-- [ ] **T08-032** · Documentation: netcode architecture guide (for gameplay devs: what to mark replicated, how to write predicted code) · `M` · `P1`
+- [~] **T08-032** [INPRG @Ihor-Ihorevych/agent · branch `T08-032-netcode-guide` · 2026-11-22] · Documentation: netcode architecture guide (for gameplay devs: what to mark replicated, how to write predicted code) · `M` · `P1`
