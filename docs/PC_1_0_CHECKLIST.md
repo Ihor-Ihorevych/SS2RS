@@ -89,7 +89,7 @@ test runs. The owner of an in-engine detector is for maintainers to decide.
 
 ## 6. Packaging and install
 
-Source of the process: [RELEASING.md](RELEASING.md).
+Source of the process: [RELEASING.md](RELEASING.md). Per-platform formats and the packaging plan: [PACKAGING.md](PACKAGING.md).
 
 - [ ] Release files are named and built as RELEASING section 4 says, for each PC platform in scope.
 - [ ] Each archive contains exactly the files listed in RELEASING section 4 (`ss2-app`, `ss2-server`,
