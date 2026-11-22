@@ -223,3 +223,9 @@ Environment evidence (docs/re/environment.md, environment-levels.md, environment
 python -I tools/re/wld_env_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/environment-levels.md] [LIMIT]    # sky, haze, bloom, fluids per level and record/renderable copies (about 15 minutes)
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/environment-schema.md --match "Haze|Bloom|CubeRenderable|CubeBackground|SimpleBackground|FluidEntity|FluidHull|ShakerEffect|ShakerRenderable|EnvironmentDamager|ForceField|CShakingParams" --title "..."    # the class reference
 ```
+
+Destruction evidence (docs/re/destruction.md, destruction-models.md):
+
+```
+python -I tools/re/destruction_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/destruction-models.md] [LIMIT]    # holders, configurations, effects, substitute chains in all models; use in worlds (about 12 minutes)
+```
