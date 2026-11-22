@@ -17,6 +17,7 @@
 - [Developer tools](DEV_TOOLS.md)
 - [Cheat commands](CHEATS.md)
 - [Fuzzing and Miri](FUZZING.md)
+- [Time synchronization](TIMESYNC.md)
 - [Testing strategy](TESTING.md)
 - [Data-gated CI design](DATA_GATED_CI.md)
 - [Parity with the original game](PARITY.md)

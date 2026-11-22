@@ -28,7 +28,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-010** · Server-side lag compensation for hitscan/melee (history of hitboxes, max rewind window, fairness limits) · `L` · `P1`
 - [ ] **T08-012** · Reliable events/RPC: explosions, pickups, chat, audio events, with dedupe across redundant snapshots, late-join suppression · `L` · `P0`
 - [ ] **T08-015** · Authority for physics objects/projectiles/AI: server simulates, clients interpolate; client-side effect prediction for local weapon fire (muzzle flash, tracer) · `L` · `P1`
-- [~] **T08-016** [INPRG @Ihor-Ihorevych/agent · branch `T08-016-time-sync` · 2026-11-22] · Time sync: clock offset/RTT estimation, tick alignment, jitter buffer · `M` · `P0`
+- [x] **T08-016** · Time sync: clock offset/RTT estimation, tick alignment, jitter buffer delay: `ss2_net::timesync` (`docs/TIMESYNC.md`); the transport and the snapshot buffer that use it are T08-005 and T08-008 · `M` · `P0`
 - [ ] **T08-013** · Join-in-progress: full-state snapshot streaming, level-load sync, spawn rules, late-joiner event suppression · `L` · `P0`
 - [ ] **T08-014** · Reconnect & drop-in/out handling; (optional later) host migration · `L` · `P2`
 
