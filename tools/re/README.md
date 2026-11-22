@@ -109,3 +109,9 @@ Particle effect evidence (docs/re/pfx.md, docs/re/pfx-schema.md):
 python -I tools/re/pfx_verify.py "C:\path\to\Serious Sam 2"    # structure, emitter shapes, graph holders, enumerations
 python -I tools/re/ep_schema.py "C:\path\to\Serious Sam 2" --check --ext .pfx    # roots and references
 ```
+
+Flare, text-effect and vibration-effect evidence (docs/re/fx.md):
+
+```
+python -I tools/re/fx_verify.py "C:\path\to\Serious Sam 2" [--refs]    # .lfx / .tfx / .vfx classes, ranges, graph patterns (seconds; --refs adds a few minutes)
+```

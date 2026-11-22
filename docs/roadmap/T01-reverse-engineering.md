@@ -36,7 +36,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-014** · SPEC `.ep` entity params: schema per entity class, inheritance/overrides, how classes are named · `L` · `P0`
 - [x] **T01-015** · SPEC `.rsc` resource databases (e.g. `HudParams.rsc`) and `.ctl` control/tool definitions · `M` · `P1`
 - [x] **T01-016** · SPEC `.pfx` particle effects: emitters, curves, forces, rendering modes, LOD/budget · `L` · `P1`
-- [~] **T01-017** [INPRG @lxstyo · branch `T01-017-lfx-tfx-vfx` · 2026-11-22] · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
+- [x] **T01-017** · SPEC `.lfx` light effects, `.tfx` text effects, `.vfx` (video/visual fx?) · `M` · `P2`
 - [x] **T01-018** · SPEC `.fnt` fonts (+ `Content/Fonts`): glyph metrics, atlases, encodings/languages · `M` · `P1`
 - [ ] **T01-019** · Identify unknown types: `.cb .srt .sfc .crt .mac .mch .scp .pss .sca .mas .ctr .preload .bin .dsc .nfo` → one-page spec each as discovered (`.dsc`/`.nfo` look like plain text). **Identified so far** (`mat.md`, `ep.md`): `.scp` = particle scheme (`CParticleScheme`), `.sca` = animation scheme (`CAnimationScheme`), `.mas` = moving animation scheme (`CMovingAnimationScheme`), `.pss` = puppet spine data (referenced by `SLeggedPuppetBodyParams.lpbp_psdPuppetSpineData`); their internal layouts are still to be specified · `L` · `P1`
 - [ ] **T01-020** · SPEC Shader system: `Bin/Shaders.module`, `GPU-Programs.asm`, `Sources/Shaders`; how materials pick programs, permutations, constants, vertex formats · `L` · `P0`
