@@ -34,7 +34,7 @@ Tooling is not invented here: every command below exists in the repo or is a sta
 | Sim scenario | planned, T08-017 | none yet | no | n/a | n/a |
 | Netsim | planned, T08-017 | none yet | no | n/a | n/a |
 | Soak | planned, T12-016 | none yet | yes (its own server) | n/a | n/a |
-| Fuzz | planned, T02-030 and T12-007 | none yet | no | n/a | n/a |
+| Fuzz | T12-007 (targets), T02-030 (format readers) | `fuzz/`, `cargo +nightly fuzz run <target>` | no | n/a | nightly (not yet run in CI) |
 
 Scheduled workflows are listed in section 5. None of them runs the test suite. There is no nightly
 test workflow yet.
@@ -174,15 +174,19 @@ test workflow yet.
   a machine that has the data (see T12-002).
 - **When:** planned nightly. Not on pull requests.
 
-### 3.9 Fuzz tests (planned, T02-030 and T12-007)
+### 3.9 Fuzz tests (T12-007; the game-format targets are T02-030)
 
-- **What (planned):** `cargo-fuzz` targets for every parser, seeded from the synthetic fixtures, run
-  nightly. T12-007 adds sanitizer jobs (ASan/UBSan for any `unsafe`, Miri on selected crates).
-- **Where:** none yet. There is no `fuzz/` directory in the repository. The harness skeleton is
-  in T02-030 (wave 0).
-- **Tooling:** `cargo-fuzz` needs nightly Rust, so use Linux or WSL locally, or let CI run it
-  (`docs/DEV_TOOLS.md`). Miri is optional for contributors.
-- **Game data:** no; synthetic inputs by design. **When:** planned nightly, not on pull requests.
+- **What:** `cargo-fuzz` targets for the parsers and loaders that exist today (console lines, launch options, settings and
+  key bindings files, virtual paths, `.gro` archives, the install checker, archive names), listed in `docs/FUZZING.md`.
+  A nightly workflow also runs Miri on three pure crates. The readers of the game formats (T02) get their targets with
+  T02-030.
+- **Where:** `fuzz/` (a separate `cargo-fuzz` project, `fuzz/fuzz_targets/*.rs`) and `.github/workflows/nightly.yml`.
+  `cargo test -p xtask` fails when the target lists of the folder, the manifest, the workflow and the doc differ.
+- **Tooling:** `cargo-fuzz` and nightly Rust; it works on Windows (MSVC) when the AddressSanitizer runtime is on the `PATH`,
+  see `docs/FUZZING.md`. Miri is optional for contributors.
+- **Game data:** no; synthetic inputs by design (never a real game file in the corpus). **When:** nightly in CI, not on
+  pull requests. **Status:** the targets build and were run locally for 30 to 60 seconds each without a finding in the
+  code; the nightly workflow has **not run in CI yet** (the Actions billing block).
 
 ## 4. Other checks that run on every pull request
 
@@ -210,9 +214,10 @@ Benchmarks are compiled by `clippy --all-targets` but not timed in CI. Timing ru
 | `portability.yml` | daily 03:00 | `cargo check --target aarch64-linux-android` for portable crates | no (`continue-on-error`) |
 | `claims.yml` | Mondays 06:00 | `cargo xtask check-claims`; stale-claim report | no |
 
-There is **no nightly test run** yet. The nightly layers (fuzz, soak, and the planned sanitizer and
-Miri jobs) are planned under T12-007, T12-016 and T02-030. Until those land, nightly coverage means
-the weekly advisory check only.
+| `nightly.yml` | daily 03:17 | `fuzz` (8 targets, 5 minutes each) and `miri` (three pure crates); see `docs/FUZZING.md` | no |
+
+The nightly fuzz and Miri jobs exist (T12-007) but have **not run in CI yet** (the Actions billing block); the soak layer is
+planned under T12-016 and the format-reader fuzz targets under T02-030.
 
 ## 6. Adding a test
 

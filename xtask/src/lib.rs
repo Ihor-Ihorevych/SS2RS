@@ -3,6 +3,7 @@
 pub mod claim;
 pub mod claim_check;
 pub mod doctor;
+pub mod fuzz_sync;
 pub mod golden;
 pub mod guard;
 pub mod roadmap;

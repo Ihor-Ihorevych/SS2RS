@@ -1,0 +1,77 @@
+[package]
+name = "ss2-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "cargo-fuzz targets for the parsers and loaders of SS2RS (T12-007; see docs/FUZZING.md)"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ss2-core = { path = "../crates/ss2-core" }
+ss2-vfs = { path = "../crates/ss2-vfs" }
+ss2-game = { path = "../crates/ss2-game" }
+ss2-platform-api = { path = "../crates/ss2-platform-api" }
+
+# Not part of the main workspace: it needs nightly Rust and libFuzzer, and must not slow down
+# or break `cargo build --workspace` on stable.
+[workspace]
+
+[[bin]]
+name = "console_line"
+path = "fuzz_targets/console_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "launch_options"
+path = "fuzz_targets/launch_options.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "settings_file"
+path = "fuzz_targets/settings_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bindings_toml"
+path = "fuzz_targets/bindings_toml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vfs_path"
+path = "fuzz_targets/vfs_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gro_archive"
+path = "fuzz_targets/gro_archive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "install_check"
+path = "fuzz_targets/install_check.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_names"
+path = "fuzz_targets/archive_names.rs"
+test = false
+doc = false
+bench = false

@@ -36,3 +36,9 @@ Cargo.lock.bak
 # Python bytecode from the tools/re scripts
 __pycache__/
 *.pyc
+
+# cargo-fuzz (docs/FUZZING.md): build output, corpora and crash inputs are never committed
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
