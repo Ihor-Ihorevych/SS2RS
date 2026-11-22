@@ -63,7 +63,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [ ] **T01-039** · Instrumentation harness for the original game (debugger/Frida-style scripts reading positions, velocities, health, tick) → CSV oracle data · `L` · `P0` · Deps: T11-008
 - [x] **T01-040** · SPEC mod interface: how `.mod`/`.nfo`, game DLL replacement, content overlays work; what `Sam2Renovation` and `InSamnity2` change · `M` · `P2`
 - [x] **T01-041** · SPEC localization: languages shipped, string tables, subtitle sync · `M` · `P2`
-- [ ] **T01-042** · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
+- [~] **T01-042** [INPRG @Ihor-Ihorevych/agent · branch `re-cam` · 2026-11-22] · SPEC camera & FOV rules, weapon view models, head bob/sway constants · `M` · `P1`
 - [ ] **T01-043** · SPEC decals, gibs, blood, hit effects pipeline (what spawns when) · `M` · `P2`
 - [x] **T01-044** · SPEC water, fog, sky, post effects usage per level (feeds T04-012/015) · `M` · `P1`
 - [ ] **T01-045** · SPEC lighting: baked vs dynamic, light types, shadow rules, ambient · `L` · `P0` · Deps: T01-012b
