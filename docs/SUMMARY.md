@@ -13,6 +13,7 @@
 - [Parity with the original game](PARITY.md)
 - [Performance budgets and benchmarks](PERF_BUDGETS.md)
 - [Releasing](RELEASING.md)
+- [Publishing crates](PUBLISHING.md)
 - [PC 1.0 release checklist](PC_1_0_CHECKLIST.md)
 - [Bug triage](TRIAGE.md)
 - [Modding policy](MODDING_POLICY.md)
