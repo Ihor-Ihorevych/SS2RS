@@ -103,9 +103,10 @@ requires the task, an **Author / reviewer** line and a confidence word in each s
 [conventions.md](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/conventions.md) requires the Evidence
 section to name the `tools/re/` script behind each count, and the reviewer to record name and date.
 
-**Current state (2026-11-22).** `docs/re/` has 60 files. 17 have no Author line, 10 of them generated
-`*-schema.md` files. Every Reviewer line that exists reads "none yet". **No independent review is recorded for
-any spec.** No implementation is mapped to a spec anywhere.
+**Current state (2026-11-22, after merging origin/main at 1089fb2).** `docs/re/` has 62 files, including the
+README and conventions. 18 have no Author line, 10 of them generated `*-schema.md` files. Every Reviewer line
+that names a spec reads "none yet". **No independent review is recorded for any spec.** No implementation is
+mapped to a spec anywhere.
 
 **Per spec:** file, author and reviewer (handle and date, or "none yet"), and the source data by **file type and
 tool only** (for example "binary, Ghidra; counts from `tools/re/<script>`"). Never an install file name, a quote,
