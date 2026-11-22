@@ -5,6 +5,12 @@
 - [Architecture overview](architecture.md)
 - [Design](superpowers/specs/2026-11-21-ss2rs-design.md)
 
+# User guide
+
+- [Install and point SS2RS at your game data](user/install.md)
+- [FAQ](user/faq.md)
+- [Troubleshooting](user/troubleshooting.md)
+
 # Contributing
 
 - [Coding standards](CODING_STANDARDS.md)
