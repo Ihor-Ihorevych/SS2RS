@@ -705,7 +705,7 @@ impl Obb {
         }
     }
 
-    fn to_local(&self, p: Vec3) -> Vec3 {
+    fn local_point(&self, p: Vec3) -> Vec3 {
         self.rotation.inverse() * (p - self.center)
     }
 
@@ -715,17 +715,17 @@ impl Obb {
 
     /// The distance from `p` to the surface: negative inside.
     pub fn signed_distance(&self, p: Vec3) -> f32 {
-        self.local_box().signed_distance(self.to_local(p))
+        self.local_box().signed_distance(self.local_point(p))
     }
 
     /// Whether `p` is inside or on the surface.
     pub fn contains_point(&self, p: Vec3) -> bool {
-        self.local_box().contains_point(self.to_local(p))
+        self.local_box().contains_point(self.local_point(p))
     }
 
     /// The point of the box nearest to `p`.
     pub fn closest_point(&self, p: Vec3) -> Vec3 {
-        self.center + self.rotation * self.local_box().closest_point(self.to_local(p))
+        self.center + self.rotation * self.local_box().closest_point(self.local_point(p))
     }
 
     /// The smallest axis-aligned box that contains this one.
@@ -772,14 +772,6 @@ mod tests {
                 self.range(-extent, extent),
                 self.range(-extent, extent),
             )
-        }
-        fn unit(&mut self) -> Vec3 {
-            loop {
-                let v = self.vec(1.0);
-                if v.length_squared() > 0.01 && v.length_squared() <= 1.0 {
-                    return v.normalize();
-                }
-            }
         }
     }
 
