@@ -4,3 +4,4 @@ pub mod geometry;
 pub mod lagcomp;
 pub mod query;
 pub mod spatial;
+pub mod visibility;
