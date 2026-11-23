@@ -18,7 +18,10 @@ use std::sync::{Mutex, MutexGuard};
 use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_render::golden::{self, Mode, Tolerance};
-use ss2_render::{ImageRgba8, RenderError, Renderer};
+use ss2_render::{
+    Fill, Filter, ImageHandle, ImageRgba8, Insets, NineSliceDraw, RenderError, Renderer, UiCommand,
+    UiFrame, UvRect,
+};
 use ss2_ui::coop_overlays::{
     ChatBox, ChatConfig, ChatKey, ChatKind, CoopOverlays, Nameplate, PingKind, PingProjection,
     Projected, ScoreEntry, VoiceSample,
@@ -26,7 +29,7 @@ use ss2_ui::coop_overlays::{
 use ss2_ui::data_wizard::{DataWizard, WizardCandidate, WizardCommand, WizardInput, WizardReport};
 use ss2_ui::devconsole::{ConsoleView, Corner, FrameStats, LineKind, draw_overlay, stats_lines};
 use ss2_ui::session_screens::{DeathMode, DeathScreen, LevelStats, SummaryScreen};
-use ss2_ui::{Canvas, Color, DrawList, Menu, ScreenId, UiInput, Vec2, theme};
+use ss2_ui::{Canvas, Color, DrawList, Menu, Rect, ScreenId, TextAlign, UiInput, Vec2, theme};
 
 /// (width, height): three resolutions at 16:9, then 21:9, then 4:3.
 const SIZES: [(u32, u32); 5] = [
@@ -846,6 +849,524 @@ fn a_different_screen_fails_against_the_golden_at_every_size() {
         assert!(matches!(err, golden::GoldenError::Differs { .. }), "{err}");
         let _ = std::fs::remove_dir_all(&failures);
     }
+}
+
+// ---- the 2D renderer screens (T04-017): 9-slice panels, a clipped list, render-to-texture -------------------
+//
+// These do not come from `ss2-ui` (it does not produce the new commands yet, T04-017b): each is a `UiFrame` built
+// here, from images made in code, drawn by the real `Renderer` at the same five sizes as the screens above.
+
+/// One picture of the 2D renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Shot2d {
+    Panels,
+    List,
+    Target,
+}
+
+const SHOTS_2D: [Shot2d; 3] = [Shot2d::Panels, Shot2d::List, Shot2d::Target];
+
+fn word_2d(shot: Shot2d) -> &'static str {
+    match shot {
+        Shot2d::Panels => "panels",
+        Shot2d::List => "list",
+        Shot2d::Target => "target",
+    }
+}
+
+fn name_2d(shot: Shot2d, (w, h): (u32, u32)) -> String {
+    format!("ui2d_{}_{w}x{h}.png", word_2d(shot))
+}
+
+fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
+    Rect { x, y, w, h }
+}
+
+fn image_from(w: u32, h: u32, f: impl Fn(u32, u32) -> [u8; 4]) -> ImageRgba8 {
+    let mut pixels = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            pixels.extend(f(x, y));
+        }
+    }
+    ImageRgba8 {
+        width: w,
+        height: h,
+        pixels,
+    }
+}
+
+/// A 48x48 panel with a 12-texel border: dark outline, gold bevel, steel frame with a rivet in each corner,
+/// and a translucent blue centre with a faint vertical gradient.
+fn panel_image() -> ImageRgba8 {
+    image_from(48, 48, |x, y| {
+        let d = x.min(y).min(47 - x).min(47 - y);
+        let (cx, cy) = (x.min(47 - x) as f32, y.min(47 - y) as f32);
+        let rivet = ((cx - 6.0).powi(2) + (cy - 6.0).powi(2)).sqrt();
+        if d < 2 {
+            [16, 20, 28, 255]
+        } else if d < 5 {
+            let t = (d - 2) as f32 / 3.0;
+            [(210.0 - 60.0 * t) as u8, (170.0 - 50.0 * t) as u8, 70, 255]
+        } else if d < 12 {
+            if x.min(47 - x) < 12 && y.min(47 - y) < 12 && rivet < 2.6 {
+                [235, 235, 245, 255]
+            } else {
+                [58, 68, 92, 255]
+            }
+        } else {
+            [24, 34 + (y / 3) as u8, 62 + (y / 2) as u8, 225]
+        }
+    })
+}
+
+/// A 24x24 tile image: 4-texel border, and a 16x16 centre that is a checker of 8-texel squares.
+fn tile_image() -> ImageRgba8 {
+    image_from(24, 24, |x, y| {
+        if x.min(y).min(23 - x).min(23 - y) < 4 {
+            [120, 90, 50, 255]
+        } else if ((x - 4) / 8 + (y - 4) / 8) % 2 == 0 {
+            [200, 70, 60, 255]
+        } else {
+            [230, 200, 120, 255]
+        }
+    })
+}
+
+/// A 32x32 round badge with a radial gradient in `rgb`.
+fn badge_image(rgb: [u8; 3]) -> ImageRgba8 {
+    image_from(32, 32, |x, y| {
+        let r = ((x as f32 - 15.5).powi(2) + (y as f32 - 15.5).powi(2)).sqrt();
+        if r > 15.0 {
+            [0, 0, 0, 0]
+        } else {
+            let k = 1.0 - r / 22.0;
+            [
+                (f32::from(rgb[0]) * k) as u8,
+                (f32::from(rgb[1]) * k) as u8,
+                (f32::from(rgb[2]) * k) as u8,
+                255,
+            ]
+        }
+    })
+}
+
+fn label(f: &mut UiFrame, x: f32, y: f32, size: f32, text: &'static str) {
+    f.text(
+        Vec2 { x, y },
+        text,
+        size,
+        Color([0.92, 0.92, 0.95, 1.0]),
+        TextAlign::Left,
+    );
+}
+
+fn panel_nine(image: ImageHandle, dest: Rect, inset: f32, scale: f32, fill: Fill) -> UiCommand {
+    UiCommand::NineSlice(NineSliceDraw {
+        image,
+        rect: dest,
+        insets: Insets::uniform(inset),
+        scale,
+        fill,
+        tint: Color([1.0; 4]),
+        filter: Filter::Linear,
+    })
+}
+
+/// A "card" scene in the pixels of whatever it is drawn into, at `(ox, oy)`, 200x120.
+fn card(f: &mut UiFrame, panel: ImageHandle, badge: ImageHandle, (ox, oy): (f32, f32)) {
+    f.quad(rect(ox, oy, 200.0, 120.0), Color([0.12, 0.14, 0.2, 1.0]));
+    f.push(panel_nine(
+        panel,
+        rect(ox + 6.0, oy + 6.0, 188.0, 108.0),
+        12.0,
+        1.0,
+        Fill::Stretch,
+    ));
+    f.image(badge, rect(ox + 18.0, oy + 18.0, 32.0, 32.0));
+    label(f, ox + 60.0, oy + 18.0, 28.0, "Card");
+    f.push_clip(rect(ox + 18.0, oy + 62.0, 110.0, 34.0));
+    label(f, ox + 18.0, oy + 62.0, 26.0, "Clipped text here");
+    f.pop_clip();
+}
+
+/// What a shot draws (canvas units), with the images and render targets it needs made on `r`.
+fn frame_2d(shot: Shot2d, r: &mut Renderer) -> UiFrame {
+    let panel = r.create_image(&panel_image()).unwrap();
+    let mut f = UiFrame::new();
+    match shot {
+        Shot2d::Panels => {
+            let tile = r.create_image(&tile_image()).unwrap();
+            label(&mut f, 80.0, 40.0, 44.0, "9-slice panels");
+            // (x, y, w, h, scale, caption): the same 48x48 image at six sizes; the last is smaller than its borders.
+            let panels: [(f32, f32, f32, f32, f32, &'static str); 5] = [
+                (80.0, 140.0, 96.0, 64.0, 1.0, "96x64"),
+                (220.0, 140.0, 220.0, 110.0, 1.0, "220x110"),
+                (480.0, 140.0, 360.0, 170.0, 1.0, "360x170"),
+                (880.0, 140.0, 300.0, 300.0, 1.0, "300x300"),
+                (80.0, 520.0, 700.0, 120.0, 1.0, "700x120"),
+            ];
+            for (x, y, w, h, scale, caption) in panels {
+                f.push(panel_nine(
+                    panel,
+                    rect(x, y, w, h),
+                    12.0,
+                    scale,
+                    Fill::Stretch,
+                ));
+                label(&mut f, x, y + h + 10.0, 26.0, caption);
+            }
+            // Smaller than the borders: they shrink, no centre.
+            f.push(panel_nine(
+                panel,
+                rect(1220.0, 140.0, 20.0, 20.0),
+                12.0,
+                1.0,
+                Fill::Stretch,
+            ));
+            label(&mut f, 1220.0, 170.0, 26.0, "20x20");
+            // The same image with its border drawn at 3x: texels are not squeezed, they are enlarged.
+            f.push(UiCommand::NineSlice(NineSliceDraw {
+                image: panel,
+                rect: rect(1340.0, 140.0, 300.0, 200.0),
+                insets: Insets::uniform(12.0),
+                scale: 2.0,
+                fill: Fill::Stretch,
+                tint: Color([1.0, 0.8, 0.8, 1.0]),
+                filter: Filter::Nearest,
+            }));
+            label(&mut f, 1340.0, 350.0, 26.0, "border x2, tinted, nearest");
+            // Tiling.
+            f.push(panel_nine(
+                tile,
+                rect(880.0, 520.0, 400.0, 200.0),
+                4.0,
+                1.0,
+                Fill::Tile,
+            ));
+            f.push(panel_nine(
+                tile,
+                rect(1320.0, 520.0, 400.0, 200.0),
+                4.0,
+                2.0,
+                Fill::Tile,
+            ));
+            label(&mut f, 880.0, 730.0, 26.0, "tiled, 1x and 2x");
+        }
+        Shot2d::List => {
+            let badges = [
+                r.create_image(&badge_image([240, 120, 40])).unwrap(),
+                r.create_image(&badge_image([60, 200, 120])).unwrap(),
+                r.create_image(&badge_image([90, 140, 250])).unwrap(),
+            ];
+            f.push(panel_nine(
+                panel,
+                rect(60.0, 40.0, 700.0, 1000.0),
+                12.0,
+                1.0,
+                Fill::Stretch,
+            ));
+            label(&mut f, 100.0, 62.0, 40.0, "Clipped list");
+            let (top, height) = (140.0, 780.0);
+            f.push_clip(rect(100.0, top, 620.0, height));
+            let names = [
+                "Rusty Gate",
+                "Sewer Run",
+                "Courtyard",
+                "The Long Bridge",
+                "Cliffside",
+                "Boiler Room",
+                "Temple Steps",
+                "Market Square",
+                "Dry Dock",
+                "Signal Tower",
+            ];
+            for (i, name) in names.iter().enumerate() {
+                // Scrolled by 47 units: the first row is cut at the top, the last at the bottom.
+                let y = top - 47.0 + i as f32 * 90.0;
+                let color = if i % 2 == 0 { ROW_A } else { ROW_B };
+                f.quad(rect(100.0, y, 620.0, 84.0), color);
+                f.image(badges[i % 3], rect(112.0, y + 10.0, 64.0, 64.0));
+                f.push_clip(rect(196.0, y, 420.0, 84.0));
+                f.text(
+                    Vec2 {
+                        x: 196.0,
+                        y: y + 18.0,
+                    },
+                    format!("{name}: a label that does not fit its cell"),
+                    34.0,
+                    Color([1.0; 4]),
+                    TextAlign::Left,
+                );
+                f.pop_clip();
+                f.quad(
+                    rect(628.0, y + 28.0, 80.0, 28.0),
+                    Color([0.0, 0.0, 0.0, 0.35]),
+                );
+            }
+            f.pop_clip();
+            // Scrollbar.
+            f.quad(rect(724.0, top, 8.0, height), Color([0.0, 0.0, 0.0, 0.4]));
+            f.quad(
+                rect(724.0, top + 60.0, 8.0, 240.0),
+                Color([0.9, 0.7, 0.3, 1.0]),
+            );
+
+            // A second clip: big text in a small window, then the window's frame.
+            f.push_clip(rect(820.0, 140.0, 400.0, 110.0));
+            f.quad(
+                rect(820.0, 140.0, 400.0, 110.0),
+                Color([0.1, 0.1, 0.15, 1.0]),
+            );
+            f.text(
+                Vec2 { x: 790.0, y: 150.0 },
+                "WIDE LARGE TEXT CUT BY ITS WINDOW",
+                72.0,
+                Color([1.0, 0.8, 0.3, 1.0]),
+                TextAlign::Left,
+            );
+            f.pop_clip();
+            // An image and a 9-slice cut by a window with fractional edges.
+            f.push_clip(rect(820.5, 300.4, 200.3, 120.6));
+            f.image_ex(
+                badges[0],
+                rect(800.0, 280.0, 256.0, 256.0),
+                UvRect::FULL,
+                Color([1.0; 4]),
+                Filter::Linear,
+            );
+            f.pop_clip();
+            f.push_clip(rect(1230.5, 270.4, 200.3, 140.6));
+            f.push(panel_nine(
+                panel,
+                rect(1260.0, 300.0, 400.0, 300.0),
+                12.0,
+                1.0,
+                Fill::Stretch,
+            ));
+            f.pop_clip();
+        }
+        Shot2d::Target => {
+            let badge = r.create_image(&badge_image([240, 120, 40])).unwrap();
+            let a = r.create_render_target(200, 120).unwrap();
+            let mut card_a = UiFrame::new();
+            card(&mut card_a, panel, badge, (0.0, 0.0));
+            r.render_to_target(a, &card_a, Color([0.0; 4])).unwrap();
+
+            // A second target drawn from the first, twice (the second time faded), over a translucent plate.
+            let b = r.create_render_target(440, 150).unwrap();
+            let mut nested = UiFrame::new();
+            nested.quad(rect(0.0, 0.0, 440.0, 150.0), Color([0.0, 0.0, 0.0, 0.45]));
+            nested.image(a, rect(10.0, 15.0, 200.0, 120.0));
+            nested.image_ex(
+                a,
+                rect(230.0, 15.0, 200.0, 120.0),
+                UvRect::FULL,
+                Color([1.0, 1.0, 1.0, 0.5]),
+                Filter::Nearest,
+            );
+            r.render_to_target(b, &nested, Color([0.0; 4])).unwrap();
+
+            label(&mut f, 80.0, 40.0, 44.0, "Render to texture");
+            f.quad(
+                rect(60.0, 120.0, 1800.0, 900.0),
+                Color([0.18, 0.3, 0.22, 1.0]),
+            );
+            // 1:1, nearest.
+            f.image(a, rect(80.0, 140.0, 200.0, 120.0));
+            label(&mut f, 80.0, 268.0, 26.0, "1:1");
+            // 2x, linear.
+            f.image_ex(
+                a,
+                rect(340.0, 140.0, 400.0, 240.0),
+                UvRect::FULL,
+                Color([1.0; 4]),
+                Filter::Linear,
+            );
+            label(&mut f, 340.0, 388.0, 26.0, "2x linear");
+            // Half strength over a pattern.
+            f.quad(
+                rect(800.0, 140.0, 100.0, 240.0),
+                Color([0.9, 0.2, 0.2, 1.0]),
+            );
+            f.quad(
+                rect(900.0, 140.0, 100.0, 240.0),
+                Color([0.2, 0.2, 0.9, 1.0]),
+            );
+            f.image_ex(
+                a,
+                rect(800.0, 200.0, 200.0, 120.0),
+                UvRect::FULL,
+                Color([1.0, 1.0, 1.0, 0.6]),
+                Filter::Nearest,
+            );
+            label(&mut f, 800.0, 388.0, 26.0, "60% over a pattern");
+            // Nested.
+            f.image(b, rect(80.0, 520.0, 440.0, 150.0));
+            label(&mut f, 80.0, 680.0, 26.0, "a target drawn from a target");
+            f.image_ex(
+                b,
+                rect(600.0, 520.0, 660.0, 225.0),
+                UvRect::FULL,
+                Color([1.0; 4]),
+                Filter::Linear,
+            );
+            // A part of a target (its right half).
+            f.image_ex(
+                a,
+                rect(1340.0, 520.0, 300.0, 180.0),
+                UvRect {
+                    u0: 0.5,
+                    v0: 0.0,
+                    u1: 1.0,
+                    v1: 1.0,
+                },
+                Color([1.0; 4]),
+                Filter::Linear,
+            );
+            label(&mut f, 1340.0, 710.0, 26.0, "right half");
+        }
+    }
+    f
+}
+
+const ROW_A: Color = Color([0.24, 0.46, 0.30, 1.0]);
+const ROW_B: Color = Color([0.20, 0.34, 0.58, 1.0]);
+
+fn one_shot_2d(shot: Shot2d) {
+    let Some((_gpu, mut r)) = renderer() else {
+        return;
+    };
+    let frame = frame_2d(shot, &mut r);
+    for size in SIZES {
+        r.resize(size.0, size.1);
+        let img = r.render_frame_to_image(&frame, theme::BACKGROUND).unwrap();
+        check_2d(shot, size, &img);
+        check_golden(&name_2d(shot, size), &img);
+    }
+}
+
+/// The checks that need no golden.
+fn check_2d(shot: Shot2d, size: (u32, u32), img: &ImageRgba8) {
+    let what = format!("{} at {}x{}", word_2d(shot), size.0, size.1);
+    assert_eq!(
+        (img.width, img.height),
+        size,
+        "{what}: the image has the size asked for"
+    );
+    let canvas = Canvas::fit(size.0, size.1).unwrap();
+    let background = background_bytes();
+    // Nothing is drawn in the bars outside the canvas.
+    let (left, top) = (
+        canvas.offset.x.floor() as i64 - 2,
+        canvas.offset.y.floor() as i64 - 2,
+    );
+    for y in (0..size.1).step_by(5) {
+        for x in 0..size.0 {
+            let in_bar = (left > 0
+                && (i64::from(x) < left || i64::from(x) > i64::from(size.0) - left - 1))
+                || (top > 0 && (i64::from(y) < top || i64::from(y) > i64::from(size.1) - top - 1));
+            if in_bar {
+                assert!(
+                    near(pixel(img, x, y), background, 1),
+                    "{what}: bar at {x},{y}"
+                );
+            }
+        }
+    }
+    let colour_bytes = |c: Color| [0, 1, 2, 3].map(|i| (c.0[i] * 255.0).round() as u8);
+    match shot {
+        Shot2d::List => {
+            // The list rows are clipped to their window: strips just above and just below it hold no row colour.
+            let strips = [
+                (100.0, 140.0 - 28.0, 620.0, 26.0),
+                (100.0, 140.0 + 780.0 + 2.0, 620.0, 26.0),
+            ];
+            for (x, y, w, h) in strips {
+                let a = canvas.to_screen(Vec2 { x, y });
+                let b = canvas.to_screen(Vec2 { x: x + w, y: y + h });
+                for py in a.y.ceil() as u32..b.y.floor() as u32 {
+                    for px in a.x.ceil() as u32..b.x.floor() as u32 {
+                        let p = pixel(img, px, py);
+                        assert!(
+                            !near(p, colour_bytes(ROW_A), 8) && !near(p, colour_bytes(ROW_B), 8),
+                            "{what}: a row colour {p:?} outside the clip at {px},{py}"
+                        );
+                    }
+                }
+            }
+            // And inside the window the rows are there: a pixel of the second row's left margin.
+            let at = canvas.to_screen(Vec2 {
+                x: 104.0,
+                y: 140.0 - 47.0 + 90.0 + 4.0,
+            });
+            assert!(
+                near(pixel(img, at.x as u32, at.y as u32), colour_bytes(ROW_B), 8),
+                "{what}: the second row is where it should be"
+            );
+        }
+        Shot2d::Panels | Shot2d::Target => {}
+    }
+}
+
+#[test]
+fn nine_slice_panels_match_their_goldens_at_every_size() {
+    one_shot_2d(Shot2d::Panels);
+}
+
+#[test]
+fn a_scissored_list_matches_its_goldens_at_every_size() {
+    one_shot_2d(Shot2d::List);
+}
+
+#[test]
+fn render_to_texture_matches_its_goldens_at_every_size() {
+    one_shot_2d(Shot2d::Target);
+}
+
+/// Needs no golden: the card drawn through a render target at 1:1 is the same picture as the card drawn in place.
+#[test]
+fn a_card_through_a_render_target_is_the_card_drawn_in_place() {
+    let Some((_gpu, mut r)) = renderer() else {
+        return;
+    };
+    r.resize(1920, 1080);
+    let panel = r.create_image(&panel_image()).unwrap();
+    let badge = r.create_image(&badge_image([240, 120, 40])).unwrap();
+    let target = r.create_render_target(200, 120).unwrap();
+    let mut inner = UiFrame::new();
+    card(&mut inner, panel, badge, (0.0, 0.0));
+    r.render_to_target(target, &inner, Color([0.0; 4])).unwrap();
+    let mut through = UiFrame::new();
+    through.image(target, rect(300.0, 200.0, 200.0, 120.0));
+    let mut direct = UiFrame::new();
+    card(&mut direct, panel, badge, (300.0, 200.0));
+    let a = r
+        .render_frame_to_image(&through, theme::BACKGROUND)
+        .unwrap();
+    let b = r.render_frame_to_image(&direct, theme::BACKGROUND).unwrap();
+    assert_eq!(a, b);
+}
+
+/// Needs no adapter: a golden missing from the 2D matrix is a failure even where the rendering tests skip.
+#[test]
+fn every_2d_renderer_screen_has_a_golden_at_every_size() {
+    if Mode::from_env(PathBuf::new()).update {
+        return;
+    }
+    let mut missing = Vec::new();
+    for shot in SHOTS_2D {
+        for size in SIZES {
+            if !golden_dir().join(name_2d(shot, size)).is_file() {
+                missing.push(name_2d(shot, size));
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "missing goldens (run with UPDATE_GOLDEN=1): {missing:?}"
+    );
+    assert_eq!(SHOTS_2D.len() * SIZES.len(), 15);
 }
 
 /// Needs no adapter: a golden missing from the matrix is a failure even where the rendering tests skip.

@@ -35,6 +35,7 @@
 - [Developer console and overlays](DEV_CONSOLE_UI.md)
 - [UI scale and resolution policy](UI_SCALING.md)
 - [UI frame budget](UI_BUDGET.md)
+- [The 2D / UI renderer](UI_RENDERER.md)
 - [The mixer core](MIXER.md)
 - [Graphics quality](QUALITY.md)
 - [Level of detail](LOD.md)
