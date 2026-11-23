@@ -12,7 +12,6 @@
 Keep one gameplay viewport and one local player per PC client through M8. Reach the co-op
 milestones with separate clients connected to the same authoritative server. Reassess
 two-player split-screen after PC 1.0 with a prototype and a separate implementation RFC.
-The renderer, input, and network contracts stay as they are for the PC release.
 
 ## Motivation
 
@@ -34,9 +33,8 @@ viewports alone would leave both players sharing input and UI state. [Renderer c
 ### PC release
 
 Measure one viewport per client as part of the normal co-op and rendering acceptance runs.
-Keep headless servers free of renderer dependencies. Validate concurrent clients with independent
-input, cameras, and HUDs at the M4 and M6 milestones. The existing render submission and input
-binding APIs are sufficient for this decision.
+Keep headless servers free of renderer dependencies. Exercise independent input and cameras in
+M4's co-op walk. Validate per-client HUDs in the M6 vertical slice.
 
 ### Scope of a later prototype
 
@@ -52,10 +50,11 @@ for shared actions and route focus changes to the local player who initiated the
 
 Compare CPU and GPU frame time with the one-viewport baseline in the same PC co-op scene. Keep
 player count and movement fixed across runs. Report window size, split orientation, render
-settings, and peak process and GPU memory. Verify
-that resizing, losing focus, disconnecting a controller, and dropping the second player leave
-the first player in control. The renderer and platform owners should bring those measurements
-and a legibility check for the HUD to the implementation RFC. [UI scaling](../UI_SCALING.md) ·
+settings, and peak process and GPU memory. Verify that resizing, disconnecting a controller,
+and dropping the second player preserve the first player's controls. Clear held inputs when the
+window loses focus and verify that focus regain restores the right assignments. The renderer and
+platform owners should bring those measurements and a HUD legibility check to the implementation
+RFC. [UI scaling](../UI_SCALING.md) ·
 [Performance budgets](../PERF_BUDGETS.md)
 
 ## Alternatives considered
@@ -69,11 +68,10 @@ and a legibility check for the HUD to the implementation RFC. [UI scaling](../UI
   passes together.
 - **Open two windows in one process.** Separate surfaces simplify some viewport decisions, but
   the app would need to manage focus, placement, and device routing across windows. Separate
-  PC clients already meet the current milestones.
+  PC clients are sufficient for the current milestones.
 
 ## Compatibility and migration
 
-The PC release retains the v0 render extract, input bindings, session model, and on-disk settings.
 If the prototype moves forward, propose compatible single-view defaults and a migration for
 saved bindings. Prototype local player ownership in the session before exposing per-view
 rendering and HUD state through a public contract.
