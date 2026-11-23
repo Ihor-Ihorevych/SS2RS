@@ -22,6 +22,7 @@ ss2-assets = { path = "../ss2-assets" }
 ss2-render-api = { path = "../ss2-render-api" }
 ss2-platform-api = { path = "../ss2-platform-api" }
 ss2-audio-api = { path = "../ss2-audio-api" }
+ss2-physics = { path = "../ss2-physics" }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -40,4 +41,8 @@ harness = false
 
 [[bench]]
 name = "audio"
+harness = false
+
+[[bench]]
+name = "physics"
 harness = false
