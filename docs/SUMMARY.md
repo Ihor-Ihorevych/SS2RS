@@ -56,6 +56,7 @@
 - [Reconnecting and dropping in and out](RECONNECT.md)
 - [Joining a game in progress](JOIN.md)
 - [AI performance budget](AI_BUDGET.md)
+- [Level progress and the end-of-level summary](LEVEL_PROGRESS.md)
 - [Starting the GPU, and getting it back](GPU_INIT.md)
 - [Sound decoders](AUDIO_DECODERS.md)
 - [Navigation model](NAVIGATION.md)
