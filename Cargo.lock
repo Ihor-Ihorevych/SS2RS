@@ -2717,9 +2717,12 @@ dependencies = [
 name = "ss2-game"
 version = "0.0.0"
 dependencies = [
+ "ss2-audio-api",
  "ss2-core",
  "ss2-physics",
+ "ss2-platform-api",
  "ss2-render-api",
+ "ss2-ui",
 ]
 
 [[package]]

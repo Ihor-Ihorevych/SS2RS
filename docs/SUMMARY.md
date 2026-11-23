@@ -45,6 +45,7 @@
 - [Texture sampling rules](TEXTURE_SAMPLING.md)
 - [Anti-aliasing planning](ANTI_ALIASING.md)
 - [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
+- [The settings screen model](SETTINGS_SCREEN.md)
 - [The loading screen model](LOADING.md)
 - [Subtitle and caption timing](SUBTITLES.md)
 - [Hot reload: change detection and settings text](HOT_RELOAD.md)

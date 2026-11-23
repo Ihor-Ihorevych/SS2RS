@@ -18,6 +18,7 @@ pub mod layout;
 pub mod loading;
 mod pointer;
 pub mod scale;
+pub mod settings_model;
 mod skin;
 pub mod subtitles;
 #[cfg(test)]
