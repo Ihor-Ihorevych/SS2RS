@@ -27,6 +27,7 @@
 - [Simulation tick loop](SIMLOOP.md)
 - [Geometry primitives](GEOMETRY.md)
 - [Free-fly debug camera](FREEFLY.md)
+- [Spatial acceleration (BVH)](SPATIAL.md)
 - [Culling and TAA jitter](CULLING.md)
 - [Debug draw](DEBUG_DRAW.md)
 - [Network threat model](THREAT_MODEL_NET.md)

@@ -8,7 +8,8 @@ the server can reconcile (T08-009).
 - [x] **T07-001** · Math/geometry primitives: AABB/OBB/capsule/sphere/plane/ray/swept shapes on `glam`; consistent coordinate system doc (handedness, up-axis, units); fixed-point-free but platform-stable ops (by construction; not measured across architectures): `ss2_physics::geometry` (`docs/GEOMETRY.md`) · `M` · `P0` · 🟢
 - [ ] **T07-001b** · Geometry follow-ups: oriented-box overlap (separating axis) and capsule / oriented-box sweeps, sphere-vs-box sweeps of a box, triangle primitives; one shared set of `Aabb`/`Sphere`/`Plane` for `ss2-render-api` and `ss2-physics` (cross-crate: needs an RFC) · `M` · `P1` · Deps: T07-001
 - [ ] **T07-006** · **SPIKE**: collision/rigid-body engine — `rapier3d` vs custom for world queries + character; compare features, mobile perf, determinism, ragdolls; RFC · `M` · `P0`
-- [~] **T07-003** [INPRG @Ihor-Ihorevych/agent · branch `T07-003-bvh` · 2026-11-23] · Spatial acceleration: static BVH from world mesh, dynamic broadphase, query API (ray, sweep, overlap) w/ filters/layers · `L` · `P0`
+- [x] **T07-003** · Spatial acceleration: static BVH from world mesh, dynamic broadphase, query API (ray, sweep, overlap) w/ filters/layers: `ss2_physics::spatial` (`docs/SPATIAL.md`): `Bvh`, `Layers`, `Triangle`, `TriMesh`; the sweep is candidate-level (exact sweeps against triangles are T07-003b) · `L` · `P0`
+- [ ] **T07-003b** · Spatial follow-ups: exact sphere/capsule sweeps against triangles (face, edge, vertex), box-triangle overlap, SAH build and incremental refit for large dynamic sets, benchmarks (T07-017) · `M` · `P1` · Deps: T07-003
 - [ ] **T07-004** · Query API frozen as contract: `raycast`, `shapecast`, `overlap`, hit result (point/normal/material/entity) · `M` · `P0`
 - [ ] **T07-002** · Collision geometry extraction from `.wld` (static) and `.mdl` (dynamic/hit volumes) · `L` · `P0` · Deps: T02-020, T02-017
 
