@@ -48,6 +48,7 @@ pub mod quality;
 mod renderer;
 mod resources;
 mod scene;
+pub mod screen_effects;
 pub mod transparency;
 
 pub use camera::{Camera, Projection};
