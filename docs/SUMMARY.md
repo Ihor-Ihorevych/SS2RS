@@ -47,6 +47,7 @@
 - [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
 - [The settings screen model](SETTINGS_SCREEN.md)
 - [The loading screen model](LOADING.md)
+- [Subtitle and caption timing](SUBTITLES.md)
 - [Hot reload: change detection and settings text](HOT_RELOAD.md)
 - [Spectating when dead](SPECTATOR.md)
 - [Roadmap progress report](PROGRESS.md)
