@@ -7,7 +7,8 @@ PC first. Mobile budgets/devices/packaging are Phase 2.
 - [x] **T12-003** · Parity checklist template per level/weapon/enemy; signed off in the PR that completes the task; evidence stored as text/CSV, not game assets · `S` · `P1` · 🟢
 - [x] **T12-004** · PC performance budgets (frame ms, draw calls, memory, load time) on 2–3 reference PCs (low/mid/high); automated perf runs on fixed scenes, regression alerts · `M` · `P1`
 - [x] **T12-007** · Nightly fuzz + sanitizer jobs: `fuzz/` (8 targets) and `.github/workflows/nightly.yml` (fuzz and Miri jobs; `docs/FUZZING.md`). ASan/UBSan have no `unsafe` of ours to check (`unsafe_code` is denied); the workflow has not run in CI yet · `M` · `P1`
-- [~] **T12-008** [INPRG @Ihor-Ihorevych/agent · branch `T12-008-reproducible-release` · 2026-11-23] · Nightly/release artifacts for Windows/Linux/macOS; reproducible builds; checksums; changelog · `M` · `P1`
+- [x] **T12-008** · Nightly/release artifacts for Windows/Linux/macOS; reproducible builds; checksums; changelog: nightly schedule, `scripts/dist-flags.sh`, deterministic archives (`scripts/make_archive.py`), `scripts/repro-check.sh` and a `reproducible` job, checksum verification (`docs/RELEASING.md` section 6); verified on Windows only · `M` · `P1`
+- [ ] **T12-008b** · Verify reproducibility on Linux and macOS (and from a checkout in another folder for `ss2-app`), and make the `reproducible` job also compare the archives and `ss2-app`; needs Actions or a Linux and a macOS machine · `S` · `P1`
 - [x] **T12-009** · PC packaging & distribution: GitHub Releases, Windows zip/installer, AppImage/Flatpak, macOS `.app`; no game assets in any package · `M` · `P2`
 - [x] **T12-010** · Compliance: license audit/SBOM per release, clean-room audit log (RE spec ↔ implementer), DCO check · `M` · `P1`
 - [x] **T12-011** · Playtest program: build channels, structured feedback form (no telemetry by default), crash-report triage · `M` · `P2`

@@ -135,7 +135,41 @@ builds stay fast.
 - A hotfix is a patch release from `main`. While there are no long-lived release branches (true
   until 1.0), a fix goes to `main` first and is released from there.
 
-## 6. Not yet covered
+## 6. Reproducible builds and nightly builds
+
+The same commit gives the same release bytes (roadmap T12-008). Three things make it so:
+
+- **`scripts/dist-flags.sh`** prints the `RUSTFLAGS` of a release build: `--remap-path-prefix` for the checkout (`/src`), the
+  cargo home (`/cargo`), the rustup home (`/rustup`) and, when `CARGO_TARGET_DIR` is set, the target folder (`/target`), so
+  the folders the build ran in are not in the binary; and, on Windows, the linker flag `/Brepro`, which puts a hash instead of the
+  build time in the executable. `release.yml` builds with `RUSTFLAGS="$(scripts/dist-flags.sh)"`.
+- **`scripts/make_archive.py`** makes the `.tar.gz` or `.zip`: entries sorted, the time of the **commit** (`SOURCE_DATE_EPOCH`,
+  never the clock), no owner, normalised modes, no time or name in the gzip header, a zip that says it was made on Unix. Its tests
+  run in CI (`python3 -m unittest discover -s scripts`).
+- **`scripts/repro-check.sh [package...]`** builds the packages twice into two empty target folders and compares the SHA-256 of
+  the binaries (`ss2-server` by default, about 25 seconds; `ss2-app` about 6 minutes per build). The `reproducible` job in
+  `release.yml` runs it for `ss2-server` on Linux and Windows. Exit status 0 identical, 1 different.
+
+**What was checked, and what was not** (on the maintainer's Windows machine, Rust 1.99.1, MSVC):
+
+- Without the flags, two builds of `ss2-server` differ. With them they are identical, also when one is built from a checkout in
+  another folder.
+- `ss2-app` was **not** reproducible at first: the build script of the `glutin` crate leaves its output folder (inside the target
+  folder) in the binary. Remapping the target folder fixed it; with that, `ss2-server` and `ss2-app` are both identical across two
+  builds into different target folders (the `ss2-app` check was not repeated from a checkout in another folder).
+- **Not checked:** Linux and macOS (the expectation that their linkers leave no time stamp comes from their documentation, not from a
+  run), a different Rust toolchain version or a different cargo registry state (the lockfile pins the crates, the toolchain is pinned
+  by `rust-toolchain.toml`), and the archives of two different machines: the compressed bytes depend on the zlib that Python links.
+  The check compares binaries, not archives.
+
+`release.yml` also runs **nightly** (03:23 UTC, Linux and Windows only, macOS minutes cost ten times as much): the same build and
+packaging as a manual run, kept as workflow artifacts for 14 days. Each package step prints the archive's SHA-256 into the run
+summary, and the draft-release job verifies `SHA256SUMS` with `sha256sum --check --strict` before attaching it. The changelog
+section as release notes was already in place.
+
+To check by hand: `scripts/repro-check.sh ss2-server ss2-app`.
+
+## 7. Not yet covered
 
 - **Code signing and notarization** (Windows SmartScreen, macOS Gatekeeper): until M8 the binaries
   are unsigned and the OS will warn; the release notes say so. Tracked with T03-035 and T03-010.

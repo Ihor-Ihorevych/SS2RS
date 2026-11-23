@@ -5,6 +5,9 @@ name: release
 #  - pull request touching this workflow or the build profile: builds + packages on Linux and
 #    Windows only, so packaging is exercised before it matters. Creates nothing.
 #  - manual run: builds + packages every platform and keeps the archives as workflow artifacts.
+#  - nightly (03:23 UTC): the same for Linux and Windows, from the default branch.
+# Builds use scripts/dist-flags.sh and archives scripts/make_archive.py, so the same commit gives the
+# same bytes; the `reproducible` job rebuilds and compares (docs/RELEASING.md section 6).
 # A release is only ever published by a human, from the draft.
 
 on:
@@ -16,7 +19,10 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "release.toml"
+      - "scripts/**"
   workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -35,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","windows-latest","macos-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'schedule') && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","windows-latest","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -63,11 +69,13 @@ jobs:
           fi
           target=$(rustc -vV | sed -n 's/^host: //p')
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          # The commit time: archives and anything else that wants a date use this, never the clock.
+          echo "epoch=$(git log -1 --format=%ct)" >> "${GITHUB_OUTPUT}"
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
           echo "name=ss2rs-${version}-${target}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build
-        run: cargo build --profile dist --locked -p ss2-app -p ss2-server
+      - name: Build (reproducible flags, scripts/dist-flags.sh)
+        run: RUSTFLAGS="$(scripts/dist-flags.sh)" cargo build --profile dist --locked -p ss2-app -p ss2-server
 
       - name: Stage exactly the files that ship (a fixed list, never a directory)
         run: |
@@ -91,16 +99,16 @@ jobs:
           echo "${output}"
           echo "${output}" | grep -qi usage
 
-      - name: Archive (tar.gz on Linux/macOS)
-        if: runner.os != 'Windows'
-        working-directory: dist
-        run: tar -czf "${{ steps.meta.outputs.name }}.tar.gz" "${{ steps.meta.outputs.name }}"
-
-      - name: Archive (zip on Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        working-directory: dist
-        run: Compress-Archive -Path "${{ steps.meta.outputs.name }}" -DestinationPath "${{ steps.meta.outputs.name }}.zip"
+      - name: Archive (deterministic, scripts/make_archive.py)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.epoch }}
+        run: |
+          name="${{ steps.meta.outputs.name }}"
+          py=python3
+          ext=tar.gz
+          if [ "${RUNNER_OS}" = "Windows" ]; then py=python; ext=zip; fi
+          ${py} scripts/make_archive.py "dist/${name}" "dist/${name}.${ext}"
+          (cd dist && sha256sum "${name}.${ext}" | tee -a "${GITHUB_STEP_SUMMARY}")
 
       - uses: actions/upload-artifact@v4
         with:
@@ -110,6 +118,23 @@ jobs:
             dist/*.zip
           if-no-files-found: error
           retention-days: 14
+
+  # Rebuilds ss2-server twice in two empty target folders and compares the SHA-256 of the binaries.
+  # (ss2-app takes minutes per build; check it by hand with `scripts/repro-check.sh ss2-app`.)
+  reproducible:
+    name: reproducible (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: scripts/repro-check.sh ss2-server
 
   # Only for tag pushes. Creates a DRAFT release; publishing it is a manual decision.
   draft-release:
@@ -127,7 +152,7 @@ jobs:
           merge-multiple: true
       - name: Checksums
         working-directory: assets
-        run: sha256sum ss2rs-* > SHA256SUMS && cat SHA256SUMS
+        run: sha256sum ss2rs-* > SHA256SUMS && cat SHA256SUMS && sha256sum --check --strict SHA256SUMS
       - name: Release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
