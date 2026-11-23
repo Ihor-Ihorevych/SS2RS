@@ -60,18 +60,26 @@ fn asset_manager(c: &mut Criterion) {
     ));
     group.bench_function("load_cold_100", |b| {
         let vfs = Arc::new(sample_vfs(1_000, SAMPLE_BYTES));
+        let new_manager = || {
+            let assets = AssetManager::new(vfs.clone());
+            assets.register_loader(LenLoader).unwrap();
+            assets
+        };
+        let preflight = new_manager();
+        for i in 0..FILES_PER_BATCH {
+            let handle = preflight.load::<usize>(&sample_path(i)).unwrap();
+            assert_eq!(*handle.get().unwrap(), SAMPLE_BYTES);
+        }
+        drop(preflight);
+
         b.iter_batched(
-            || {
-                let assets = AssetManager::new(vfs.clone());
-                assets.register_loader(LenLoader).unwrap();
-                assets
-            },
+            new_manager,
             |assets| {
                 for i in 0..FILES_PER_BATCH {
                     black_box(assets.load::<usize>(&sample_path(i)).unwrap());
                 }
             },
-            BatchSize::SmallInput,
+            BatchSize::PerIteration,
         );
     });
     group.finish();

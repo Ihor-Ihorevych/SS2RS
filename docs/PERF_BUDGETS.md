@@ -205,8 +205,9 @@ Findings (and what they do not say):
 ### 5.8 Loader throughput and working set (T02-032)
 
 The `assets` benchmark measures cold asset-manager batches and the archive reader's stored and
-deflated paths. Each cold batch reads 100 files of 4 KiB through `MemoryVfs` and the `LenLoader`
-test loader. The timed batch starts with a fresh manager and registry. The archive cases read
+deflated paths. Each cold batch reads 100 of the 1,000 synthetic 4 KiB files through `MemoryVfs`
+and the `LenLoader` test loader. Criterion creates one manager and registry per iteration.
+An untimed preflight checks that all 100 loads complete with the expected size. The archive cases read
 one 4 MiB entry per iteration, with alternating fixed and pseudorandom bytes, through `ArchiveVfs`.
 Archive creation and mount happen before timed reads. The archive reads use a warm OS file cache.
 Throughput counts uncompressed bytes. The cached asset-manager case reports time because the
@@ -220,9 +221,9 @@ Use these measurements as a baseline for this machine and workload.
 
 | Benchmark | Throughput (MB/s) | Peak working set (MiB) |
 |---|---:|---:|
-| `assets/load_cold_100` | 4,702.9 | 12.01 |
-| `asset_archive/stored_4mib` | 2,177.0 | 9.05 |
-| `asset_archive/deflated_4mib` | 276.19 | 9.18 |
+| `assets/load_cold_100` | 3,472.9 | 9.37 |
+| `asset_archive/stored_4mib` | 1,740.2 | 9.05 |
+| `asset_archive/deflated_4mib` | 230.02 | 9.17 |
 
 Run the same throughput cases from the repository root.
 
