@@ -185,6 +185,27 @@ impl Aabb {
         (self.max - self.min) * 0.5
     }
 
+    /// The eight corners; bit 0 of the index picks max x, bit 1 max y, bit 2 max z.
+    pub fn corners(&self) -> [Vec3; 8] {
+        let pick = |i: usize| {
+            Vec3::new(
+                if i & 1 == 0 { self.min.x } else { self.max.x },
+                if i & 2 == 0 { self.min.y } else { self.max.y },
+                if i & 4 == 0 { self.min.z } else { self.max.z },
+            )
+        };
+        [
+            pick(0),
+            pick(1),
+            pick(2),
+            pick(3),
+            pick(4),
+            pick(5),
+            pick(6),
+            pick(7),
+        ]
+    }
+
     /// The box grown by `amount` on every side.
     #[must_use]
     pub fn expanded(&self, amount: f32) -> Self {
