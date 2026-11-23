@@ -8,7 +8,8 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [ ] **T10-001** · UI framework decision + core: retained vs immediate mode; layout (anchors/flex), styling/skins, event routing, focus system; renders via T04-017 · `L` · `P0`
 - [ ] **T10-002** · Text rendering: glyph atlas from `.fnt` or fallback TTF, shaping basics, Unicode ranges (Latin/Cyrillic/…), wrapping, colored runs · `L` · `P0` · Deps: T02-025
 - [ ] **T10-005** · Navigation model: mouse hover, keyboard/gamepad focus graph, consistent back/confirm; input-device-agnostic focus so touch can be added later · `M` · `P0`
-- [~] **T10-017** [INPRG @Ihor-Ihorevych/agent · branch `T10-017-scale-policy` · 2026-11-23] · Resolution/scale policy: virtual canvas, DPI scaling, aspect ratios (16:9 → 21:9 ultrawide) · `M` · `P0`
+- [x] **T10-017** · Resolution/scale policy: virtual canvas, DPI scaling, aspect ratios (16:9 → 21:9 ultrawide): `ss2_ui::scale` (`docs/UI_SCALING.md`): letterbox or expand, a safe area, the user's smaller-UI scale, a text floor with the OS scale factor, anchors; **nothing uses it yet** (T10-017b) · `M` · `P0`
+- [ ] **T10-017b** · Adopt the scale policy: move the menu screens and the app from `Canvas::fit` to `ScreenMetrics`, draw a full-window background in `Expand` mode, anchor the HUD in `safe_area`, golden screenshots at 16:9, 21:9, 4:3 and portrait, the aspect and UI-scale settings (T10-012) · `S` · `P0` · Deps: T10-017
 
 ## Menus & flows
 - [ ] **T10-004** · Menu system recreating original flow: main menu, new/continue/load/save, options, credits; data-driven from original menu definitions where specified · `XL` → split per screen · `P1`
