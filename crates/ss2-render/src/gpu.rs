@@ -653,6 +653,15 @@ pub(crate) async fn request_gpu(
     Err(RenderError::NoAdapter(last_error))
 }
 
+/// One test at a time may own a GPU device: tests that make or destroy devices while others do the same in this process hung the run
+/// (twice, under load, on the software and the hardware adapters), as the integration tests found before (`docs/GOLDEN_IMAGES.md`).
+#[cfg(test)]
+pub(crate) fn gpu_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -978,6 +987,7 @@ mod tests {
 
     #[test]
     fn a_real_device_reports_itself() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let config = GpuConfig::from_env();
         let instance = make_instance(&config, None);
         let gpu = match pollster::block_on(request_gpu(&instance, None, None, &config)) {
