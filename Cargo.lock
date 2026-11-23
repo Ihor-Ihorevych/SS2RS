@@ -2681,6 +2681,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-ans"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-bmf"
 version = "0.0.0"
 dependencies = [

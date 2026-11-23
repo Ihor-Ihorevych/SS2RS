@@ -1,0 +1,23 @@
+[package]
+name = "ss2-format-ans"
+description = ".ans animation sets: animations, envelopes, events and a pose sampling API (track T02)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-assets = { path = "../ss2-assets" }
+ss2-meta = { path = "../ss2-meta" }
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-vfs = { path = "../ss2-vfs" }
+
+
