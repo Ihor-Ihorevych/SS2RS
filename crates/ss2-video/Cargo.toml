@@ -10,3 +10,11 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-vfs = { path = "../ss2-vfs" }
+tracing.workspace = true
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+tracing-subscriber.workspace = true

@@ -3007,6 +3007,12 @@ dependencies = [
 [[package]]
 name = "ss2-video"
 version = "0.0.0"
+dependencies = [
+ "ss2-testkit",
+ "ss2-vfs",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "ss2-world"
