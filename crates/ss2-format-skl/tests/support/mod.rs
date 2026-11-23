@@ -1,7 +1,7 @@
 use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
 
 // Class and member numbers come from the format spec. The values, type IDs and hierarchy are synthetic.
-pub fn skeleton(lods: &[&[(i32, i32)]], rotation_w: f32, skeleton_class: &str) -> Vec<u8> {
+pub fn skeleton(lods: &[&[(i32, i32)]], rotation: [f32; 4], skeleton_class: &str) -> Vec<u8> {
     const FLOAT: u32 = 1;
     const INT: u32 = 2;
     const FLAGS: u32 = 3;
@@ -113,10 +113,10 @@ pub fn skeleton(lods: &[&[(i32, i32)]], rotation_w: f32, skeleton_class: &str) -
             .array_header(b"STAR", bones.len() as u32);
         for &(id, parent) in *bones {
             data = data.i32(id).i32(parent).f32(0.25);
-            for field in [
-                0.0, 0.0, 0.0, rotation_w, 1.0, 2.0, 3.0, 0.0, -1.0, 0.0, -5.0, 1.0, 0.0, 0.0,
-                -6.0, 0.0, 0.0, 1.0, -7.0, 3.75, -3.0, -2.0, -1.0, 1.0, 2.0, 3.0,
-            ] {
+            for field in rotation.into_iter().chain([
+                1.0, 2.0, 3.0, 0.0, -1.0, 0.0, -5.0, 1.0, 0.0, 0.0, -6.0, 0.0, 0.0, 1.0, -7.0,
+                3.75, -3.0, -2.0, -1.0, 1.0, 2.0, 3.0,
+            ]) {
                 data = data.f32(field);
             }
             data = data.u32(5);

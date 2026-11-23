@@ -11,7 +11,7 @@ use ss2_vfs::{EntryKind, MemoryVfs, Vfs, VfsPath, mount_install};
 fn registered_loader_preserves_lod_order_sparse_ids_and_source_transforms() {
     let bytes = support::skeleton(
         &[&[(1, 0), (4, 1), (9, 0)], &[(4, 0), (9, 4)]],
-        1.0001,
+        [0.0, 0.0, 0.600_12, 0.800_16],
         "CSkeleton",
     );
     let assets = AssetManager::new(Arc::new(
@@ -43,7 +43,11 @@ fn registered_loader_preserves_lod_order_sparse_ids_and_source_transforms() {
     assert!(lods[1].bone(1).is_none());
     let bone = lods[1].bone(9).unwrap();
     assert_eq!(bone.local_translation, Vec3::new(1.0, 2.0, 3.0));
-    assert_eq!(bone.local_rotation, Quat::IDENTITY);
+    assert!(bone.local_rotation.is_normalized());
+    assert!(
+        bone.local_rotation
+            .abs_diff_eq(Quat::from_xyzw(0.0, 0.0, 0.6, 0.8), 1e-6)
+    );
     assert_eq!(
         bone.inverse_bind.transform_point3(Vec3::X),
         Vec3::new(-5.0, -5.0, -7.0)
@@ -63,11 +67,11 @@ fn invalid_bones_report_the_problem_with_the_hierarchy_or_rotation() {
         (&[(4, 3)][..], "earlier"),
         (&[(0, 0)][..], "positive"),
     ] {
-        let bytes = support::skeleton(&[bones], 1.0, "CSkeleton");
+        let bytes = support::skeleton(&[bones], Quat::IDENTITY.to_array(), "CSkeleton");
         let error = Skeleton::parse(&bytes).unwrap_err().to_string();
         assert!(error.contains(description), "{error}");
     }
-    let bytes = support::skeleton(&[&[(1, 0)]], 0.0, "CSkeleton");
+    let bytes = support::skeleton(&[&[(1, 0)]], [0.0; 4], "CSkeleton");
     assert!(
         Skeleton::parse(&bytes)
             .unwrap_err()
@@ -78,7 +82,7 @@ fn invalid_bones_report_the_problem_with_the_hierarchy_or_rotation() {
 
 #[test]
 fn unrelated_ctsemeta_objects_are_rejected() {
-    let bytes = support::skeleton(&[&[(1, 0)]], 1.0, "CUnrelated");
+    let bytes = support::skeleton(&[&[(1, 0)]], Quat::IDENTITY.to_array(), "CUnrelated");
     assert!(
         Skeleton::parse(&bytes)
             .unwrap_err()
