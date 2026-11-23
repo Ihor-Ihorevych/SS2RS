@@ -398,6 +398,7 @@ dependencies = [
  "ss2-game",
  "ss2-net",
  "ss2-platform-api",
+ "ss2-sim",
  "ss2-vfs",
 ]
 
@@ -438,6 +439,10 @@ dependencies = [
  "ss2-core",
  "ss2-ui",
 ]
+
+[[package]]
+name = "ss2-sim"
+version = "0.0.0"
 
 [[package]]
 name = "ss2-ui"

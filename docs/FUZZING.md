@@ -21,6 +21,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `archive_names` | `archive_load_order`, `PatchLevel::from_file_name` | the order does not depend on the input order |
 | `session_message` | `ss2_net::session::decode` on any bytes, then a `SessionServer` fed the message from several peers | decoded or refused; what decodes round-trips; the server never holds more than its slots or failure records |
 | `replay_parse` | `Replay::parse` on raw bytes, and on a scripted valid replay damaged in a few places | read or refused; what reads can be played through and written out again to the same records |
+| `save_parse` | `ss2_sim::save::parse` on raw bytes, and on a world built by a script, saved, damaged in a few places and **re-sealed with a correct checksum** | read or refused; what reads restores into an empty world, saves again, and reads again with the same entities and header |
 
 The `.wld`, `.tex`, `.mdl` and the other game formats are not fuzzed yet: their readers do not exist (track T02, with the
 fuzz targets of T02-030). Add a target in `fuzz/fuzz_targets/`, a `[[bin]]` entry in `fuzz/Cargo.toml` and the name to the
