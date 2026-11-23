@@ -80,7 +80,7 @@ Facts that matter for a loader:
 
 ## The default mod
 
-The strings `DefaultMod.txt` appear in `Core.dll` and `Sam2.exe` and no such file ships: it is apparently the file the launcher **writes** to remember which mod was last chosen (`Sam2.exe` is a small 28 KB executable that imports `Core.dll` and `Engine.dll`). The mod list is presumably built from the `.nfo` files in `Content/` (their keys, `NAME`, `AUTHOR` and `THUMBNAIL`, are what a list needs).
+`Content/DefaultMod.txt` **does ship** (313 bytes, inside `Patch_02_068.gro`): comment lines and the one statement `CURRENTMOD = SeriousSam2.mod ;`. The program reads `Content/CurrentMod.txt` if it exists and otherwise this file; to switch mods one saves a copy as `CurrentMod.txt` with another `CURRENTMOD` value (`console-config.md`; `Core.dll` also holds a format string for that statement, so the launcher presumably writes `CurrentMod.txt` itself). `Sam2.exe` is a small 28 KB executable that imports `Core.dll` and `Engine.dll`. The mod list is presumably built from the `.nfo` files in `Content/` (their keys, `NAME`, `AUTHOR` and `THUMBNAIL`, are what a list needs).
 
 ## What is not in the data
 
