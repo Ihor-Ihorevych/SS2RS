@@ -27,6 +27,7 @@ mod directory;
 mod install;
 mod layered;
 mod memory;
+mod modcheck;
 mod mods;
 mod path;
 
@@ -40,6 +41,10 @@ pub use directory::DirectoryVfs;
 pub use install::{archive_load_order, mount_install};
 pub use layered::LayeredVfs;
 pub use memory::MemoryVfs;
+pub use modcheck::{
+    Lint, ModCheckEnv, ModFinding, ModLayer, ModReport, ModSpec, ModSummary, ModUnderTest,
+    check_install_mods, check_mods, installed_mod_names,
+};
 pub use mods::{
     ModInfo, ModManifest, ModModule, Nfo, discover_mods, mod_archive_names, mount_mod,
     parse_current_mod, selected_mod,

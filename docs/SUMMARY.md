@@ -92,6 +92,7 @@
 - [Accessibility review and checklist](ACCESSIBILITY.md)
 - [Localization QA pass](LOCALIZATION_QA.md)
 - [Modding policy](MODDING_POLICY.md)
+- [Mod validation (`ss2-doctor --mod`)](MOD_VALIDATION.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
 - [Compliance procedure](COMPLIANCE.md)
 - [Clean-room audit log](compliance/clean-room-log.md)
