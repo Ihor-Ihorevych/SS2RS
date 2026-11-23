@@ -1,0 +1,17 @@
+# meta-dump (annotated text; offsets are file offsets, +n is a size in bytes)
+file: broken.meta
+size: 406 bytes
+status: problems
+
+== coverage
+file size   406 bytes
+explained   377 bytes (92.8571%)
+  of which opaque (a word of unknown meaning or raw byte arrays): 4 bytes
+undecoded   29 bytes in 1 range(s)
+  0x00000169..0x00000186  29 bytes  in OBJS
+    reason: object 1 (type 2) at byte 361 does not decode: invalid CTSEMETA object data: at byte 373: unsupported type 50: external type `CMysteryClass` has no known encoding
+    | 01 00 00 00 02 00 00 00 01 00 00 00 01 02 03 04 05 02 00 00 00 01 00 00 00 21 00 00 00
+
+== problems
+- object 1 (type 2) at byte 361 does not decode: invalid CTSEMETA object data: at byte 373: unsupported type 50: external type `CMysteryClass` has no known encoding
+- 2 of 3 object records were not decoded

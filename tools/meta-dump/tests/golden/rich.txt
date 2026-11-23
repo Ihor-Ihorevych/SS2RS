@@ -1,0 +1,103 @@
+# meta-dump (annotated text; offsets are file offsets, +n is a size in bytes)
+file: rich.meta
+size: 799 bytes
+status: ok
+
+== header 0x00000000..0x0000004b (75 bytes)
+magic: CTSEMETA   byte-order marker: 0x1234ABCD
+format version: 8
+version string: "$Version: Serious Sam 2; 2.062.00:57284; 2005-Gold-RC5$"
+build: product "Serious Sam 2", release 2.062.00, build 57284, tag 2005-Gold-RC5
+
+== chunks
+header   0x00000000..0x0000004b  75 bytes
+INFO     0x0000004b..0x00000063  24 bytes
+RFIL     0x00000063..0x000000bd  90 bytes  2 entries
+IDNT     0x000000bd..0x000000d9  28 bytes  2 entries
+EXTY     0x000000d9..0x000000fc  35 bytes  1 entries
+INTY     0x000000fc..0x0000024f  339 bytes  8 entries
+EXOB     0x0000024f..0x00000267  24 bytes  1 entries
+OBTY     0x00000267..0x0000027f  24 bytes  2 entries
+EDTY     0x0000027f..0x0000028f  16 bytes  1 entries
+OBJS     0x0000028f..0x000002e9  90 bytes  2 entries
+EDOB     0x000002e9..0x00000317  46 bytes  1 entries
+METAEND  0x00000317..0x0000031f  8 bytes
+
+== INFO 0x0000004b..0x00000063
+flag: 1 (meaning unknown)
+declared: 2 file references, 2 identifiers, 9 types, 3 objects
+
+== RFIL file references (2)
+0x0000006b +40  #0 flags 0x00000000  "Content/Test/Models/Cube.mdl"
+0x00000093 +42  #1 flags 0x00040000  "Content/Test/Textures/Wall.tex"
+
+== IDNT identifiers (2)
+0x000000c5 +8  #0 ""
+0x000000cd +12  #1 "Blob"
+
+== EXTY external types (1)
+0x000000e1 +27  type 20 CModelConfiguration
+
+== INTY type table (8 types, 0 ADIM blocks)
+0x00000104 +33  type 0 UBYTE  kind 1  primitive size 1 align 1
+0x00000125 +33  type 1 SLONG  kind 1  primitive size 4 align 4
+0x00000146 +33  type 2 FLOAT  kind 1  primitive size 4 align 4
+0x00000167 +35  type 3 CString  kind 1  primitive size 4 align 4
+0x0000018a +33  type 4 IDENT  kind 1  primitive size 4 align 4
+0x000001ab +43  type 5 CStaticArray<UBYTE>  kind 0  static-array of 0 UBYTE
+0x000001d6 +91  type 6 CBlob  kind 1  struct
+    flags 5, base class none, 6 members
+      [0] "1" : 5 CStaticArray<UBYTE>
+      [1] "2" : 1 SLONG
+      [2] "3" : 2 FLOAT
+      [3] "4" : 3 CString
+      [4] "5" : 4 IDENT
+      [5] "6" : 7 CBlob*
+0x00000231 +30  type 7 CBlob*  kind 0  pointer of 6 CBlob
+
+== EXOB external objects (1)
+0x00000257 +16  object 100  type 20 CModelConfiguration  flags 1  file #0 "Content/Test/Models/Cube.mdl"
+
+== OBTY (2)
+0x0000026f +8  object 0  type 6 CBlob
+0x00000277 +8  object 1  type 6 CBlob
+
+== EDTY (1)
+0x00000287 +8  object 50  type 6 CBlob
+
+== OBJS objects (2 of 2 decoded)
+0x00000297 +46  object 0  type 6 CBlob
+    CBlob {
+      CBlob.1 = bytes[5] de ad be ef 01
+      CBlob.2 = -9
+      CBlob.3 = "NaN"
+      CBlob.4 = "cafÃ©"
+      CBlob.5 = {ident: 1, text: "Blob"}
+      CBlob.6 = {ref: 100, to: "external", type: "CModelConfiguration", file: "Content/Test/Models/Cube.mdl"}
+    }
+0x000002c5 +36  object 1  type 6 CBlob
+    CBlob {
+      CBlob.1 = bytes[0]
+      CBlob.2 = 2
+      CBlob.3 = 1.5
+      CBlob.4 = ""
+      CBlob.5 = {ident: 0, text: ""}
+      CBlob.6 = {ref: 0, to: "object", type: "CBlob"}
+    }
+
+== EDOB extra records (1 of 1 decoded)
+0x000002f1 +38  object 50  type 6 CBlob
+    CBlob {
+      CBlob.1 = bytes[1] 07
+      CBlob.2 = 3
+      CBlob.3 = 0.25
+      CBlob.4 = "x"
+      CBlob.5 = {ident: 0, text: ""}
+      CBlob.6 = null
+    }
+
+== coverage
+file size   799 bytes
+explained   799 bytes (100.0000%)
+  of which opaque (a word of unknown meaning or raw byte arrays): 10 bytes
+undecoded   0 bytes in 0 range(s)

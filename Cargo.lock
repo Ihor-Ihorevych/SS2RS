@@ -1414,6 +1414,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "meta-dump"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde_json",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+ "tempfile",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
