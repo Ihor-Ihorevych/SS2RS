@@ -15,6 +15,7 @@ mod about_tests;
 #[cfg(test)]
 mod draw_tests;
 pub mod layout;
+pub mod loading;
 mod pointer;
 pub mod scale;
 mod skin;
