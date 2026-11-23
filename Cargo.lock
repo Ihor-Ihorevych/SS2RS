@@ -2866,10 +2866,13 @@ version = "0.0.0"
 dependencies = [
  "ss2-audio-api",
  "ss2-core",
+ "ss2-format-rsc",
  "ss2-physics",
  "ss2-platform-api",
  "ss2-render-api",
+ "ss2-testkit",
  "ss2-ui",
+ "ss2-vfs",
 ]
 
 [[package]]

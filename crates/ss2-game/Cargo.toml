@@ -18,3 +18,8 @@ ss2-render-api = { path = "../ss2-render-api" }
 ss2-ui = { path = "../ss2-ui" }
 ss2-audio-api = { path = "../ss2-audio-api" }
 ss2-platform-api = { path = "../ss2-platform-api" }
+
+[dev-dependencies]
+ss2-format-rsc = { path = "../ss2-format-rsc" }
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-vfs = { path = "../ss2-vfs" }
