@@ -20,6 +20,7 @@ use ss2_core::settings::Settings;
 use ss2_render::golden::{self, Mode, Tolerance};
 use ss2_render::{ImageRgba8, RenderError, Renderer};
 use ss2_ui::devconsole::{ConsoleView, Corner, FrameStats, LineKind, draw_overlay, stats_lines};
+use ss2_ui::session_screens::{DeathMode, DeathScreen, LevelStats, SummaryScreen};
 use ss2_ui::{Canvas, Color, DrawList, Menu, ScreenId, UiInput, Vec2, theme};
 
 /// (width, height): three resolutions at 16:9, then 21:9, then 4:3.
@@ -37,15 +38,23 @@ enum Shot {
     Menu(ScreenId),
     Console,
     Overlay,
+    DeathSolo,
+    DeathCoop,
+    SummaryDone,
+    SummaryCounting,
 }
 
-const SHOTS: [Shot; 6] = [
+const SHOTS: [Shot; 10] = [
     Shot::Menu(ScreenId::Main),
     Shot::Menu(ScreenId::Options),
     Shot::Menu(ScreenId::Pause),
     Shot::Menu(ScreenId::About),
     Shot::Console,
     Shot::Overlay,
+    Shot::DeathSolo,
+    Shot::DeathCoop,
+    Shot::SummaryDone,
+    Shot::SummaryCounting,
 ];
 
 /// The software adapter crashed a test process once when several tests made devices at the same time (see
@@ -83,6 +92,10 @@ fn word(shot: Shot) -> &'static str {
         Shot::Menu(ScreenId::About) => "about",
         Shot::Console => "console",
         Shot::Overlay => "overlay",
+        Shot::DeathSolo => "death_solo",
+        Shot::DeathCoop => "death_coop",
+        Shot::SummaryDone => "summary",
+        Shot::SummaryCounting => "summary_counting",
     }
 }
 
@@ -112,8 +125,46 @@ fn menu_at(screen: ScreenId) -> Menu {
 }
 
 /// What the shot draws, in canvas units.
+fn level_stats() -> LevelStats {
+    LevelStats {
+        level: "The Jungle".into(),
+        kills: 137,
+        kills_total: 164,
+        secrets: 2,
+        secrets_total: 5,
+        elapsed_secs: 1325,
+        par_secs: Some(1500),
+        score: Some(48_250),
+    }
+}
+
 fn draw(shot: Shot) -> DrawList {
     match shot {
+        Shot::DeathSolo => DeathScreen::new(DeathMode::Solo).draw(),
+        Shot::DeathCoop => {
+            let mut screen = DeathScreen::new(DeathMode::Coop {
+                respawn_in_ticks: Some(250),
+                ticks_per_second: 60,
+            });
+            for _ in 0..10 {
+                screen.update();
+            }
+            screen.draw()
+        }
+        Shot::SummaryDone => {
+            let mut screen = SummaryScreen::new(level_stats());
+            while screen.counting() {
+                screen.update();
+            }
+            screen.draw()
+        }
+        Shot::SummaryCounting => {
+            let mut screen = SummaryScreen::new(level_stats());
+            for _ in 0..70 {
+                screen.update();
+            }
+            screen.draw()
+        }
         Shot::Menu(screen) => menu_at(screen).draw(),
         Shot::Console => {
             let mut view = ConsoleView::new(100);
@@ -230,7 +281,10 @@ fn check_geometry(shot: Shot, size: (u32, u32), list: &DrawList, img: &ImageRgba
     );
 
     // The focused button of a menu is where the canvas puts it, and orange. Sample near its left edge, away from the label.
-    if matches!(shot, Shot::Menu(_) | Shot::Overlay) {
+    if matches!(
+        shot,
+        Shot::Menu(_) | Shot::Overlay | Shot::DeathSolo | Shot::DeathCoop | Shot::SummaryDone
+    ) {
         let focused = list
             .quads
             .iter()
@@ -293,6 +347,26 @@ fn console_matches_its_goldens_at_every_size() {
 #[test]
 fn frame_time_overlay_matches_its_goldens_at_every_size() {
     one_shot(Shot::Overlay);
+}
+
+#[test]
+fn solo_death_screen_matches_its_goldens_at_every_size() {
+    one_shot(Shot::DeathSolo);
+}
+
+#[test]
+fn coop_death_screen_matches_its_goldens_at_every_size() {
+    one_shot(Shot::DeathCoop);
+}
+
+#[test]
+fn finished_summary_matches_its_goldens_at_every_size() {
+    one_shot(Shot::SummaryDone);
+}
+
+#[test]
+fn counting_summary_matches_its_goldens_at_every_size() {
+    one_shot(Shot::SummaryCounting);
 }
 
 #[test]
@@ -377,7 +451,7 @@ fn every_screen_has_a_golden_at_every_size() {
     );
     assert_eq!(
         SHOTS.len() * SIZES.len(),
-        30,
-        "the matrix is six screens by five sizes"
+        50,
+        "the matrix is ten screens by five sizes"
     );
 }
