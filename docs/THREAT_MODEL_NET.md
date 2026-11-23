@@ -46,7 +46,7 @@ a roadmap task, nothing written; **gap** = nothing is planned. "Untested" means 
 |---|---|---|
 | A packet crashes the receiver (panic, out-of-bounds) | the rule "never panic on bad input" (`docs/architecture.md`); parsers return errors; the parsers that exist are fuzzed (`docs/FUZZING.md`) | **built** for the parsers that exist; the **packet decoders do not exist yet**, so they are not fuzzed (add them with the wire format) |
 | A field that claims a huge size makes the receiver allocate gigabytes | every buffer in `ss2-net` has a bound: the input buffer accepts only ticks within `max_ahead_ticks` (30) so it holds at most that many frames per client; the event receiver holds at most 4,096 out-of-order events; the event log keeps 256; the snapshot buffer 64; the unacked input history 64 (`INPUTSTREAM.md`, `EVENTS.md`, `SNAPSHOTS.md`) | **built** (tested) for those structures; **the decoder must bound lengths before allocating** (planned with the wire format) |
-| A packet from another build or a different protocol | version and schema-hash check before anything else (`PROTOCOL.md`): refused with a message | **built** (the check); **planned** (the handshake that carries it, T08-006) |
+| A packet from another build or a different protocol | version and schema-hash check before anything else (`PROTOCOL.md`): refused with a message | **built** (the check, and the session handshake that carries it, `docs/SESSION.md`) |
 | A peer sends an older or a newer message layout | same | **built** |
 
 ### 3.2 Cheating by a malicious client
@@ -64,7 +64,7 @@ structural: there is no message by which a client can set its position, health o
 | **Lag switch / selective packet loss** to gain an advantage | server-side lag compensation is **bounded**: a maximum rewind window, so a fake lag cannot reach arbitrarily far back | **planned** (T08-010: "max rewind window, fairness limits") |
 | **Clock manipulation** | the client's clock estimate (`ClockSync`) only places server data on the client's own timeline; the server's tick is the only time that matters, and a client that lies about it gains nothing | **built** (by design: nothing in the server reads a client clock) |
 | **Aimbots, wallhacks, macros** | **cannot be prevented**: they run on the player's own machine and read or send plausible inputs. The only defence against wallhacks is not sending data the player should not see (relevancy filtering). A co-op game accepts that a friend can cheat | **gap by decision**; relevancy filtering is **planned** (T08-007) |
-| **Repeated violations** | a counter per client (`violations()`) is available for a policy: warn, drop, kick, ban | the **counter is built**, the **policy and the kick are planned** (T08-006) |
+| **Repeated violations** | a counter per client (`violations()`) is available for a policy: warn, drop, kick, ban | the **counter is built**; **kick and ban are built** (`docs/SESSION.md`); the **policy** that decides when to call them is the game's and is planned |
 
 ### 3.3 A malicious server or host
 
@@ -91,11 +91,11 @@ A host controls the simulation the others see, so it can do anything inside the 
 
 | Threat | Defence | Status |
 |---|---|---|
-| A flood of connection attempts to a listening server | per-address limits on half-open and total connections; QUIC limits the amplification of unauthenticated packets by design (RFC 9000, 3x until the address is validated); a retry token can be required under load | **planned** (T08-006, T08-020); **proposed** transport behaviour; **untested** |
-| A flood of data from a connected client | the input rate limit above; a total per-client bandwidth cap | input limit **built**; bandwidth cap **planned** (T08-006) |
+| A flood of connection attempts to a listening server | per-address limits on half-open and total connections; QUIC limits the amplification of unauthenticated packets by design (RFC 9000, 3x until the address is validated); a retry token can be required under load | **partly built**: the session layer keeps what it remembers about refused peers bounded and holds no state for them (`docs/SESSION.md`); per-address limits on attempts, half-open limits and retry tokens are **planned** (T08-020) and the transport's (**proposed**); **untested** |
+| A flood of data from a connected client | the input rate limit above; a total per-client bandwidth cap | input limit **built**; bandwidth cap **planned** (not part of the session layer: the transport and the dedicated server, T08-020) |
 | Memory exhaustion | every buffer is bounded (3.1) | **built** for the structures that exist |
 | **Amplification / reflection** (the server answers a spoofed address with more data than it was sent) | do not answer unauthenticated packets beyond a handshake of bounded size | **proposed** with the transport; **untested** |
-| Slowloris-style (open a connection and say nothing) | idle and handshake timeouts | **planned** (T08-006) |
+| Slowloris-style (open a connection and say nothing) | idle and handshake timeouts | **built** in the session layer for the client and for connected peers (join retries and a 10 s give-up, a keepalive and a 10 s idle timeout; `docs/SESSION.md`); a server-side timeout for a peer that connected at the transport and never says hello is the transport's job (**planned**) |
 | A slow client holds up the server | the server never waits for a client: a missing input is repeated for 5 ticks, then neutral (`InputBuffer::take`) | **built** (tested) |
 
 ### 3.6 Information and privacy
@@ -103,7 +103,7 @@ A host controls the simulation the others see, so it can do anything inside the 
 | Threat | Defence | Status |
 |---|---|---|
 | A peer learns the IP addresses of the others (peer-to-peer exposure) | with a **client-server** model a client sees only the server's address and the server sees the clients'; the host of a listen server sees everyone's; a relay for invite codes (T08-019) would hide the host's address only if it relays traffic | **inherent to the model**; document it in the player-facing text (**no task covers a privacy note yet**; the install and FAQ pages in `docs/user/` are the place) |
-| Invite code or session password guessed | the password is checked **inside** the encrypted connection and the number of attempts is limited per address | **planned** (T08-006); the **length and format of invite codes** are undecided (T08-019) |
+| Invite code or session password guessed | the password is checked **inside** the encrypted connection and the number of attempts is limited per address | **built** for the password (a lockout after repeated wrong guesses, `docs/SESSION.md`; untested against a real network); the **length and format of invite codes** are undecided (T08-019) |
 | Player names or chat text used to attack a log, a terminal or the UI (control characters, very long strings, markup) | sanitize and bound text at the boundary; log with structured fields, never by concatenating raw text into a format string | **gap**: no chat or name handling exists; add the rule to T08-012's consumers and T10 |
 | Information a client should not have (enemies behind walls) | relevancy filtering: send only the entities a client may know about | **planned** (T08-007) |
 
@@ -123,9 +123,9 @@ Marking saves made with cheats (`docs/CHEATS.md` "Not covered") is a product dec
 
 ## 5. Gaps, in the order I would close them
 
-1. The **wire format decoder** (T08-030's schema, T08-006's messages): bound every length before allocating, and add a **fuzz target** for each packet type (`docs/FUZZING.md`).
+1. The **wire format decoders**: the session messages (T08-006) and the replay file (T08-025) bound every length before allocating and have fuzz targets (`docs/FUZZING.md`); the **snapshot, input and event packets** do not have a decoder yet, and each will need the same bounds and a **fuzz target** with it.
 2. **Input validity checks by the game** (T08-021b): the sanity bounds on aim, movement and buttons, called by the server on every accepted frame; count and refuse.
-3. **Connection limits, bandwidth caps, handshake and idle timeouts, the violation policy** (T08-006, T08-020).
+3. **Per-address connection limits, bandwidth caps, a transport-level handshake timeout and the violation policy** (T08-020 and the transport; the session layer of T08-006 is built).
 4. **Certificate or key pinning** in the join flow (T08-019, RFC 0006), with a design review.
 5. **Relevancy filtering** and **bounded lag compensation** (T08-007, T08-010).
 6. A **real-network test** of the transport under hostile conditions (T08-017b): so far everything was run in a simulator or on loopback.

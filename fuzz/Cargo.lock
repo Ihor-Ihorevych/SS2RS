@@ -406,11 +406,20 @@ name = "ss2-game"
 version = "0.0.0"
 dependencies = [
  "ss2-core",
+ "ss2-physics",
+ "ss2-render-api",
 ]
 
 [[package]]
 name = "ss2-net"
 version = "0.0.0"
+
+[[package]]
+name = "ss2-physics"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+]
 
 [[package]]
 name = "ss2-platform-api"
@@ -420,6 +429,21 @@ dependencies = [
  "serde",
  "ss2-core",
  "toml",
+]
+
+[[package]]
+name = "ss2-render-api"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-ui",
+]
+
+[[package]]
+name = "ss2-ui"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
 ]
 
 [[package]]
