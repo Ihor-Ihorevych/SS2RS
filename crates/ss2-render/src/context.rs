@@ -161,20 +161,7 @@ impl Renderer {
     pub fn new_offscreen(size: (u32, u32)) -> Result<Renderer, RenderError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let (gpu, _adapter) = pollster::block_on(request_gpu(&instance, None, None))?;
-        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("offscreen"),
-            size: wgpu::Extent3d {
-                width: size.0.max(1),
-                height: size.1.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: gpu.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let texture = capture_texture(&gpu.device, gpu.format, (size.0.max(1), size.1.max(1)))?;
         Ok(Self::build(gpu, Target::Offscreen { texture }, size))
     }
 
@@ -340,25 +327,100 @@ impl Renderer {
         list: &DrawList,
         clear: Color,
     ) -> Result<ImageRgba8, RenderError> {
-        let (w, h) = (self.size.0.max(1), self.size.1.max(1));
-        let Target::Offscreen { texture } = &self.target else {
+        if !matches!(self.target, Target::Offscreen { .. }) {
             return Err(RenderError::Device(
                 "render_to_image() needs an offscreen renderer".into(),
             ));
+        }
+        self.capture_image(Some(list), clear, (self.size.0.max(1), self.size.1.max(1)))
+    }
+
+    /// Render a capture with the current framebuffer size and return tightly packed RGBA8 pixels.
+    /// Pass `None` to suppress quads and text, for example when taking a photo without the HUD.
+    /// A windowed renderer draws into a separate texture. Non-8-bit targets use an RGBA8 capture
+    /// pass on the same device. This waits for GPU readback and requires a nonzero size.
+    pub fn capture_frame(
+        &mut self,
+        overlay: Option<&DrawList>,
+        clear: Color,
+    ) -> Result<ImageRgba8, RenderError> {
+        if self.size.0 == 0 || self.size.1 == 0 {
+            return Err(RenderError::Device(
+                "cannot capture a zero-size framebuffer".into(),
+            ));
+        }
+        self.capture_image(overlay, clear, self.size)
+    }
+
+    fn capture_image(
+        &mut self,
+        overlay: Option<&DrawList>,
+        clear: Color,
+        size: (u32, u32),
+    ) -> Result<ImageRgba8, RenderError> {
+        let format = match &self.target {
+            Target::Window { config, .. } => config.format,
+            Target::Offscreen { texture } => texture.format(),
         };
-        let texture = texture.clone();
+        match format {
+            wgpu::TextureFormat::Rgba8Unorm
+            | wgpu::TextureFormat::Rgba8UnormSrgb
+            | wgpu::TextureFormat::Bgra8Unorm
+            | wgpu::TextureFormat::Bgra8UnormSrgb => self.read_frame(overlay, clear, size, format),
+            _ => {
+                let format = wgpu::TextureFormat::Rgba8Unorm;
+                let texture = capture_texture(&self.device, format, size)?;
+                let gpu = Gpu {
+                    device: self.device.clone(),
+                    queue: self.queue.clone(),
+                    format,
+                };
+                Self::build(gpu, Target::Offscreen { texture }, size)
+                    .read_frame(overlay, clear, size, format)
+            }
+        }
+    }
+
+    fn read_frame(
+        &mut self,
+        overlay: Option<&DrawList>,
+        clear: Color,
+        (w, h): (u32, u32),
+        format: wgpu::TextureFormat,
+    ) -> Result<ImageRgba8, RenderError> {
+        let swap_red_blue = matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+        let texture = match &self.target {
+            Target::Offscreen { texture } if (texture.width(), texture.height()) == (w, h) => {
+                texture.clone()
+            }
+            _ => capture_texture(&self.device, format, (w, h))?,
+        };
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("offscreen"),
+                label: Some("capture"),
             });
-        self.draw(&view, &mut encoder, list, clear)?;
-
-        let bytes_per_row = (w * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let row_bytes = w * 4;
+        let bytes_per_row = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let readback_size = u64::from(bytes_per_row) * u64::from(h);
+        if readback_size > self.device.limits().max_buffer_size {
+            return Err(RenderError::Device(format!(
+                "capture readback buffer is too large for {w}x{h}"
+            )));
+        }
+        self.draw(
+            &view,
+            &mut encoder,
+            overlay.unwrap_or(&DrawList::default()),
+            clear,
+        )?;
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
-            size: (bytes_per_row * h) as u64,
+            size: readback_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
@@ -399,11 +461,12 @@ impl Renderer {
             .slice(..)
             .get_mapped_range()
             .map_err(|e| RenderError::Device(format!("readback range: {e}")))?;
-        let mut pixels = Vec::with_capacity((w * h * 4) as usize);
-        for row in 0..h as usize {
-            let start = row * bytes_per_row as usize;
-            pixels.extend_from_slice(&data[start..start + (w * 4) as usize]);
-        }
+        let pixels = pack_capture_rows(
+            &data,
+            row_bytes as usize,
+            bytes_per_row as usize,
+            swap_red_blue,
+        );
         drop(data);
         readback.unmap();
         self.text.trim();
@@ -476,10 +539,98 @@ impl Renderer {
     }
 }
 
+fn capture_texture(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    (width, height): (u32, u32),
+) -> Result<wgpu::Texture, RenderError> {
+    let limit = device.limits().max_texture_dimension_2d;
+    if width > limit || height > limit {
+        return Err(RenderError::Device(format!(
+            "capture size {width}x{height} exceeds the texture limit of {limit}"
+        )));
+    }
+    Ok(device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("capture texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    }))
+}
+
+fn pack_capture_rows(data: &[u8], row_bytes: usize, pitch: usize, swap_red_blue: bool) -> Vec<u8> {
+    let mut pixels = Vec::with_capacity(data.len() / pitch * row_bytes);
+    for row in data.chunks_exact(pitch) {
+        pixels.extend_from_slice(&row[..row_bytes]);
+    }
+    if swap_red_blue {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+        }
+    }
+    pixels
+}
+
 fn present_mode(vsync: bool) -> wgpu::PresentMode {
     if vsync {
         wgpu::PresentMode::AutoVsync
     } else {
         wgpu::PresentMode::AutoNoVsync
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bgra_capture_rows_are_unpadded_and_swizzled() {
+        let rows = [10, 20, 30, 40, 0, 0, 0, 0, 50, 60, 70, 80, 0, 0, 0, 0];
+        assert_eq!(
+            pack_capture_rows(&rows, 4, 8, true),
+            [30, 20, 10, 40, 70, 60, 50, 80]
+        );
+        assert_eq!(
+            pack_capture_rows(&rows, 4, 8, false),
+            [10, 20, 30, 40, 50, 60, 70, 80]
+        );
+    }
+
+    #[test]
+    fn floating_point_target_can_be_captured_as_rgba8() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let format = wgpu::TextureFormat::Rgba16Float;
+        let gpu = match pollster::block_on(request_gpu(&instance, None, Some(format))) {
+            Ok((gpu, _)) => gpu,
+            Err(RenderError::NoAdapter(reason)) => {
+                eprintln!("SKIPPED (no GPU adapter): {reason}");
+                return;
+            }
+            Err(error) => panic!("renderer creation failed: {error}"),
+        };
+        let size = (37, 19);
+        let texture = capture_texture(&gpu.device, format, size).unwrap();
+        let mut renderer = Renderer::build(gpu, Target::Offscreen { texture }, size);
+        let capture = renderer
+            .capture_frame(None, Color([0.0, 0.0, 1.0, 1.0]))
+            .unwrap();
+        assert_eq!((capture.width, capture.height), size);
+        assert_eq!(capture.pixels.len(), (size.0 * size.1 * 4) as usize);
+        assert!(
+            capture
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == [0, 0, 255, 255])
+        );
     }
 }
