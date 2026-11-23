@@ -45,6 +45,7 @@
 - [Texture sampling rules](TEXTURE_SAMPLING.md)
 - [Anti-aliasing planning](ANTI_ALIASING.md)
 - [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
+- [The loading screen model](LOADING.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
