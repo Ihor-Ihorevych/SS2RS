@@ -16,7 +16,7 @@ Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.m
 
 ## Evidence
 
-`tools/re/ctse_leftovers_verify.py` over the retail install with all patches: 8,063 effective format-8 files (later archives override earlier ones) plus all 155 files of versions 4–7 read from the archives. Nothing from binaries except the name of one engine switch mentioned in the `INFO[0]` notes (`conventions.md` §5).
+`tools/re/ctse_leftovers_verify.py` over the retail install with all patches: 8,063 version-8 files (the newest version-8 copy of every path) plus all 155 files of versions 4–7 read from the archives. Of the 8,141 paths of the install that hold a container, the game reads 8,016 version-8 files and 125 old-version files: for 47 paths a newer old-version file overrides the version-8 copy, which the 8,063 still include. Nothing from binaries except the name of one engine switch mentioned in the `INFO[0]` notes (`conventions.md` §5).
 
 ## Old format versions 4–7 (155 files)
 
@@ -42,7 +42,7 @@ Everything else is identical: the section order, `RFIL`/`IDNT`/`EXTY` entries (`
 
 ## `INFO[0]`
 
-Values and counts over the 8,063 effective files: **0** in 769 files, **1** in 7,294 files. Observations:
+Values and counts over the 8,063 version-8 files: **0** in 769 files, **1** in 7,294 files. Observations:
 
 | `INFO[0]` | Files | With extra records after `EDOB` |
 |---:|---:|---:|
@@ -58,7 +58,7 @@ A reader must ignore `INFO[0]`; a writer may store 1 (no edit data) or 0.
 
 ## `RFIL.flags`
 
-`flags` is `0` or `0x00040000` (bit 18): **37,746 clear and 2,044 set** over the 8,063 effective files (5 %); counting every archive copy, including the overridden ones, the totals are 49,376 and 3,743 (`ctsemeta-container.md`). Facts:
+`flags` is `0` or `0x00040000` (bit 18): **37,746 clear and 2,044 set** over the 8,063 version-8 files (5 %); counting every archive copy, including the overridden ones, the totals are 49,376 and 3,743 (`ctsemeta-container.md`). Facts:
 
 - Only four container kinds ever carry the flag: **worlds** (1,630 of 11,367 entries), **`.ep`** (287 of 596), **`.rsc`** (65 of 270) and **`.ctl`** (62 of 68). No model, mesh, material, animation, effect or font file has a flagged entry.
 - The flag is a property of the **entry in one file**, not of the target: 177 paths are flagged in every file that lists them, 165 paths are flagged in some files and not in others (for example `Fonts/SeriousZurich.fnt`, `Models/Weapons/AutoShotgun/AutoShotgun_FP.mdl`).
@@ -120,4 +120,4 @@ What the extra classes are (all 60 distinct non-world files; worlds are in `ctse
 
 - `Textures/Levels/01a_Aisha/Trim_Horizontal_01.tex` (version 4, `2.005.00:24818`): `INFO` = `0, 1, 20, 2` (four words: `RFIL` 0, `IDNT` 1, types 20, objects 2); the first struct is `CResourceFile` with members numbered 1, 2, 4 (`rf_iNextFreeID`, `rf_iDefaultID`, `rf_crsShared`).
 - `Textures/Menu/background_gradient.tex` (version 7, `2.023.00:40633`): `INFO` = `0, 1, 20, 2`.
-- Counts: versions 4/5/6/7 = 20/4/113/18 files (155), 125 effective; `INFO[0]` 0/1 = 769/7,294; 119 files with extra records, all with `INFO[0]` 0; `RFIL.flags` set in 2,044 of 39,790 entries (effective files); `EXOB.flags` 1 in 36,000 of 42,927 entries; 94 entity-class codes for 143 classes; `CWorldInfoEntity` = 2, `CStaticModelEntity` = 10, `SDoubleShotgunItemEntity` = 94,229, `SHealthItemLEntity` = 86,275; shader codes 1000, 1010, 1020, 1025, 1030, 1040, 1050, 1070.
+- Counts: versions 4/5/6/7 = 20/4/113/18 files (155), 125 effective; `INFO[0]` 0/1 = 769/7,294; 119 files with extra records, all with `INFO[0]` 0; `RFIL.flags` set in 2,044 of 39,790 entries (version-8 files); `EXOB.flags` 1 in 36,000 of 42,927 entries; 94 entity-class codes for 143 classes; `CWorldInfoEntity` = 2, `CStaticModelEntity` = 10, `SDoubleShotgunItemEntity` = 94,229, `SHealthItemLEntity` = 86,275; shader codes 1000, 1010, 1020, 1025, 1030, 1040, 1050, 1070.
