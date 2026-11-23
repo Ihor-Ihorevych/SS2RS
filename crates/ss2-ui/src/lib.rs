@@ -1,6 +1,9 @@
 //! ss2-ui — UI framework, HUD, menus and localization (track T10)
 
 pub mod accessibility;
+pub mod coop_overlays;
+#[cfg(test)]
+mod coop_overlays_tests;
 pub mod devconsole;
 pub mod draw;
 pub mod focus;
