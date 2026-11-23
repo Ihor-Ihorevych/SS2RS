@@ -48,6 +48,10 @@ What the numbers mean: **received** counts packets that arrived at least once; l
 already arrived (jitter larger than the packet spacing causes this by itself, which is why `bad_wifi` shows far more than its 2 % of deliberate reordering); **duplicates received** counts second copies.
 Percentiles are the nearest rank.
 
+## Soak test
+
+`netsim soak` runs headless bots against a session server for a number of virtual minutes and checks invariants: see [SOAK.md](SOAK.md).
+
 ## How it was tested
 
 Twenty-one unit tests and seven end-to-end tests (the real binary), written before the code. The unit tests cover: the replay report (counts, per-player inputs, keyframes, the rendered text, a cut file, damaged and

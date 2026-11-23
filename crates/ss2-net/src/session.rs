@@ -733,6 +733,20 @@ impl SessionServer {
         }
     }
 
+    /// A datagram of any kind (an input packet, an acknowledgement) arrived from a connected `peer` at `now_us`: that
+    /// counts as proof of life, like a keepalive. The session layer only sees session messages, so **without this a
+    /// peer that is sending game traffic but whose few keepalives are lost is dropped for silence** (found by the
+    /// soak test: `docs/SOAK.md`). `false` if `peer` is not connected (nothing changes).
+    pub fn heard_from(&mut self, peer: PeerId, now_us: u64) -> bool {
+        match self.peers.get_mut(&peer) {
+            Some(p) => {
+                p.last_heard = p.last_heard.max(now_us);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Advance time: drop peers that have been silent too long and send keepalives to quiet ones.
     /// `server_tick` is what new clients are told.
     pub fn tick(&mut self, now_us: u64, server_tick: u64) -> Vec<Outgoing> {
@@ -1009,6 +1023,14 @@ impl SessionClient {
                 Vec::new()
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// A datagram of any kind (a snapshot, an acknowledgement) arrived from the server at `now_us`: that counts as proof of
+    /// life while connected (see [`SessionServer::heard_from`]). Ignored in any other state.
+    pub fn heard_from_server(&mut self, now_us: u64) {
+        if matches!(self.state, ClientState::Connected { .. }) {
+            self.last_heard = self.last_heard.max(now_us);
         }
     }
 
@@ -1785,6 +1807,92 @@ mod tests {
         c.tick(11 * SECOND);
         assert_eq!(c.state(), &ClientState::TimedOut);
         assert!(c.take_events().contains(&ClientEvent::TimedOut));
+    }
+
+    #[test]
+    fn game_traffic_counts_as_proof_of_life_on_both_sides() {
+        let mut s = SessionServer::new(ServerConfig {
+            idle_timeout_us: 5 * SECOND,
+            ..server_config()
+        });
+        s.handle(PeerId(1), hello_with("A", b""), 0);
+        // Input packets every second, no keepalives: not dropped.
+        for t in 1..=20 {
+            assert!(s.heard_from(PeerId(1), t * SECOND));
+            s.tick(t * SECOND, 0);
+        }
+        assert_eq!(s.connected(), 1);
+        // Silence for longer than the timeout after the last datagram still drops it.
+        s.tick(26 * SECOND, 0);
+        assert_eq!(s.connected(), 0);
+        assert!(
+            !s.heard_from(PeerId(1), 27 * SECOND),
+            "a peer that is gone is not revived"
+        );
+        assert!(
+            !s.heard_from(PeerId(99), 27 * SECOND),
+            "nor is one that never joined"
+        );
+        assert_eq!(s.connected(), 0);
+
+        let mut c = SessionClient::new(client_config("A"));
+        c.start(0);
+        c.handle(
+            Message::Welcome {
+                handshake: hs(),
+                mod_hash: 0,
+                slot: 0,
+                tick_hz: 30,
+                server_tick: 0,
+            },
+            100,
+        );
+        for t in 1..=20 {
+            c.heard_from_server(t * SECOND);
+            c.tick(t * SECOND);
+        }
+        assert!(
+            matches!(c.state(), ClientState::Connected { .. }),
+            "{:?}",
+            c.state()
+        );
+        c.tick(31 * SECOND);
+        assert_eq!(c.state(), &ClientState::TimedOut);
+        // Not connected: ignored, and it cannot make a connecting client wait longer.
+        let mut joining = SessionClient::new(client_config("B"));
+        joining.start(0);
+        joining.heard_from_server(9 * SECOND);
+        joining.handle(
+            Message::Welcome {
+                handshake: hs(),
+                mod_hash: 0,
+                slot: 0,
+                tick_hz: 30,
+                server_tick: 0,
+            },
+            9 * SECOND + 1,
+        );
+        joining.tick(9 * SECOND + 1);
+        assert!(matches!(joining.state(), ClientState::Connected { .. }));
+    }
+
+    #[test]
+    fn an_older_timestamp_does_not_make_a_peer_look_older() {
+        let mut s = SessionServer::new(ServerConfig {
+            idle_timeout_us: 5 * SECOND,
+            ..server_config()
+        });
+        s.handle(PeerId(1), hello_with("A", b""), 10 * SECOND);
+        assert!(
+            s.heard_from(PeerId(1), 3 * SECOND),
+            "a late-processed datagram"
+        );
+        s.tick(14 * SECOND, 0);
+        assert_eq!(
+            s.connected(),
+            1,
+            "the join at 10 s still counts: 4 s of silence is within 5 s"
+        );
     }
 
     #[test]

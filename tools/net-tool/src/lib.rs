@@ -12,6 +12,8 @@
 //! What it does **not** do: record a session (there is no simulation to record yet) or play one back
 //! (the playback driver is T08-025b), and the scenario is one steady one-way stream, not a game's traffic.
 
+pub mod soak;
+
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
