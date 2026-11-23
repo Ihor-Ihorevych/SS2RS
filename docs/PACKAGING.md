@@ -49,7 +49,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 
 - Today the only way is the environment variable **`SS2_DATA_DIR`**, pointing at the folder with the
   `.gro` archives ([install guide](user/install.md)).
-- The first-run wizard (T10-019, `P0`) is **planned**. `ss2-doctor` (T11-013, `crates/ss2-vfs/src/bin/ss2-doctor.rs`) exists, but **`release.yml` does not put it in the archives yet** (it packs `ss2-app` and `ss2-server` only): add it with T12-008.
+- The first-run wizard (T10-019, `P0`) is **built as a screen and a tested start-up decision but not shown by the window yet** (T10-019b, `docs/FIRST_RUN.md`). `ss2-doctor` (T11-013, `crates/ss2-vfs/src/bin/ss2-doctor.rs`) exists, but **`release.yml` does not put it in the archives yet** (it packs `ss2-app` and `ss2-server` only): add it with T12-008.
 - No package step downloads, copies or bundles game data.
 
 ## 2. Package formats per platform
@@ -121,7 +121,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 - **Settings (IMPLEMENTED):** `Settings::default_path` (`crates/ss2-core/src/settings.rs`) puts `settings.toml` in the OS config directory under `SS2RS/`, found with the `directories` crate (for example `%APPDATA%\SS2RS\settings.toml` on Windows). Saved through a temporary file; a missing or broken file gives defaults (T03-030, done). Schema and migration: T03-014 (`P0`, open).
 - **Key bindings:** `bindings_file` in `crates/ss2-platform-api/src/paths.rs` is planned; the feature is T03-005 (open).
 - **Saves (OPEN):** `PlatformPaths` has a `save_dir` and, since T03-012, resolves the per-OS directories (`PlatformPaths::resolve` with `UserDirs::detect()`: `%APPDATA%\SS2RS`, `~/.config/SS2RS` and so on) and a **portable mode** (a file `ss2-portable` next to the executable, or an explicit flag: everything below `ss2-data/` next to the executable); `ss2-app` uses it for its log, crash reports and settings (`crates/ss2-app/src/diagnostics.rs`); no save is written yet. Save format versioning follows RELEASING section 1.
-- **Data location (OPEN):** `SS2_DATA_DIR` today; the remembered choice is T10-019; a `--data` option is T03-020. None exists.
+- **Data location (OPEN):** `SS2_DATA_DIR` today; the remembered choice is `data_location.toml` (T10-019, written and read by tested code that the window does not call yet, T10-019b); a `--data` option is T03-020.
 - **Logs and crash reports (OPEN):** T03-019 and T03-016. The log location is not decided.
 - **Updates (OPEN):** new versions are announced on GitHub Releases only. No roadmap task adds an updater or update check, so the engine does not check for updates. An automatic update would need a new task.
 - **Uninstall:** nothing is registered with the system. For a portable archive, delete the folder. The settings file in the config directory stays until removed by hand. No saves or logs exist yet. The uninstall text belongs in the user guide (T12-014) once the installer question is settled.

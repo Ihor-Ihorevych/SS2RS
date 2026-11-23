@@ -686,7 +686,8 @@ impl DataWizard {
         match self.view {
             WizardView::Candidates => {
                 let n = self.candidates.len();
-                let shown = n.saturating_sub(self.scroll).min(VISIBLE_CANDIDATES);
+                // `scroll` never passes the first full window from the end, so the window is always full when there is enough to fill it.
+                let shown = n.min(VISIBLE_CANDIDATES);
                 // With nothing found, one slot says so.
                 let slots = shown.max(1);
                 let mut out = Vec::new();
@@ -804,7 +805,12 @@ impl DataWizard {
     pub fn draw_into(&self, list: &mut DrawList) {
         list.clear();
         Self::centered(list, 60.0, 72.0, theme::TEXT, "Find Serious Sam 2");
-        let line = self.notice.as_deref().or(self.message.as_deref());
+        // The reason for the wizard is no use on a result: it would only crowd the verdict.
+        let message = self
+            .message
+            .as_deref()
+            .filter(|_| self.view != WizardView::Result);
+        let line = self.notice.as_deref().or(message);
         if let Some(text) = line {
             let color = if self.notice.is_some() { WARN } else { DIM };
             Self::centered(list, 160.0, 28.0, color, shorten_middle(text, 120));
@@ -867,11 +873,11 @@ impl DataWizard {
         if n == 0 {
             Self::centered(list, 212.0, 28.0, DIM, "No install was found on its own.");
         } else {
-            let last = (self.scroll + VISIBLE_CANDIDATES).min(n);
             let text = if n > VISIBLE_CANDIDATES {
                 format!(
-                    "Found {n} folders (showing {}-{last}). Choose one:",
-                    self.scroll + 1
+                    "Found {n} folders (showing {}-{}). Choose one:",
+                    self.scroll + 1,
+                    self.scroll + VISIBLE_CANDIDATES
                 )
             } else if n == 1 {
                 "Found one folder. Choose it, or enter another:".to_owned()
@@ -988,8 +994,8 @@ impl DataWizard {
         };
         Self::centered(
             list,
-            170.0,
-            28.0,
+            205.0,
+            26.0,
             DIM,
             shorten_middle(&report.dir.display().to_string(), MAX_SHOWN_PATH_CHARS),
         );
@@ -1002,7 +1008,7 @@ impl DataWizard {
         };
         Self::centered(
             list,
-            212.0,
+            240.0,
             44.0,
             color,
             shorten_middle(&report.headline, 70),
@@ -1030,7 +1036,7 @@ impl DataWizard {
             Self::text(
                 list,
                 210.0,
-                285.0 + i as f32 * 40.0,
+                305.0 + i as f32 * 40.0,
                 28.0,
                 tint,
                 TextAlign::Left,

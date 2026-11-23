@@ -64,6 +64,7 @@
 - [Death and end-of-level screens](SESSION_SCREENS.md)
 - [Co-op overlays](COOP_OVERLAYS.md)
 - [Navigation model](NAVIGATION.md)
+- [First run: finding the install](FIRST_RUN.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
 - [Visibility: sight and sound](VISIBILITY.md)

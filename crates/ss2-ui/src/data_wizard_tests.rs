@@ -239,6 +239,21 @@ fn the_field_shows_a_window_around_the_cursor() {
     );
     assert!(middle.contains('|'));
     assert_eq!(middle.chars().count(), 3 + FIELD_VISIBLE_CHARS + 1 + 3);
+    // The window keeps forty characters before the cursor and twenty after it.
+    let chars: Vec<char> = long.chars().collect();
+    let at = |a: usize, b: usize| chars[a..b].iter().collect::<String>();
+    assert_eq!(
+        field_view(&long, 100, true),
+        format!("...{}|{}...", at(60, 100), at(100, 120))
+    );
+    assert!(
+        !field_view(&long, 40, true).starts_with("..."),
+        "the window starts at the start"
+    );
+    assert!(
+        field_view(&long, 41, true).starts_with("..."),
+        "one character in, the dots show"
+    );
     // Wherever the cursor is, it is inside the window.
     for cursor in 0..=200 {
         assert_eq!(
@@ -284,6 +299,12 @@ fn wrapping_breaks_at_spaces_keeps_the_indent_and_splits_a_word_that_is_too_long
         "a line may be exactly the width"
     );
     assert_eq!(wrap("aaa bbb ccc ddd", 8), ["aaa bbb", "ccc ddd"]);
+    assert_eq!(
+        wrap("aaaa bbb", 8),
+        ["aaaa bbb"],
+        "a line may be exactly the width"
+    );
+    assert_eq!(wrap("aaaa bbbb", 8), ["aaaa", "bbbb"]);
     assert_eq!(
         wrap("  -> Reinstall the game or copy the file back", 22),
         [
@@ -733,6 +754,9 @@ fn left_right_home_end_backspace_and_delete_edit_the_field_while_it_has_focus() 
 fn edits_do_nothing_while_a_button_has_the_focus_except_that_typing_returns_to_the_field() {
     let mut w = manual();
     typed(&mut w, "abc");
+    w.handle(WizardInput::Home);
+    nav(&mut w, NavInput::Right);
+    assert_eq!(w.field().cursor(), 1, "the cursor is in the middle");
     nav(&mut w, NavInput::Down);
     assert_eq!(w.focus(), 1);
     for input in [
@@ -747,12 +771,12 @@ fn edits_do_nothing_while_a_button_has_the_focus_except_that_typing_returns_to_t
     nav(&mut w, NavInput::Right);
     assert_eq!(
         (w.field().text(), w.field().cursor()),
-        ("abc", 3),
+        ("abc", 1),
         "nothing changed"
     );
     assert_eq!(w.focus(), 1);
     typed(&mut w, "d");
-    assert_eq!(w.field().text(), "abcd");
+    assert_eq!(w.field().text(), "adbc");
     assert_eq!(w.focus(), 0, "typing puts the focus on the field");
 }
 
@@ -804,6 +828,7 @@ fn the_check_button_checks_like_enter() {
 fn the_text_survives_a_trip_to_the_list_and_back() {
     let mut w = manual();
     typed(&mut w, "/keep/me");
+    w.handle(WizardInput::Home);
     nav(&mut w, NavInput::Back);
     nav(&mut w, NavInput::Activate);
     assert_eq!(w.view(), WizardView::Manual);
@@ -945,6 +970,70 @@ fn the_message_is_shown_and_a_notice_takes_its_place() {
         w.draw().texts.len(),
         3,
         "title and the two lines of the searching screen"
+    );
+}
+
+#[test]
+fn the_reason_for_the_wizard_is_not_drawn_over_a_result() {
+    let mut w = DataWizard::new(Some("because of the reason".into()));
+    w.start();
+    w.set_candidates(candidates(1));
+    assert!(
+        texts(&w.draw())
+            .iter()
+            .any(|t| t == "because of the reason")
+    );
+    nav(&mut w, NavInput::Activate);
+    w.set_report(report(true, 0, &["Archives: 14 found, 14 readable"]));
+    assert!(
+        !texts(&w.draw())
+            .iter()
+            .any(|t| t == "because of the reason")
+    );
+    w.set_notice("a notice still shows");
+    assert!(texts(&w.draw()).iter().any(|t| t == "a notice still shows"));
+}
+
+#[test]
+fn one_warning_already_tints_the_headline_and_starting_again_drops_a_notice() {
+    let mut w = found(1);
+    nav(&mut w, NavInput::Activate);
+    w.set_report(report(true, 1, &["WARNING: one"]));
+    let list = w.draw();
+    let head = list
+        .texts
+        .iter()
+        .find(|t| t.text == "Serious Sam 2 found")
+        .unwrap();
+    let line = list
+        .texts
+        .iter()
+        .find(|t| t.text.starts_with("WARNING"))
+        .unwrap();
+    assert_eq!(
+        head.color, line.color,
+        "one warning is enough for the warning colour"
+    );
+    w.set_notice("old news");
+    assert_eq!(w.start(), WizardCommand::Search);
+    assert_eq!(w.notice(), None);
+}
+
+#[test]
+fn more_lines_than_fit_are_counted_exactly() {
+    let mut w = found(1);
+    nav(&mut w, NavInput::Activate);
+    let lines: Vec<String> = (0..12).map(|i| format!("line {i}")).collect();
+    let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+    w.set_report(report(true, 0, &lines));
+    let list = w.draw();
+    let body: Vec<_> = list.texts.iter().filter(|t| t.pos.x == 210.0).collect();
+    assert_eq!(body.len(), MAX_REPORT_LINES);
+    assert_eq!(body[7].text, "line 7", "eight lines are shown");
+    assert!(
+        body[8].text.starts_with("... and 4 more lines"),
+        "{}",
+        body[8].text
     );
 }
 

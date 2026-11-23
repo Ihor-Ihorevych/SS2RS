@@ -418,6 +418,31 @@ fn a_choice_that_cannot_be_saved_still_goes_on_and_tells_the_player() {
 }
 
 #[test]
+fn the_remembered_folder_is_offered_first_with_every_source_that_named_it() {
+    let rig = Rig::new();
+    let install = rig.dir("sam");
+    make_install(&install, &COMPLETE);
+    ss2_vfs::save_choice(
+        &rig.store(),
+        &ss2_vfs::RememberedChoice {
+            dir: install.clone(),
+            validated_at: 1,
+        },
+    )
+    .unwrap();
+    // The same folder is also the current folder: one row, two sources, the remembered one first.
+    let env = TestEnv::in_dir(&install);
+    let host = Host::new(&env, rig.store(), 2);
+    let mut w = wizard_for(&WizardReason::FirstRun);
+    start(&mut w, &host);
+    assert_eq!(w.candidates().len(), 1);
+    assert_eq!(
+        w.candidates()[0].detail,
+        "remembered choice, current folder - patch 2.100 (build 800000)"
+    );
+}
+
+#[test]
 fn search_again_finds_a_folder_that_appeared_meanwhile_and_quit_quits() {
     let rig = Rig::new();
     let install = rig.dir("late");

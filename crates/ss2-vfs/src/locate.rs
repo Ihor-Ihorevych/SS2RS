@@ -177,8 +177,8 @@ pub fn parse_reg_query(text: &str, value: &str) -> Option<String> {
         if kind != "REG_SZ" && kind != "REG_EXPAND_SZ" {
             return None;
         }
-        let data = data.trim();
-        return (!data.is_empty()).then(|| data.to_owned());
+        // `line` was trimmed and split after the type, so `data` is not empty.
+        return Some(data.trim().to_owned());
     }
     None
 }

@@ -124,33 +124,44 @@ fn the_current_vdf_layout_gives_every_path_and_ignores_the_apps() {
 }
 "#;
     assert_eq!(
-        parse_library_folders(text),
-        [
-            PathBuf::from(r"C:\Program Files (x86)\Steam"),
-            PathBuf::from(r"D:\Steam Library")
-        ]
+        library_texts(text),
+        [r"C:\Program Files (x86)\Steam", r"D:\Steam Library"]
     );
+}
+
+/// The folders of a VDF as text: `PathBuf` equality on Windows treats `/` and `\` alike, which would hide a wrong escape.
+fn library_texts(text: &str) -> Vec<String> {
+    parse_library_folders(text)
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[test]
+fn the_key_path_may_be_written_in_any_case_and_old_style_pairs_follow_sections() {
+    assert_eq!(
+        library_texts("\"x\" { \"Path\" \"/a\" \"PATH\" \"/b\" }"),
+        ["/a", "/b"]
+    );
+    // After a section has closed, a numbered pair is at the top level again.
+    assert_eq!(
+        library_texts("\"LibraryFolders\" { \"0\" { \"x\" \"y\" } \"1\" \"/after\" }"),
+        ["/after"]
+    );
+    // A numbered pair inside a section is not a library.
+    assert!(library_texts("\"LibraryFolders\" { \"0\" { \"1\" \"/inside\" } }").is_empty());
 }
 
 #[test]
 fn the_old_vdf_layout_is_read_too() {
     let text = "\"LibraryFolders\"\n{\n\t\"TimeNextStatsReport\"\t\"1400000000\"\n\t\"ContentStatsID\"\t\"-1\"\n\t\"1\"\t\"E:\\\\Games\\\\Steam\"\n\t\"2\"\t\"/mnt/games/steam\"\n}\n";
-    assert_eq!(
-        parse_library_folders(text),
-        [
-            PathBuf::from(r"E:\Games\Steam"),
-            PathBuf::from("/mnt/games/steam")
-        ]
-    );
+    assert_eq!(library_texts(text), [r"E:\Games\Steam", "/mnt/games/steam"]);
 }
 
 #[test]
 fn escapes_comments_and_unicode_in_the_vdf_are_handled() {
     let text = "// a comment \"path\" \"nope\"\n\"x\" { \"path\" \"C:\\\\Игры\\\\a \\\"b\\\"\" }";
-    assert_eq!(
-        parse_library_folders(text),
-        [PathBuf::from("C:\\Игры\\a \"b\"")]
-    );
+    assert_eq!(library_texts(text), ["C:\\Игры\\a \"b\""]);
 }
 
 #[test]
@@ -467,6 +478,73 @@ fn linux_steam_gog_and_wine_places_are_searched_under_the_home_folder() {
     );
 }
 
+/// A machine of this family where the game sits in `steamapps/common` of the Steam folder `root`.
+fn steam_at(mut env: FakeEnvironment, root: &str) -> Discovery {
+    let common = format!("{root}/steamapps/common");
+    env = env
+        .with_dir(&common, &["Serious Sam 2"])
+        .with_dir(format!("{common}/Serious Sam 2"), &["All_PC_01.gro"]);
+    discover(&env, None)
+}
+
+#[test]
+fn every_linux_steam_folder_is_searched() {
+    for root in [
+        "/home/ann/.steam/steam",
+        "/home/ann/.local/share/Steam",
+        "/home/ann/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+        "/home/ann/.wine/drive_c/Program Files (x86)/Steam",
+    ] {
+        let d = steam_at(linux(), root);
+        assert_eq!(d.candidates.len(), 1, "{root}: {d:?}");
+        assert_eq!(d.candidates[0].sources, [CandidateSource::Steam], "{root}");
+    }
+}
+
+#[test]
+fn every_windows_steam_folder_is_searched() {
+    // The registry values, the two program files folders (from the variables) and the default place.
+    let hkcu = windows().with_registry(r"HKCU\Software\Valve\Steam", "SteamPath", "E:/s1");
+    assert_eq!(steam_at(hkcu, "E:/s1").candidates.len(), 1);
+    let wow = windows().with_registry(
+        r"HKLM\SOFTWARE\WOW6432Node\Valve\Steam",
+        "InstallPath",
+        "E:/s2",
+    );
+    assert_eq!(steam_at(wow, "E:/s2").candidates.len(), 1);
+    let hklm = windows().with_registry(r"HKLM\SOFTWARE\Valve\Steam", "InstallPath", "E:/s3");
+    assert_eq!(steam_at(hklm, "E:/s3").candidates.len(), 1);
+    let x86 = windows().with_var("ProgramFiles(x86)", r"F:\PF86");
+    assert_eq!(steam_at(x86, "F:/PF86/Steam").candidates.len(), 1);
+    let pf = windows().with_var("ProgramFiles", r"F:\PF");
+    assert_eq!(steam_at(pf, "F:/PF/Steam").candidates.len(), 1);
+    let default = steam_at(windows(), "C:/Program Files (x86)/Steam");
+    assert_eq!(default.candidates.len(), 1);
+    // A blank registry value is no folder.
+    let blank = windows().with_registry(r"HKCU\Software\Valve\Steam", "SteamPath", "  ");
+    assert!(discover(&blank, None).candidates.is_empty());
+}
+
+#[test]
+fn the_store_places_follow_the_program_files_variables() {
+    for var in ["ProgramFiles(x86)", "ProgramFiles"] {
+        let env = windows()
+            .with_var(var, r"G:\Apps")
+            .with_dir(
+                r"G:\Apps\GOG Galaxy\Games\Serious Sam 2",
+                &["All_PC_01.gro"],
+            )
+            .with_dir(r"G:\Apps\Croteam\Serious Sam 2", &["All_PC_01.gro"]);
+        let d = discover(&env, None);
+        let sources: Vec<_> = d.candidates.iter().map(|c| c.sources[0]).collect();
+        assert_eq!(
+            sources,
+            [CandidateSource::Gog, CandidateSource::Retail],
+            "{var}"
+        );
+    }
+}
+
 #[test]
 fn the_macos_steam_folder_is_searched() {
     let mut env = FakeEnvironment::new(Os::MacOs)
@@ -764,6 +842,21 @@ fn a_failed_save_leaves_the_old_choice_alone() {
     assert_eq!(
         load_choice(&file),
         LoadedChoice::Found(choice(&tmp.path().join("keep"), 7))
+    );
+}
+
+#[test]
+fn a_failed_rename_leaves_no_temporary_file_behind() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = choice_file(tmp.path());
+    // A folder with something in it stands where the file should go: the rename must fail.
+    fs::create_dir(&file).unwrap();
+    fs::write(file.join("x"), "x").unwrap();
+    let err = save_choice(&file, &choice(&tmp.path().join("g"), 1)).unwrap_err();
+    assert!(matches!(err, Error::Io { .. }), "{err:?}");
+    assert!(
+        !file.with_extension("toml.tmp").exists(),
+        "the temporary file was removed"
     );
 }
 
