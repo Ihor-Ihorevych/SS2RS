@@ -34,6 +34,7 @@ Tooling is not invented here: every command below exists in the repo or is a sta
 | Sim scenario | planned, T08-017 | none yet | no | n/a | n/a |
 | Netsim | T08-017 (in-process; socket level is T08-017b) | `cargo test -p ss2-net` | no | n/a | n/a |
 | Soak | planned, T12-016 | none yet | yes (its own server) | n/a | n/a |
+| Property | exists (physics queries only), T07-025 | `crates/ss2-physics/tests/properties.rs` (`proptest`) | no | yes (256 cases each) | no |
 | Fuzz | T12-007 (targets), T02-030 (format readers) | `fuzz/`, `cargo +nightly fuzz run <target>` | no | n/a | nightly (not yet run in CI) |
 
 Scheduled workflows are listed in section 5. None of them runs the test suite. There is no nightly
@@ -77,7 +78,7 @@ test workflow yet.
 - **Naming:** same as unit tests; put a fixture name in the test name when it matters.
 - **Run:** same as unit tests (`cargo test --workspace --locked`).
 - **Game data:** no. This is the main way parser code is tested on plain CI.
-- **When:** every pull request. Malformed-input coverage is also the target of the fuzz layer (3.9).
+- **When:** every pull request. Malformed-input coverage is also the target of the fuzz layer (3.10).
 
 ### 3.3 Data-gated tests (exists)
 
@@ -182,7 +183,19 @@ test workflow yet.
   a machine that has the data (see T12-002).
 - **When:** planned nightly. Not on pull requests.
 
-### 3.9 Fuzz tests (T12-007; the game-format targets are T02-030)
+### 3.9 Property tests (exists for the physics queries, T07-025)
+
+- **What:** `proptest` generates random meshes, rays and sphere sweeps and checks them against a slow brute-force answer or an invariant, then shrinks a failure to a minimal input. In
+  `crates/ss2-physics/tests/properties.rs`: the BVH ray cast equals a loop over every triangle and does not depend on triangle order; a ray respects its maximum distance; a sphere sweep **never tunnels**
+  (if the sphere, sampled along its path, is ever inside a triangle, the sweep reports a hit at or before it), stops outside what it hits, and is never later than a ray along the same line; moving colliders
+  give the same answer in any order; four threads give the same bits as one.
+- **Run:** they run with the other tests (256 cases each). `PROPTEST_CASES=20000 cargo test --release -p ss2-physics --test properties` runs many more (about ten seconds). A failing case is printed with
+  its minimal input; copy it into an ordinary test next to the fix (proptest's own regression file does not work for integration tests, so it is switched off).
+- **What it found:** one thing, in the first run: a sphere of **radius 0** can report a touch where a ray misses a triangle by about 2e-3 (the zero-radius edge test is a tangent test). It is not a bug for the controller (radius is never 0),
+  so the property is one-directional (a sphere is never later than a ray) and the slop is recorded in the test.
+- **Not covered:** "no stuck in corners" and "no tunneling at maximum speed" of the **character controller** (T07-005 does not exist: T07-025b); other crates (a fuzz-like property for the replay and save readers exists as fuzz targets, not here).
+
+### 3.10 Fuzz tests (T12-007; the game-format targets are T02-030)
 
 - **What:** `cargo-fuzz` targets for the parsers and loaders that exist today (console lines, launch options, settings and
   key bindings files, virtual paths, `.gro` archives, the install checker, archive names), listed in `docs/FUZZING.md`.
