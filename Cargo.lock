@@ -1421,6 +1421,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "net-tool"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ss2-net",
+ "tempfile",
+]
+
+[[package]]
 name = "nix"
 version = "0.31.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
