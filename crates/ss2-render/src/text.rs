@@ -7,19 +7,22 @@ use glyphon::{
 };
 use ss2_ui::{Canvas, TextAlign, TextRun};
 
-use crate::RenderError;
+use crate::{PixelRect, RenderError};
 
 const INTER: &[u8] = include_bytes!("../assets/Inter-Regular.ttf");
 
 /// Wide enough that placeholder labels never wrap.
 const BOX_WIDTH: f32 = 1400.0;
 
+/// Draws text with glyphon. Each batch of text of a frame has its own `TextRenderer` (glyphon draws everything a
+/// renderer has prepared in one call, so text between two other draws needs a renderer of its own); they share
+/// one glyph atlas.
 pub(crate) struct TextPainter {
     font_system: FontSystem,
     swash: SwashCache,
     viewport: Viewport,
     atlas: TextAtlas,
-    renderer: TextRenderer,
+    renderers: Vec<TextRenderer>,
 }
 
 impl TextPainter {
@@ -34,26 +37,18 @@ impl TextPainter {
         let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
         let cache = Cache::new(device);
         let viewport = Viewport::new(device, &cache);
-        let mut atlas = TextAtlas::new(device, queue, &cache, format);
-        let renderer =
-            TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+        let atlas = TextAtlas::new(device, queue, &cache, format);
         Self {
             font_system,
             swash: SwashCache::new(),
             viewport,
             atlas,
-            renderer,
+            renderers: Vec::new(),
         }
     }
 
-    pub(crate) fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        size: (u32, u32),
-        canvas: &Canvas,
-        texts: &[TextRun],
-    ) -> Result<(), RenderError> {
+    /// Tell glyphon how large the target of the coming batches is.
+    pub(crate) fn begin(&mut self, queue: &wgpu::Queue, size: (u32, u32)) {
         self.viewport.update(
             queue,
             Resolution {
@@ -61,6 +56,43 @@ impl TextPainter {
                 height: size.1,
             },
         );
+    }
+
+    /// Lay out `texts` and put their glyphs on the renderer number `slot` (made when it is first used).
+    /// Glyphs outside `clip` (a pixel rectangle; the whole target when `None`) are not drawn.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare(
+        &mut self,
+        slot: usize,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        size: (u32, u32),
+        canvas: &Canvas,
+        texts: &[&TextRun],
+        clip: Option<PixelRect>,
+    ) -> Result<(), RenderError> {
+        while self.renderers.len() <= slot {
+            self.renderers.push(TextRenderer::new(
+                &mut self.atlas,
+                device,
+                wgpu::MultisampleState::default(),
+                None,
+            ));
+        }
+        let bounds = match clip {
+            Some(r) => TextBounds {
+                left: r.x as i32,
+                top: r.y as i32,
+                right: (r.x + r.w) as i32,
+                bottom: (r.y + r.h) as i32,
+            },
+            None => TextBounds {
+                left: 0,
+                top: 0,
+                right: size.0 as i32,
+                bottom: size.1 as i32,
+            },
+        };
         let attrs = Attrs::new().family(Family::Name("Inter"));
         let scale = canvas.scale;
         let mut buffers = Vec::with_capacity(texts.len());
@@ -91,12 +123,7 @@ impl TextPainter {
                     left,
                     top: p.y,
                     scale: 1.0,
-                    bounds: TextBounds {
-                        left: 0,
-                        top: 0,
-                        right: size.0 as i32,
-                        bottom: size.1 as i32,
-                    },
+                    bounds,
                     default_color: GlyphColor::rgba(
                         (c[0] * 255.0).round() as u8,
                         (c[1] * 255.0).round() as u8,
@@ -107,7 +134,7 @@ impl TextPainter {
                 }
             })
             .collect();
-        self.renderer
+        self.renderers[slot]
             .prepare(
                 device,
                 queue,
@@ -120,11 +147,13 @@ impl TextPainter {
             .map_err(|e| RenderError::Device(format!("text prepare: {e}")))
     }
 
+    /// Draw what renderer `slot` prepared.
     pub(crate) fn render<'pass>(
         &'pass self,
+        slot: usize,
         pass: &mut wgpu::RenderPass<'pass>,
     ) -> Result<(), RenderError> {
-        self.renderer
+        self.renderers[slot]
             .render(&self.atlas, &self.viewport, pass)
             .map_err(|e| RenderError::Device(format!("text render: {e}")))
     }
