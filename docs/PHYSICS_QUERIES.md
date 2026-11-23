@@ -86,5 +86,5 @@ distance, so "a moving hit always replaces the static one" cannot be told apart 
   the static world, rotated boxes and capsules.
 - **Several hits** (`raycast_all`) for piercing weapons; **the triangle index** in a hit.
 - **The material table** that says what a `PhysMaterialId` means (T07-009), the **entity mapping** for `ColliderId` (the simulation's job,
-  T08-002) and **lag compensation** (T08-010).
+  T08-002) and **lag compensation** (built as a library: `docs/LAG_COMPENSATION.md`).
 - **Threads:** queries are `&self`, but running them in parallel is not tested.
