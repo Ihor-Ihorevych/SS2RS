@@ -30,6 +30,7 @@ CTSEMETA leftovers (docs/re/ctsemeta-leftovers.md):
 ```
 python -I tools/re/ctse_leftovers_verify.py "C:\path\to\Serious Sam 2"                  # old formats 4-7, INFO[0], EDTY, RFIL/EXOB flags (about 4 minutes)
 python -I tools/re/ctse_leftovers_verify.py "C:\path\to\Serious Sam 2" --only codes     # entity-class codes of the 59 worlds (slow)
+python -I tools/re/dtty_verify.py "C:\path\to\Serious Sam 2"                            # docs/re/dtty-kinds.md: DTTY kind and flags statistics
 ```
 
 Skeleton evidence (docs/re/skl.md):
