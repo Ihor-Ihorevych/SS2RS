@@ -4,7 +4,7 @@
 //!
 //! The decisions are plain values and functions so they can be tested without a GPU
 //! ([`GpuConfig`], [`LimitTier`], [`RecoveryTracker`], [`DeviceReport::lines`]); the code that calls
-//! wgpu with them is small ([`request_gpu`]) and the [`crate::Renderer`] uses it to start and to
+//! wgpu with them is small (`request_gpu`) and the [`crate::Renderer`] uses it to start and to
 //! rebuild itself. See `docs/GPU_INIT.md`.
 
 use std::collections::VecDeque;
