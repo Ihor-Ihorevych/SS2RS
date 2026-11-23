@@ -6,7 +6,7 @@ and how names and versions are handled. It does not change any `Cargo.toml`.
 
 ## 1. Current state and expectations
 
-- All 25 workspace members (23 crates under `crates/`, `tools/gro-tool` and `xtask`) set
+- All 26 workspace members (23 crates under `crates/`, `tools/gro-tool`, `tools/net-tool` and `xtask`) set
   `publish = false` in their manifest. All of them inherit `license = "Apache-2.0"` and
   `edition = "2024"` from `[workspace.package]` in the
   [root `Cargo.toml`](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/Cargo.toml).
@@ -35,6 +35,7 @@ published · **3** binary, tool or xtask, never published · **4** undecided (de
 | `ss2-app` | client and listen-server executable | 3 | Binary |
 | `ss2-server` | headless dedicated server executable | 3 | Binary |
 | `tools/gro-tool` | list and extract files from a game install | 3 | Tool that reads a player's install; never published |
+| `tools/net-tool` | inspect replay files, run the network simulator | 3 | Development tool; reads no game data; not in the release archives |
 | `xtask` | repository tooling | 3 | Repo-only tooling |
 | `ss2-testkit` | data-gated test helpers | 2 | Reads `SS2_DATA_DIR`; test support only |
 | `ss2-bench` | criterion benchmark harness | 2 | Benchmarks only (docs/PERF_BUDGETS.md) |
@@ -128,7 +129,7 @@ A crate is published only when **all** of these hold, checked in the PR that rem
 
 | Question | Decision | Status |
 |---|---|---|
-| Can any crate be published now? | No. All 25 members keep `publish = false` | In force |
+| Can any crate be published now? | No. All 26 members keep `publish = false` | In force |
 | First library candidate | `ss2-vfs` (after its API is final and RFC 0001 is accepted) | Candidate |
 | Format readers (`ss2-meta`) | Candidate after T02-006..008 land | Pending |
 | Name reservation | None until T00-031 is decided; then `0.0.1` placeholders (§6) | Pending T00-031 |
