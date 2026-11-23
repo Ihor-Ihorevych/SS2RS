@@ -24,7 +24,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-008** · Texture sampling: filtering, anisotropy, mip bias, sRGB/linear rules, normal-map decode, cubemaps · `M` · `P0`
 - [ ] **T04-016** · Transparency: sorting, blend modes (additive/alpha/premult), alpha-to-coverage option, soft particles · `M` · `P1`
 - [ ] **T04-023** · Instancing & batching for hordes (hundreds of animated enemies), animation texture/instanced skinning option · `L` · `P1`
-- [~] **T04-024** [INPRG @Ihor-Ihorevych/agent · branch `T04-024-lod-distance-culling-policy` · 2026-11-23] · LOD & distance culling policy (model LODs, impostors for far enemies), quality-tier aware · `M` · `P1`
+- [x] **T04-024** · LOD & distance culling policy (model LODs, impostors for far enemies), quality-tier aware: `ss2_render_api::lod` (`docs/LOD.md`): selection by screen coverage with levels, an impostor, size and distance culling, quality bias and view distance, hysteresis, a per-thing tracker; **nothing feeds it yet (no mesh levels, no impostors, no renderer calls it), no cross-fade** (T04-024b) · `M` · `P1`
+- [ ] **T04-024b** · Use the LOD policy in the mesh path (levels from `.bmf`, T04-005), impostor generation and drawing, cross-fade or dithered transitions, per-class distances and shadow-caster LOD, and a benchmark of selection for thousands of things · `M` · `P1` · Deps: T04-024, T04-005
 
 ## World & lighting (needs T01-012/045) — M3
 - [ ] **T04-009** · World geometry renderer: static geometry chunks, sector/portal or PVS culling per `.wld` spec, material batching · `XL` → split (batches, culling, streaming) · `P0` · Deps: T02-020

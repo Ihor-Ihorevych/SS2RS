@@ -35,6 +35,7 @@
 - [UI frame budget](UI_BUDGET.md)
 - [The mixer core](MIXER.md)
 - [Graphics quality](QUALITY.md)
+- [Level of detail](LOD.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
