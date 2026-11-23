@@ -5,9 +5,11 @@ T01-036); HUD params from `HudParams.rsc`-style databases. **PC first: mouse, ke
 Touch/mobile layout is Phase 2; the framework just must not bake in "mouse always exists".
 
 ## Framework (Wave 0 — no game data needed)
-- [ ] **T10-001** · UI framework decision + core: retained vs immediate mode; layout (anchors/flex), styling/skins, event routing, focus system; renders via T04-017 · `L` · `P0`
+- [x] **T10-001** · UI framework decision + core: retained vs immediate mode; layout (anchors/flex), styling/skins, event routing, focus system; renders via T04-017: the **decision** is `docs/rfcs/0010-ui-framework.md` (**in review**: our own immediate-style layer for the game, `egui` for tools only); the core that exists is the menu slice, anchors and scale (T10-017), the draw budget (T10-023); **stack/flex layout, a skin data model, a general focus graph and text wrapping are not built** (T10-001b) · `L` · `P0`
+- [ ] **T10-001b** · UI core after RFC 0010: stack and flex layout, the `Skin` data model (placeholder now, original data T10-004/T10-033), a general focus graph shared by mouse, keyboard and gamepad (with T10-005), event routing beyond the menu's pointer code, a small widget set with tests and golden images, text wrapping and coloured runs (T10-002) · `L` · `P0` · Deps: T10-001
 - [ ] **T10-002** · Text rendering: glyph atlas from `.fnt` or fallback TTF, shaping basics, Unicode ranges (Latin/Cyrillic/…), wrapping, colored runs · `L` · `P0` · Deps: T02-025
-- [ ] **T10-005** · Navigation model: mouse hover, keyboard/gamepad focus graph, consistent back/confirm; input-device-agnostic focus so touch can be added later · `M` · `P0`
+- [x] **T10-005** · Navigation model: mouse hover, keyboard/gamepad focus graph, consistent back/confirm; input-device-agnostic focus so touch can be added later: `ss2_ui::focus` (`docs/NAVIGATION.md`): a focus graph with spatial neighbours and explicit links, wrapping, hover-focus and press-release activation, the same events for every device; property-tested; **`Menu` does not use it yet, and scrolling lists, modals, text fields and controls that consume a direction are not modelled** (T10-005b) · `M` · `P0`
+- [ ] **T10-005b** · Use the focus model: move `Menu` and its pointer code onto `FocusGraph`, controls that consume a direction (sliders), modal focus traps, scrolling lists and tab groups, held-direction repeat, text fields with the IME (T10-022) · `M` · `P0` · Deps: T10-005
 - [x] **T10-017** · Resolution/scale policy: virtual canvas, DPI scaling, aspect ratios (16:9 → 21:9 ultrawide): `ss2_ui::scale` (`docs/UI_SCALING.md`): letterbox or expand, a safe area, the user's smaller-UI scale, a text floor with the OS scale factor, anchors; **nothing uses it yet** (T10-017b) · `M` · `P0`
 - [ ] **T10-017b** · Adopt the scale policy: move the menu screens and the app from `Canvas::fit` to `ScreenMetrics`, draw a full-window background in `Expand` mode, anchor the HUD in `safe_area`, golden screenshots at 16:9, 21:9, 4:3 and portrait, the aspect and UI-scale settings (T10-012) · `S` · `P0` · Deps: T10-017
 
@@ -35,7 +37,8 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Quality
 - [ ] **T10-015** · UI golden-image tests for each screen at 3 resolutions + 2 aspect ratios · `M` · `P1`
-- [~] **T10-023** [INPRG @Ihor-Ihorevych/agent · branch `T10-023-ui-budget` · 2026-11-23] · UI performance budget (draw calls; zero steady-state allocations per frame) · `S` · `P2`
+- [x] **T10-023** · UI performance budget (draw calls; zero steady-state allocations per frame): `docs/UI_BUDGET.md`: at most 24 quads and 32 text runs per frame, zero allocations in a warm frame (`Menu::draw_into`, `Cow` text, an allocation-free layout), measured once with a counting allocator and kept as a safe structural test (no owned text, no list growth); **the counting allocator itself needs `unsafe` approval, and the renderer side, the dev console overlay and frame time are not measured** (T10-023b) · `S` · `P2`
+- [ ] **T10-023b** · UI budget follow-ups: a committed counting-allocator test if a maintainer approves the `unsafe`, allocations and GPU draw calls of the renderer per frame (text buffers, vertex data), the developer console overlay (T10-007b), the HUD and every new screen added to the frame budget test, a frame-time benchmark of `draw_into` · `S` · `P2` · Deps: T10-023
 
 ## PHASE 2 — Mobile UI (not scheduled before M8)
 - [ ] **T10-006** · Touch HUD (virtual controls from T03-009), responsive layout, customization screen, left-handed mode · `L` · `PHASE 2`

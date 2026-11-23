@@ -38,6 +38,7 @@ pub struct MemoryVfs;                           // mock / test double
 - **`open` returns `Box<dyn ReadSeek>`** (`Read + Seek + Send`). This is the seam T02-005 needs: memory-mapped, buffered, or (Phase 2) Android content-URI backends all fit behind it without touching loaders. `read` is a convenience; backends may override it.
 - **`list` is sorted and merged across layers** so overrides (`Patch_*` over `All_PC_*`, mods) and directory merges (T02-002) are invisible to callers and deterministic.
 - Mount/layer management is **not** part of the trait. Constructing and layering a concrete VFS is the app's job (T02-002/003); consumers only see `Arc<dyn Vfs>`.
+- **Loose directories.** Mount a local folder with `DirectoryVfs::new(path)` and pass it to `LayeredVfs::mount` to give it priority over archives mounted earlier. Lookups use normalized names and read the current filesystem, including any files added after mounting. Files stream through `File`, and directory listings omit symbolic links and special files. Case-colliding entries in the same host directory are reported as invalid.
 
 ### `ss2-assets`
 
@@ -54,6 +55,7 @@ pub struct AssetManager;      // new(Arc<dyn Vfs>), register_loader(L), load::<T
 ```
 
 - **Typed handles, type-erased registry.** The manager maps extension → loader; `load::<T>` checks that the loader produces `T`. A mismatch is a caller error (`Err`), caught on first use instead of a bad downcast later.
+- **Format registration.** Each format crate supplies an `AssetLoader` to `AssetManager::register_loader`. Registration lowercases extensions, strips leading dots, and installs the whole set together. An empty list, an invalid VFS suffix, or a collision with a registered loader returns `Error::Invalid` and leaves the registry unchanged.
 - **Two kinds of failure, kept apart.** *Caller mistakes* (bad path, no loader, wrong `T`) return `Err` from `load`. *Data problems* (missing file, corrupt contents) are stored in the handle (`LoadState::Failed`, `error()`), so one bad asset never aborts a level load and the failure is cached and reportable once.
 - **Handles may be `Loading`.** v0 loads synchronously, so handles are `Ready` or `Failed` on return, **but consumers must not rely on that**: T02-009 makes loading async. `LoadState` is `#[non_exhaustive]` for the same reason.
 - **Dependencies** (`ctx.load_dependency`) go through the same manager, so shared textures are loaded once. They are recorded per asset (`Handle::dependencies`), which is the hook for the `RFIL`-based dependency graph (T02-009). Cyclic dependencies are allowed and terminate.

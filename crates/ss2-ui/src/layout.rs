@@ -24,23 +24,25 @@ pub const SLIDER_TRACK_X: f32 = 300.0;
 /// Slider track width.
 pub const SLIDER_TRACK_W: f32 = 300.0;
 
+/// One rectangle per item (spacers included), centered horizontally on the canvas, **without allocating**: the layout of a frame.
+pub(crate) fn item_rect_iter(items: &[Item]) -> impl Iterator<Item = Rect> + '_ {
+    let mut y = TOP;
+    items.iter().map(move |item| {
+        let (w, h, gap) = match item {
+            Item::Spacer => (ITEM_W, SPACER_H, GAP),
+            Item::Text { .. } => (TEXT_W, TEXT_H, TEXT_GAP),
+            _ => (ITEM_W, ITEM_H, GAP),
+        };
+        let x = (crate::geometry::CANVAS_W - w) / 2.0;
+        let r = Rect { x, y, w, h };
+        y += h + gap;
+        r
+    })
+}
+
 /// One rectangle per item (spacers included), centered horizontally on the canvas.
 pub(crate) fn item_rects(items: &[Item]) -> Vec<Rect> {
-    let mut y = TOP;
-    items
-        .iter()
-        .map(|item| {
-            let (w, h, gap) = match item {
-                Item::Spacer => (ITEM_W, SPACER_H, GAP),
-                Item::Text { .. } => (TEXT_W, TEXT_H, TEXT_GAP),
-                _ => (ITEM_W, ITEM_H, GAP),
-            };
-            let x = (crate::geometry::CANVAS_W - w) / 2.0;
-            let r = Rect { x, y, w, h };
-            y += h + gap;
-            r
-        })
-        .collect()
+    item_rect_iter(items).collect()
 }
 
 #[cfg(test)]
