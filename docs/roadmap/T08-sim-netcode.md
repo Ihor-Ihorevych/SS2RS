@@ -37,7 +37,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 ## Co-op game-layer rules (with T09)
 - [ ] **T08-023** · Co-op rules: respawn/checkpoint sync, shared level progress, enemy scaling by player count, friendly fire option, player ghosting at transitions, level-transition sync · `L` · `P1` · Deps: T01-037
 - [ ] **T08-024** · Spectator/follow-cam for dead players · `M` · `P2`
-- [ ] **T08-022** · Save/load as serialization of sim state (own format) + co-op saves, checkpoints, quick-save rules · `L` · `P1`
+- [~] **T08-022** [INPRG @Ihor-Ihorevych/agent · branch `T08-022-save-format` · 2026-11-23] · Save/load as serialization of sim state (own format) + co-op saves, checkpoints, quick-save rules · `L` · `P1`
 
 ## Tooling, tests, ops
 - [x] **T08-017** · Network simulator (latency, jitter, loss, duplication, reorder, bandwidth cap with a tail-drop queue): `ss2_net::netsim`, deterministic and in-process; the socket-level conditioner is T08-017b and the scenario runner is T11-010 · `M` · `P0`
