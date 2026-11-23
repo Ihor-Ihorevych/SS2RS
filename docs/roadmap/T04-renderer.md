@@ -14,7 +14,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-017** · 2D/UI renderer: batched quads, text glyph quads, scissor, 9-slice, render-to-texture (shared with T10) · `M` · `P0` · 🟢
 - [x] **T04-018** · Debug draw (lines/AABB/spheres/text/labels), toggleable overlays: the GPU-free recorder `ss2_render_api::DebugDraw` (`docs/DEBUG_DRAW.md`); the wgpu line pass is T04-018b · `S` · `P1` · 🟢
 - [ ] **T04-018b** · Debug draw GPU pass: draw `DebugDraw::lines()` as a line list (depth test on/off) in the debug-overlay stage of the frame graph, labels through the 2D renderer (`project_labels`), the `r_debug <category>` console command · `S` · `P1` · Deps: T04-002, T04-017
-- [ ] **T04-019** · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
+- [~] **T04-019** [INPRG @Ihor-Ihorevych/agent · branch `T04-019-frame-profiler` · 2026-11-23] · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
 - [ ] **T04-026** · `RenderWorld` extract implementation + double-buffering between sim and render thread · `L` · `P0` · Deps: T00-015
 
 ## Models & materials (Wave 1) — M1/M2
