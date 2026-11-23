@@ -2752,6 +2752,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-rsc"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-ep",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-tex"
 version = "0.0.0"
 dependencies = [
