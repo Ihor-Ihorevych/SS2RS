@@ -551,7 +551,7 @@ fn pack_capture_rows(data: &[u8], row_bytes: usize, pitch: usize, swap_red_blue:
         pixels.extend_from_slice(&row[..row_bytes]);
     }
     if swap_red_blue {
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
     }

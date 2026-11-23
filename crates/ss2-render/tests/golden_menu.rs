@@ -64,8 +64,10 @@ fn capture_uses_the_current_size_and_can_omit_the_overlay() {
     assert!(
         without_overlay
             .pixels
-            .chunks_exact(4)
-            .all(|pixel| pixel == [255, 0, 0, 255])
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [255, 0, 0, 255])
     );
 
     let menu = Menu::new(Settings::default()).draw();
