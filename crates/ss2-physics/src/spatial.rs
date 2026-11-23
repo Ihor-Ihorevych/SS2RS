@@ -216,6 +216,27 @@ impl<T> Bvh<T> {
         }
     }
 
+    /// Call `visit(depth, bounds, is_leaf)` for every node, parents before children and the left child
+    /// first (the root is depth 0): for drawing the tree and for statistics.
+    pub fn visit_nodes(&self, visit: &mut impl FnMut(usize, &Aabb, bool)) {
+        let mut stack = if self.nodes.is_empty() {
+            Vec::new()
+        } else {
+            vec![(0_u32, 0_usize)]
+        };
+        while let Some((index, depth)) = stack.pop() {
+            let node = &self.nodes[index as usize];
+            match node.kind {
+                Kind::Leaf { .. } => visit(depth, &node.bounds, true),
+                Kind::Inner { left, right } => {
+                    visit(depth, &node.bounds, false);
+                    stack.push((right, depth + 1));
+                    stack.push((left, depth + 1));
+                }
+            }
+        }
+    }
+
     /// Verify the structure: every node's box contains what is under it, and every item is in
     /// exactly one leaf. For tests and debugging.
     pub fn check(&self) -> Result<(), String> {
@@ -889,6 +910,35 @@ mod tests {
                 log
             );
         }
+    }
+
+    #[test]
+    fn visiting_the_nodes_gives_every_node_once_parents_first_with_their_depth() {
+        let mut rng = Lcg(13);
+        let tree = Bvh::build(random_boxes(&mut rng, 100));
+        let (mut count, mut leaves, mut max_depth, mut first) = (0, 0, 0, None);
+        tree.visit_nodes(&mut |depth, bounds, is_leaf| {
+            first.get_or_insert((depth, *bounds));
+            count += 1;
+            max_depth = max_depth.max(depth);
+            if is_leaf {
+                leaves += 1;
+            }
+        });
+        assert_eq!(
+            first,
+            Some((0, tree.bounds().unwrap())),
+            "the root comes first, at depth 0"
+        );
+        assert_eq!(
+            count,
+            2 * leaves - 1,
+            "a binary tree with {leaves} leaves has that many nodes"
+        );
+        assert_eq!(max_depth + 1, tree.depth());
+        assert!(leaves >= 100 / 4, "leaves hold at most four items each");
+        let empty: Bvh<u32> = Bvh::build(Vec::new());
+        empty.visit_nodes(&mut |_, _, _| panic!("an empty tree has no nodes"));
     }
 
     #[test]
