@@ -20,3 +20,4 @@ mod author.
 - Benchmark harness and proposed performance budgets (T00-019), documentation site and
   architecture overview (T00-020), release engineering policy and tooling (T00-021).
 - Placeholder main menu (no game data used): `cargo run -p ss2-app`.
+- Animation sets (`.ans`) load, with pose sampling (interpolation, looping), animation events and root-motion deltas (T02-016).

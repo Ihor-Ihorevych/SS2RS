@@ -44,6 +44,7 @@
 - [Screen effects](SCREEN_EFFECTS.md)
 - [Instancing and batching](BATCHING.md)
 - [Texture sampling rules](TEXTURE_SAMPLING.md)
+- [Animation sets and sampling](ANIMATION_SAMPLING.md)
 - [Anti-aliasing planning](ANTI_ALIASING.md)
 - [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
 - [The settings screen model](SETTINGS_SCREEN.md)
