@@ -113,10 +113,12 @@ test workflow yet.
 ### 3.4 Golden-image tests (exists, menu only)
 
 - **What:** renders a scene offscreen and compares the RGBA result against a stored PNG with a mean
-  absolute difference tolerance.
+  absolute difference limit **and** a limit on the share of pixels that differ by more than 16
+  levels ([GOLDEN_IMAGES.md](GOLDEN_IMAGES.md)); a failure writes the rendered and the difference
+  image to `target/golden-failures/`.
 - **Where:** `crates/ss2-render/tests/golden_menu.rs`. Goldens are in `testdata/golden/`
   (`menu_main_1280x720.png`, `menu_options_1280x720.png`). The comparison helper is
-  `ss2_render::mean_abs_diff` (`crates/ss2-render/src/image_diff.rs`).
+  `ss2_render::golden` (`crates/ss2-render/src/golden.rs`); `SS2_FORCE_SOFTWARE_ADAPTER=1` forces the software adapter.
 - **Naming:** `<screen>_matches_golden` for whole-image comparisons; `<behaviour>` for pixel checks
   (for example `focus_highlight_is_orange_at_first_button`).
 - **Run:**
@@ -136,8 +138,8 @@ test workflow yet.
   verified in this document; check the test output in a CI run before relying on it.
 - **When:** pull requests, through the workspace test job. Any change to a golden is a visible binary
   diff in review; say why in the PR.
-- **Planned:** a headless harness with software adapters in CI and tolerance diffing (**planned, see
-  T04-021**); UI golden images for each screen at three resolutions and two aspect ratios
+- **Exists:** the tolerance diffing and the failure evidence ([GOLDEN_IMAGES.md](GOLDEN_IMAGES.md), T04-021). **Planned:** a CI job with
+  a software adapter (T04-021b); UI golden images for each screen at three resolutions and two aspect ratios
   (**planned, see T10-015**).
 
 ### 3.5 Golden-audio tests (planned, T06-013)

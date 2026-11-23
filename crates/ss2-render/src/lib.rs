@@ -2,6 +2,7 @@
 
 mod batch;
 mod context;
+pub mod golden;
 mod image_diff;
 mod text;
 

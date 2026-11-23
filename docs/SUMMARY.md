@@ -29,6 +29,7 @@
 - [Gamepads](GAMEPADS.md)
 - [Developer console and overlays](DEV_CONSOLE_UI.md)
 - [UI scale and resolution policy](UI_SCALING.md)
+- [Golden-image harness](GOLDEN_IMAGES.md)
 - [Simulation tick loop](SIMLOOP.md)
 - [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)
