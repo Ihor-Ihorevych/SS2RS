@@ -39,6 +39,7 @@
 mod camera;
 mod culling;
 mod debug_draw;
+pub mod frame_timing;
 mod ids;
 pub mod lod;
 pub mod quality;

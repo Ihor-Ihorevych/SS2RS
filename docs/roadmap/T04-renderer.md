@@ -14,7 +14,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-017** · 2D/UI renderer: batched quads, text glyph quads, scissor, 9-slice, render-to-texture (shared with T10) · `M` · `P0` · 🟢
 - [x] **T04-018** · Debug draw (lines/AABB/spheres/text/labels), toggleable overlays: the GPU-free recorder `ss2_render_api::DebugDraw` (`docs/DEBUG_DRAW.md`); the wgpu line pass is T04-018b · `S` · `P1` · 🟢
 - [ ] **T04-018b** · Debug draw GPU pass: draw `DebugDraw::lines()` as a line list (depth test on/off) in the debug-overlay stage of the frame graph, labels through the 2D renderer (`project_labels`), the `r_debug <category>` console command · `S` · `P1` · Deps: T04-002, T04-017
-- [~] **T04-019** [INPRG @Ihor-Ihorevych/agent · branch `T04-019-frame-profiler` · 2026-11-23] · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
+- [x] **T04-019** · GPU profiling via timestamp queries + CPU spans; frame time overlay: `ss2_render_api::frame_timing` (`docs/FRAME_TIMING.md`): frame-time history and percentiles, tick-to-millisecond conversion with wrap-around and plausibility checks, pass timings, the overlay text; CPU spans were already `puffin` (T11-011); **no wgpu timestamp queries, nothing draws the overlay, not tried on a real GPU** (T04-019b) · `S` · `P1`
+- [ ] **T04-019b** · wgpu timestamp-query set per frame-graph pass (feature check, resolve and non-stalling readback, period from the queue), draw the overlay from `overlay_lines` and a graph from `ordered()`, a key or console variable to toggle it, feed it from the app loop, verify on a real GPU · `S` · `P1` · Deps: T04-019, T04-001, T04-002
 - [ ] **T04-026** · `RenderWorld` extract implementation + double-buffering between sim and render thread · `L` · `P0` · Deps: T00-015
 
 ## Models & materials (Wave 1) — M1/M2
