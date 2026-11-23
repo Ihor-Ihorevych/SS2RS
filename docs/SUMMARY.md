@@ -24,6 +24,7 @@
 - [Netcode architecture guide](NETCODE.md)
 - [Net statistics](NETSTATS.md)
 - [Replay files](REPLAY.md)
+- [Simulation tick loop](SIMLOOP.md)
 - [Culling and TAA jitter](CULLING.md)
 - [Debug draw](DEBUG_DRAW.md)
 - [Network threat model](THREAT_MODEL_NET.md)
