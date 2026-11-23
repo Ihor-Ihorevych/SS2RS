@@ -42,7 +42,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-031** · Screen-space effects: damage flashes, underwater overlay, fades, letterbox for cutscenes · `S` · `P1` · 🟢
 
 ## Quality, tooling, mobile
-- [ ] **T04-020** · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings · `M` · `P1`
+- [~] **T04-020** [INPRG @Ihor-Ihorevych/agent · branch `T04-020-quality-presets` · 2026-11-23] · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings · `M` · `P1`
 - [x] **T04-021** · Golden-image test harness: `ss2_render::golden` (`docs/GOLDEN_IMAGES.md`): a two-limit tolerance, failure evidence (rendered and difference images), the update workflow (with T11-015), `SS2_FORCE_SOFTWARE_ADAPTER`; **no CI job with a software adapter yet** (T04-021b) · `M` · `P0`
 - [ ] **T04-021b** · CI job for the golden tests with a software adapter (Mesa lavapipe on Linux, WARP on Windows) and `SS2_FORCE_SOFTWARE_ADAPTER=1`; measure whether goldens made on one platform pass on the other and set per-check tolerances · `S` · `P1` · Deps: T04-021, T12-001
 - [ ] **T04-022** · Visual parity workflow: compare to oracle screenshots (T01-038) side by side; checklist per level · `M` · `P2`
@@ -50,7 +50,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-028** · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
 - [ ] **T04-032** · GLES3 fallback validation (naga output limits, UBO sizes, no compute) and device blocklist · `M` · `PHASE 2`
 - [ ] **T04-033** · Render settings hot-reload, shader hot-reload · `S` · `P2`
-- [~] **T04-034** [INPRG @lxstyo/agent · branch `T04-034-multi-view-split-screen` · 2026-11-23] · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
+- [x] **T04-034** · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
+  Decision recorded in [RFC 0011](../rfcs/0011-split-screen.md).
 
 ## Menu slice (PC, placeholder skin)
 - [x] **T04-035** · wgpu context (windowed + offscreen), 2D quad batch and `glyphon` text with an embedded OFL font; partial T04-001/T04-017 · `L` · `P1` · Deps: T10-032
