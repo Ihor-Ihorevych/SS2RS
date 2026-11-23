@@ -107,13 +107,32 @@ fn missing_paths_and_wrong_entry_kinds_are_reported() {
 }
 
 #[test]
-fn colliding_host_names_are_reported_on_case_sensitive_volumes() {
+fn replacing_the_mounted_root_with_a_file_makes_it_unavailable() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("mount");
+    fs::create_dir(&root).unwrap();
+    let vfs = DirectoryVfs::new(&root).unwrap();
+    assert_eq!(vfs.stat(&VfsPath::root()).unwrap().kind, EntryKind::Dir);
+
+    fs::remove_dir(&root).unwrap();
+    fs::write(&root, b"regular file").unwrap();
+    assert!(matches!(
+        vfs.stat(&VfsPath::root()),
+        Err(Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn colliding_host_names_are_reported_through_the_layered_mount() {
     let root = tempfile::tempdir().unwrap();
-    fs::write(root.path().join("File.txt"), b"one").unwrap();
+    // Lowercasing U+0130 (İ) produces two code points: `i` with a combining dot.
+    // Filesystems can allow both spellings even when they reject ASCII case variants.
+    fs::write(root.path().join("İtem.txt"), b"one").unwrap();
+    let normalized = "i\u{307}tem.txt";
     match OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(root.path().join("FILE.txt"))
+        .open(root.path().join(normalized))
     {
         Ok(_) => {}
         Err(error) if error.kind() == ErrorKind::AlreadyExists => return,
@@ -121,13 +140,24 @@ fn colliding_host_names_are_reported_on_case_sensitive_volumes() {
     }
     let vfs = DirectoryVfs::new(root.path()).unwrap();
     assert!(matches!(
-        vfs.stat(&path("file.txt")),
+        vfs.stat(&path(normalized)),
         Err(Error::Invalid { .. })
     ));
     assert!(matches!(
         vfs.list(&VfsPath::root()),
         Err(Error::Invalid { .. })
     ));
+
+    let mut layers = LayeredVfs::new();
+    layers.mount(
+        "base",
+        MemoryVfs::from_files([(normalized, &b"base"[..])]).unwrap(),
+    );
+    layers.mount("loose", vfs);
+    let key = path(normalized);
+    assert!(matches!(layers.stat(&key), Err(Error::Invalid { .. })));
+    assert!(matches!(layers.open(&key), Err(Error::Invalid { .. })));
+    assert!(matches!(layers.read(&key), Err(Error::Invalid { .. })));
 }
 
 #[cfg(any(unix, windows))]

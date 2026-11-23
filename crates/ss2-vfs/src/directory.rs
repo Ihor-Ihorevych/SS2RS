@@ -83,18 +83,16 @@ impl Vfs for DirectoryVfs {
         let entry = self.resolve(path)?;
         let meta =
             fs::symlink_metadata(&entry.path).map_err(|error| host_error(&entry.path, error))?;
-        if meta.is_file() {
-            Ok(Stat {
+        match entry.kind {
+            EntryKind::File if meta.is_file() => Ok(Stat {
                 kind: EntryKind::File,
                 size: meta.len(),
-            })
-        } else if meta.is_dir() {
-            Ok(Stat {
+            }),
+            EntryKind::Dir if meta.is_dir() => Ok(Stat {
                 kind: EntryKind::Dir,
                 size: 0,
-            })
-        } else {
-            Err(Error::NotFound(path.to_string()))
+            }),
+            _ => Err(Error::NotFound(path.to_string())),
         }
     }
 
