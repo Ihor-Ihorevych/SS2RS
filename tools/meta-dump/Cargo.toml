@@ -1,0 +1,32 @@
+[package]
+name = "meta-dump"
+description = "Print any CTSEMETA file as annotated text, JSON or RON: header, chunks, types, references, objects, raw spans, and the bytes no decoder explains"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "meta_dump"
+path = "src/lib.rs"
+
+[[bin]]
+name = "meta-dump"
+path = "src/main.rs"
+
+[dependencies]
+ss2-core = { path = "../../crates/ss2-core" }
+ss2-meta = { path = "../../crates/ss2-meta" }
+ss2-vfs = { path = "../../crates/ss2-vfs" }
+anyhow.workspace = true
+clap = { workspace = true, features = ["env"] }
+
+[dev-dependencies]
+ss2-testkit = { path = "../../crates/ss2-testkit" }
+serde_json = "1"
+tempfile.workspace = true
