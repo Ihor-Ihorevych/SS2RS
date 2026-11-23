@@ -1,29 +1,65 @@
 //! [`ArchiveVfs`]: one `.gro` archive (a standard ZIP file) as a read-only [`Vfs`] layer.
 //!
-//! The central directory is read once at open and turned into an in-memory index (files by
-//! normalized path, plus a directory tree), so `stat`/`list` never touch the disk. File data is
-//! read on demand: **stored** entries stream straight from the archive file (seekable, no
-//! memory, ideal for `.ogv` videos), **deflated** entries are decompressed into memory (the
-//! `zip` crate verifies their CRC).
+//! The central directory is turned into an index by normalized path. Install and mod mounts
+//! reuse a persistent index on later launches. File data is read on demand: **stored** entries
+//! stream straight from the archive file, and **deflated** entries are decompressed into memory.
+//! Whole-file reads verify their CRC.
 
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{self, Cursor, Read, Seek, SeekFrom};
+use std::io::{self, BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
 use ss2_core::{Error, Result};
 use zip::{CompressionMethod, ZipArchive};
 
 use crate::{DirEntry, EntryKind, ReadSeek, Stat, Vfs, VfsPath};
 
+#[path = "archive_cache.rs"]
+mod cache;
+
+#[derive(Serialize, Deserialize)]
+enum RecordKind {
+    File(Entry),
+    Dir,
+    Skipped,
+}
+
+/// Keep archive order, including directory and skipped entries, when rebuilding the VFS index.
+#[derive(Serialize, Deserialize)]
+struct Record {
+    name: String,
+    kind: RecordKind,
+}
+
+#[derive(Serialize, Deserialize)]
 struct Entry {
-    /// Index in the ZIP central directory.
+    /// Index for the ZIP reader when the entry cannot be read directly.
     index: usize,
     /// Uncompressed size in bytes.
     size: u64,
-    /// Where the data starts in the archive file, if it is stored uncompressed.
-    stored_at: Option<u64>,
+    payload: Option<Payload>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Payload {
+    start: u64,
+    len: u64,
+    crc32: u32,
+    deflated: bool,
+}
+
+impl Payload {
+    fn fits_archive(&self, size: u64, archive_len: u64) -> bool {
+        self.start >= 30
+            && self
+                .start
+                .checked_add(self.len)
+                .is_some_and(|end| end <= archive_len)
+            && (self.deflated || self.len == size)
+    }
 }
 
 /// A `.gro` archive mounted as a [`Vfs`] (see the module docs).
@@ -39,7 +75,7 @@ pub struct ArchiveVfs {
     /// Directory path -> (child name -> kind). Contains the root and every ancestor directory.
     children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>>,
     skipped: Vec<String>,
-    zip: Mutex<ZipArchive<File>>,
+    file: Arc<Mutex<File>>,
 }
 
 fn zip_error(path: &Path, name: &str, e: zip::result::ZipError) -> Error {
@@ -65,53 +101,61 @@ fn register_dirs(children: &mut BTreeMap<VfsPath, BTreeMap<String, EntryKind>>, 
 }
 
 impl ArchiveVfs {
-    /// Open the archive at `path` and index it.
+    /// Open the archive at `path` and index it from its ZIP headers.
     ///
     /// # Errors
     /// [`Error::Io`] if the file cannot be opened or read; [`Error::Invalid`] (naming the file)
     /// if it is not a valid ZIP archive.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
+        Self::from_cached_file(path.as_ref(), None)
+    }
+
+    pub(crate) fn cache_dir() -> Option<PathBuf> {
+        directories::BaseDirs::new().map(|dirs| dirs.cache_dir().join("SS2RS/archive-index"))
+    }
+
+    pub(crate) fn from_cached_file(path: &Path, cache_dir: Option<&Path>) -> Result<Self> {
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.display().to_string());
-        let file = File::open(path).map_err(|e| Error::io(path, e))?;
-        let mut zip = ZipArchive::new(file).map_err(|e| zip_error(path, &name, e))?;
+        let mut file = File::open(path).map_err(|e| Error::io(path, e))?;
+        let cache = cache_dir.and_then(|dir| cache::ArchiveCache::new(dir, path, &mut file));
+        let records = match cache.as_ref().and_then(|cache| cache.load(&mut file)) {
+            Some(records) => records,
+            None => {
+                let (directory_start, records) = scan_records(path, &name, &mut file)?;
+                if let Some(cache) = cache {
+                    let _ = cache.save(&mut file, directory_start, &records);
+                }
+                records
+            }
+        };
 
         let mut files = BTreeMap::new();
         let mut children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>> = BTreeMap::new();
         children.insert(VfsPath::root(), BTreeMap::new());
         let mut skipped = Vec::new();
 
-        for index in 0..zip.len() {
-            let raw = zip
-                .by_index_raw(index)
-                .map_err(|e| zip_error(path, &name, e))?;
-            let entry_name = match raw.name() {
-                Ok(name) => name.into_owned(),
-                Err(_) => {
-                    skipped.push(format!("<entry {index}: undecodable name>"));
-                    continue;
-                }
-            };
-            let is_dir = raw.is_dir();
-            let size = raw.size();
-            let stored_at = (raw.compression() == CompressionMethod::Stored)
-                .then(|| raw.data_start())
-                .flatten();
-            drop(raw);
-
+        for Record {
+            name: entry_name,
+            kind,
+        } in records
+        {
+            if matches!(kind, RecordKind::Skipped) {
+                skipped.push(entry_name);
+                continue;
+            }
             let Ok(vpath) = VfsPath::new(&entry_name) else {
                 skipped.push(entry_name);
                 continue;
             };
-            if is_dir {
+            let RecordKind::File(entry) = kind else {
                 if !vpath.is_root() {
                     register_dirs(&mut children, &vpath);
                 }
                 continue;
-            }
+            };
             if vpath.is_root() {
                 skipped.push(entry_name);
                 continue;
@@ -125,14 +169,7 @@ impl ArchiveVfs {
                         .insert(file_name.to_owned(), EntryKind::File);
                 }
             }
-            files.insert(
-                vpath,
-                Entry {
-                    index,
-                    size,
-                    stored_at,
-                },
-            );
+            files.insert(vpath, entry);
         }
 
         Ok(Self {
@@ -141,7 +178,7 @@ impl ArchiveVfs {
             files,
             children,
             skipped,
-            zip: Mutex::new(zip),
+            file: Arc::new(Mutex::new(file)),
         })
     }
 
@@ -167,9 +204,57 @@ impl ArchiveVfs {
     }
 }
 
+fn scan_records(path: &Path, name: &str, file: &mut File) -> Result<(u64, Vec<Record>)> {
+    let archive_len = file.metadata().map_err(|e| Error::io(path, e))?.len();
+    let mut zip = ZipArchive::new(file).map_err(|e| zip_error(path, name, e))?;
+    let directory_start = zip.central_directory_start();
+    let records = (0..zip.len())
+        .map(|index| {
+            let raw = zip
+                .by_index_raw(index)
+                .map_err(|e| zip_error(path, name, e))?;
+            let Ok(entry_name) = raw.name() else {
+                return Ok(Record {
+                    name: format!("<entry {index}: undecodable name>"),
+                    kind: RecordKind::Skipped,
+                });
+            };
+            let kind = if raw.is_dir() {
+                RecordKind::Dir
+            } else {
+                let size = raw.size();
+                let payload = match (raw.encrypted(), raw.compression(), raw.data_start()) {
+                    (
+                        false,
+                        CompressionMethod::Stored | CompressionMethod::Deflated,
+                        Some(start),
+                    ) => Some(Payload {
+                        start,
+                        len: raw.compressed_size(),
+                        crc32: raw.crc32(),
+                        deflated: raw.compression() == CompressionMethod::Deflated,
+                    })
+                    .filter(|payload| payload.fits_archive(size, archive_len)),
+                    _ => None,
+                };
+                RecordKind::File(Entry {
+                    index,
+                    size,
+                    payload,
+                })
+            };
+            Ok(Record {
+                name: entry_name.into_owned(),
+                kind,
+            })
+        })
+        .collect::<Result<_>>()?;
+    Ok((directory_start, records))
+}
+
 /// A read-only, seekable view of `len` bytes starting at `start` inside an open file.
 struct FileWindow {
-    file: File,
+    file: Arc<Mutex<File>>,
     start: u64,
     len: u64,
     pos: u64,
@@ -182,8 +267,12 @@ impl Read for FileWindow {
         }
         let want =
             usize::try_from(self.len - self.pos).map_or(buf.len(), |rest| buf.len().min(rest));
-        self.file.seek(SeekFrom::Start(self.start + self.pos))?;
-        let n = self.file.read(&mut buf[..want])?;
+        let mut file = self
+            .file
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        file.seek(SeekFrom::Start(self.start + self.pos))?;
+        let n = file.read(&mut buf[..want])?;
         self.pos += n as u64;
         Ok(n)
     }
@@ -227,11 +316,10 @@ impl Vfs for ArchiveVfs {
 
     fn open(&self, path: &VfsPath) -> Result<Box<dyn ReadSeek>> {
         let entry = self.entry(path)?;
-        if let Some(start) = entry.stored_at {
-            let file = File::open(&self.path).map_err(|e| Error::io(&self.path, e))?;
+        if let Some(payload) = entry.payload.as_ref().filter(|payload| !payload.deflated) {
             return Ok(Box::new(FileWindow {
-                file,
-                start,
+                file: Arc::clone(&self.file),
+                start: payload.start,
                 len: entry.size,
                 pos: 0,
             }));
@@ -241,15 +329,25 @@ impl Vfs for ArchiveVfs {
 
     fn read(&self, path: &VfsPath) -> Result<Vec<u8>> {
         let entry = self.entry(path)?;
-        let mut zip = self
-            .zip
+        let mut archive_file = self
+            .file
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Cap the up-front allocation even when the archive declares a very large file.
+        let mut bytes = Vec::with_capacity(usize::try_from(entry.size).unwrap_or(0).min(64 << 20));
+        if let Some(payload) = &entry.payload {
+            payload
+                .read(&mut archive_file, entry.size, &mut bytes)
+                .map_err(|e| Error::io(&self.path, e))?;
+            return Ok(bytes);
+        }
+
+        // Keep the ZIP library's format handling and errors for other archive entries.
+        let mut zip = ZipArchive::new(&mut *archive_file)
+            .map_err(|e| zip_error(&self.path, &self.name, e))?;
         let mut file = zip
             .by_index(entry.index)
             .map_err(|e| zip_error(&self.path, &self.name, e))?;
-        // Cap the up-front allocation: the declared size comes from the (untrusted) archive.
-        let mut bytes = Vec::with_capacity(usize::try_from(entry.size).unwrap_or(0).min(64 << 20));
         file.read_to_end(&mut bytes)
             .map_err(|e| Error::io(&self.path, e))?;
         Ok(bytes)
@@ -266,6 +364,27 @@ impl Vfs for ArchiveVfs {
                 .collect()),
             _ => Err(Error::NotFound(dir.to_string())),
         }
+    }
+}
+
+impl Payload {
+    fn read(&self, file: &mut File, size: u64, bytes: &mut Vec<u8>) -> io::Result<()> {
+        file.seek(SeekFrom::Start(self.start))?;
+        let mut input = file.take(self.len);
+        if self.deflated {
+            flate2::bufread::DeflateDecoder::new(BufReader::new(input))
+                .take(size.saturating_add(1))
+                .read_to_end(bytes)?;
+        } else {
+            input.read_to_end(bytes)?;
+        }
+        if bytes.len() as u64 > size || crc32fast::hash(bytes) != self.crc32 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "archive entry size or checksum is invalid",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -295,7 +414,17 @@ mod tests {
 
     /// Write an archive with the given (name, data, deflate?) entries using the real zip writer.
     fn mixed(dir: &tempfile::TempDir, name: &str, files: &[(&str, &[u8], bool)]) -> PathBuf {
+        mixed_with_comment(dir, name, files, "")
+    }
+
+    fn mixed_with_comment(
+        dir: &tempfile::TempDir,
+        name: &str,
+        files: &[(&str, &[u8], bool)],
+        comment: &str,
+    ) -> PathBuf {
         let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.set_comment(comment).unwrap();
         for (n, d, deflate) in files {
             let method = if *deflate {
                 zip::CompressionMethod::Deflated
@@ -329,6 +458,121 @@ mod tests {
         );
         let vfs = ArchiveVfs::from_file(&path).unwrap();
         (dir, vfs)
+    }
+
+    fn cache_file(dir: &Path) -> PathBuf {
+        let mut entries = std::fs::read_dir(dir).unwrap();
+        let path = entries.next().unwrap().unwrap().path();
+        assert!(entries.next().is_none());
+        path
+    }
+
+    #[test]
+    fn warm_mount_reuses_the_cache_and_can_read_both_compression_methods() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        let path = mixed(
+            &dir,
+            "a.gro",
+            &[
+                ("A.TXT", b"first", false),
+                ("a.txt", b"stored", false),
+                ("deep/zip.txt", b"deflated", true),
+                ("empty/", b"", false),
+                ("../bad.txt", b"", false),
+            ],
+        );
+        ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        let cache_path = cache_file(&cache);
+        File::options()
+            .write(true)
+            .open(&cache_path)
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH)
+            .unwrap();
+        let modified = cache_path.metadata().unwrap().modified().unwrap();
+
+        let archive = ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        assert_eq!(cache_path.metadata().unwrap().modified().unwrap(), modified);
+        assert_eq!(archive.file_count(), 2);
+        assert!(archive.list(&p("empty")).unwrap().is_empty());
+        assert_eq!(archive.skipped_entries(), ["../bad.txt"]);
+        assert_eq!(archive.read(&p("a.txt")).unwrap(), b"stored");
+        assert_eq!(archive.read(&p("deep/zip.txt")).unwrap(), b"deflated");
+        let mut stream = archive.open(&p("a.txt")).unwrap();
+        stream.seek(SeekFrom::End(-3)).unwrap();
+        let mut tail = Vec::new();
+        stream.read_to_end(&mut tail).unwrap();
+        assert_eq!(tail, b"red");
+    }
+
+    #[test]
+    fn stale_cache_is_rebuilt_even_for_same_size_and_timestamp() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        // A long first payload and long comment put the changed file and directory metadata
+        // beyond samples taken only at the archive's beginning and end.
+        let first = [0; 8192];
+        let comment = "x".repeat(8192);
+        let path = mixed_with_comment(
+            &dir,
+            "a.gro",
+            &[("padding", &first, false), ("old.txt", b"one", false)],
+            &comment,
+        );
+        ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        let before = path.metadata().unwrap();
+        mixed_with_comment(
+            &dir,
+            "a.gro",
+            &[("padding", &first, false), ("new.txt", b"two", false)],
+            &comment,
+        );
+        File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(before.modified().unwrap())
+            .unwrap();
+        assert_eq!(path.metadata().unwrap().len(), before.len());
+
+        let archive = ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        assert!(!archive.exists(&p("old.txt")));
+        assert_eq!(archive.read(&p("new.txt")).unwrap(), b"two");
+    }
+
+    #[test]
+    fn stored_stream_reads_the_archive_that_was_mounted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = stored(&dir, "a.gro", &[("a.txt", b"old")]);
+        let archive = ArchiveVfs::from_file(&path).unwrap();
+        std::fs::rename(&path, dir.path().join("original.gro")).unwrap();
+        stored(&dir, "a.gro", &[("a.txt", b"new")]);
+
+        let mut stream = archive.open(&p("a.txt")).unwrap();
+        let mut bytes = Vec::new();
+        stream.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"old");
+    }
+
+    #[test]
+    fn a_corrupt_cache_is_rebuilt_and_an_unwritable_cache_is_optional() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        let path = stored(&dir, "a.gro", &[("a.txt", b"data")]);
+        ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        let cache_path = cache_file(&cache);
+        let mut index = std::fs::read(&cache_path).unwrap();
+        let last = index.last_mut().unwrap();
+        *last ^= 1;
+        std::fs::write(&cache_path, &index).unwrap();
+
+        let archive = ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
+        assert_eq!(archive.read(&p("a.txt")).unwrap(), b"data");
+        assert_ne!(std::fs::read(&cache_path).unwrap(), index);
+
+        let archive = ArchiveVfs::from_cached_file(&path, Some(&cache_path)).unwrap();
+        assert_eq!(archive.read(&p("a.txt")).unwrap(), b"data");
     }
 
     #[test]

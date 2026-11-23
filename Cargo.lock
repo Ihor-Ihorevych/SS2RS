@@ -2867,6 +2867,11 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
+ "directories",
+ "flate2",
+ "serde",
+ "serde_json",
  "ss2-core",
  "ss2-testkit",
  "tempfile",
