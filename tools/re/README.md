@@ -25,6 +25,13 @@ python -I tools/re/bmf_verify.py "C:\path\to\Serious Sam 2"    # per-surface lay
 python -I tools/re/edob_verify.py "C:\path\to\Serious Sam 2"   # the EDOB extra-record rule for every non-world file
 ```
 
+CTSEMETA leftovers (docs/re/ctsemeta-leftovers.md):
+
+```
+python -I tools/re/ctse_leftovers_verify.py "C:\path\to\Serious Sam 2"                  # old formats 4-7, INFO[0], EDTY, RFIL/EXOB flags (about 4 minutes)
+python -I tools/re/ctse_leftovers_verify.py "C:\path\to\Serious Sam 2" --only codes     # entity-class codes of the 59 worlds (slow)
+```
+
 Skeleton evidence (docs/re/skl.md):
 
 ```
