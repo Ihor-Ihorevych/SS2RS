@@ -30,6 +30,7 @@
 - [Free-fly debug camera](FREEFLY.md)
 - [Spatial acceleration (BVH)](SPATIAL.md)
 - [Physics queries](PHYSICS_QUERIES.md)
+- [Physics debug drawing](PHYSICS_DEBUG.md)
 - [Culling and TAA jitter](CULLING.md)
 - [Debug draw](DEBUG_DRAW.md)
 - [Network threat model](THREAT_MODEL_NET.md)

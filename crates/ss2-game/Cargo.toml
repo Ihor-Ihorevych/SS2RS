@@ -13,4 +13,5 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+ss2-physics = { path = "../ss2-physics" }
 ss2-render-api = { path = "../ss2-render-api" }
