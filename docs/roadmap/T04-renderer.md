@@ -43,7 +43,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 
 ## Quality, tooling, mobile
 - [ ] **T04-020** · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings · `M` · `P1`
-- [ ] **T04-021** · Golden-image test harness: headless wgpu (software adapters in CI), tolerance diffing, update workflow · `M` · `P0`
+- [~] **T04-021** [INPRG @Ihor-Ihorevych/agent · branch `T04-021-golden-harness` · 2026-11-23] · Golden-image test harness: headless wgpu (software adapters in CI), tolerance diffing, update workflow · `M` · `P0`
 - [ ] **T04-022** · Visual parity workflow: compare to oracle screenshots (T01-038) side by side; checklist per level · `M` · `P2`
 - [ ] **T04-027** · Mobile optimization pass: tile-based friendly passes, ASTC/ETC2, limited MRT, half precision, thermal-adaptive scaling · `L` · `PHASE 2`
 - [ ] **T04-028** · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
