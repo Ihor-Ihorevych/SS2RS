@@ -10,7 +10,7 @@ the server can reconcile (T08-009).
 - [ ] **T07-006** · **SPIKE**: collision/rigid-body engine — `rapier3d` vs custom for world queries + character; compare features, mobile perf, determinism, ragdolls; RFC · `M` · `P0`
 - [x] **T07-003** · Spatial acceleration: static BVH from world mesh, dynamic broadphase, query API (ray, sweep, overlap) w/ filters/layers: `ss2_physics::spatial` (`docs/SPATIAL.md`): `Bvh`, `Layers`, `Triangle`, `TriMesh`; the sweep is candidate-level (exact sweeps against triangles are T07-003b) · `L` · `P0`
 - [ ] **T07-003b** · Spatial follow-ups: exact sphere/capsule sweeps against triangles (face, edge, vertex), box-triangle overlap, SAH build and incremental refit for large dynamic sets, benchmarks (T07-017) · `M` · `P1` · Deps: T07-003
-- [ ] **T07-004** · Query API frozen as contract: `raycast`, `shapecast`, `overlap`, hit result (point/normal/material/entity) · `M` · `P0`
+- [~] **T07-004** [INPRG @Ihor-Ihorevych/agent · branch `T07-004-query-contract` · 2026-11-23] · Query API frozen as contract: `raycast`, `shapecast`, `overlap`, hit result (point/normal/material/entity) · `M` · `P0`
 - [ ] **T07-002** · Collision geometry extraction from `.wld` (static) and `.mdl` (dynamic/hit volumes) · `L` · `P0` · Deps: T02-020, T02-017
 
 ## Movement (M3/M4)
