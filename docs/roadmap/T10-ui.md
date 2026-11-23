@@ -15,7 +15,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Menus & flows
 - [ ] **T10-004** · Menu system recreating original flow: main menu, new/continue/load/save, options, credits; data-driven from original menu definitions where specified · `XL` → split per screen · `P1`
-- [ ] **T10-012** · Settings screens: video (quality, resolution, FOV, vsync), audio buses, controls/rebinding (T03-005), gameplay, network · `L` · `P1`
+- [~] **T10-012** [INPRG @Ihor-Ihorevych/agent · branch `T10-012-settings-model` · 2026-11-23] · Settings screens: video (quality, resolution, FOV, vsync), audio buses, controls/rebinding (T03-005), gameplay, network · `L` · `P1`
 - [ ] **T10-018** · Co-op lobby/session UI: host/join, direct IP/invite code/server browser, player list, ready state, character select · `L` · `P1` · Deps: T08-019
 - [x] **T10-009** · Loading screens with progress and tips, shader/cache warm-up status: `ss2_ui::loading` (`docs/LOADING.md`): weighted stages (shader and cache warm-up are just stages), a bar that never goes back, a smoothed time estimate, the status line and non-repeating tips; **nothing draws it and nothing reports progress to it yet** (T10-009b) · `S` · `P1` · 🟢
 - [ ] **T10-009b** · Draw the loading screen (bar, status, tips on the menu skin, T10-033), report progress from the loaders, the world load and the shader/pipeline-cache warm-up, the game's own tips and their localization (T10-011), and tune the bar speed and the estimate on real loads · `S` · `P1` · Deps: T10-009, T10-033

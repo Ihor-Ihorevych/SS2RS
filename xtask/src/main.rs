@@ -8,6 +8,7 @@ use xtask::claim_check;
 use xtask::doctor;
 use xtask::golden;
 use xtask::guard::{self, Mode};
+use xtask::progress;
 use xtask::roadmap;
 
 #[derive(Parser)]
@@ -70,6 +71,12 @@ enum Command {
     },
     /// Fail if a roadmap claim is contradictory or malformed ([x] with a tag, [~] without one, ...).
     CheckClaims,
+    /// Print how far the roadmap is: done, claimed and open tasks per track, and the follow-up tasks left behind.
+    Progress {
+        /// Print JSON instead of Markdown.
+        #[arg(long)]
+        json: bool,
+    },
     /// Report active claims, their age and the last push to their branch; flags stale ones.
     Claims {
         /// Days without a push before a claim counts as stale (AGENTS.md rule 8).
@@ -205,6 +212,29 @@ fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("check-claims: {e:#}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Command::Progress { json } => {
+            let result = guard::repo_root().and_then(|root| {
+                roadmap::load_all(&std::path::Path::new(&root).join("docs").join("roadmap"))
+            });
+            match result {
+                Ok(tasks) => {
+                    let p = progress::compute(&tasks);
+                    print!(
+                        "{}",
+                        if json {
+                            progress::render_json(&p)
+                        } else {
+                            progress::render_markdown(&p)
+                        }
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("progress: {e}");
                     ExitCode::from(2)
                 }
             }

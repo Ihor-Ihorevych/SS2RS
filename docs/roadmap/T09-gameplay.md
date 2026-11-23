@@ -45,7 +45,8 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 
 ## Dev & test
 - [x] **T09-028** · Cheats/dev commands (god, noclip, notarget, give, spawn, kill-all, level skip) via console: the commands, the `sv_cheats` gate and the request queue (`docs/CHEATS.md`); applying the requests needs the simulation (T08, T09) · `S` · `P1` · 🟢
-- [ ] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached) · `M` · `P0`
+- [x] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached): `ss2_sim::scenario` (`docs/SCENARIOS.md`): exact tick stepping, probes with series statistics (total drop, first tick where), `run_until`, scripted actions, a lifecycle log and a determinism check; **it has only run against toy systems: no player, weapon or enemy exists yet to build real scenarios from** (T09-029b) · `M` · `P0`
+- [ ] **T09-029b** · The first real scenarios on the harness once the gameplay exists: a weapon's time-to-kill table, an enemy reaching a point, damage dealt per weapon (T09-005, T09-019); recorded-input playback (T07-019), a failure report that prints the series, and multi-client scenarios over the simulated network (T08-029) · `M` · `P0` · Deps: T09-029, T09-005
 - [ ] **T09-030** · Balance/parity validation vs oracle numbers (T01-038): time-to-kill tables, rate-of-fire, projectile speeds, enemy speeds · `L` · `P1`
 - [ ] **T09-031** · Difficulty system tables & modifiers · `M` · `P1`
 - [ ] **T09-032** · Gameplay documentation: how to add an entity class / weapon / enemy (template + checklist) · `M` · `P0`
