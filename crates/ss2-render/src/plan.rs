@@ -121,13 +121,12 @@ impl<'a> Builder<'a, '_> {
             CommandRef::NineSlice(n) => {
                 if let Some(size) = self.known(n.image) {
                     let cells = nine_slice(n.rect, n.insets, size, n.scale, n.fill);
-                    if !cells.is_empty() {
-                        self.geometry(Some(n.image), n.filter, |v, canvas| {
-                            for cell in &cells {
-                                push_quad(v, canvas, cell.dest, cell.uv, n.tint.0);
-                            }
-                        });
-                    }
+                    // A slice that draws nothing adds no vertices, and so no batch.
+                    self.geometry(Some(n.image), n.filter, |v, canvas| {
+                        for cell in &cells {
+                            push_quad(v, canvas, cell.dest, cell.uv, n.tint.0);
+                        }
+                    });
                 }
             }
             CommandRef::Text(t) => self.text(t),
@@ -440,6 +439,22 @@ mod tests {
             .quad(r(0.0, 0.0, 5.0, 5.0), WHITE)
             .pop_clip();
         assert_eq!(plan_of(&f).batches.len(), 1);
+    }
+
+    #[test]
+    fn text_in_different_clips_is_not_one_batch() {
+        let mut f = UiFrame::new();
+        text(&mut f, "a");
+        f.push_clip(r(0.0, 0.0, 100.0, 100.0));
+        text(&mut f, "b");
+        text(&mut f, "c");
+        f.pop_clip();
+        text(&mut f, "d");
+        let p = plan_of(&f);
+        assert_eq!(p.batches.len(), 3);
+        assert_eq!(p.batches[0].kind, BatchKind::Text { runs: 0..1 });
+        assert_eq!(p.batches[1].kind, BatchKind::Text { runs: 1..3 });
+        assert_eq!(p.batches[2].kind, BatchKind::Text { runs: 3..4 });
     }
 
     #[test]

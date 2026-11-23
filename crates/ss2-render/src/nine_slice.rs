@@ -578,6 +578,63 @@ mod tests {
     }
 
     #[test]
+    fn a_centre_only_a_sliver_wide_is_still_one_cut_piece() {
+        // Borders of 4 + 4 leave 0.001 for the centre, which is a 16-texel tile.
+        let c = nine_slice(
+            rect(0.0, 0.0, 8.001, 8.0),
+            Insets {
+                left: 4.0,
+                top: 0.0,
+                right: 4.0,
+                bottom: 0.0,
+            },
+            (24, 8),
+            1.0,
+            Fill::Tile,
+        );
+        assert!(all_sane(&c));
+        assert_eq!(c.len(), 3, "{}", c.len());
+        assert!(c[1].dest.w < 0.01 && c[1].dest.w > 0.0, "{:?}", c[1]);
+    }
+
+    #[test]
+    fn tiles_that_fit_exactly_are_not_followed_by_an_empty_tile() {
+        // The tile length is inexact in binary for these scales: N whole tiles must stay N pieces.
+        for scale in [0.1_f32, 0.3, 0.7, 1.1, 2.3] {
+            for n in [1usize, 2, 5, 12] {
+                let tile = 16.0_f32 * scale;
+                let border = 4.0 * scale;
+                let c = nine_slice(
+                    rect(0.0, 0.0, n as f32 * tile + 2.0 * border, 8.0 * scale),
+                    Insets {
+                        left: 4.0,
+                        top: 0.0,
+                        right: 4.0,
+                        bottom: 0.0,
+                    },
+                    (24, 8),
+                    scale,
+                    Fill::Tile,
+                );
+                assert_eq!(c.len(), n + 2, "scale {scale}, {n} tiles: {}", c.len());
+            }
+        }
+    }
+
+    #[test]
+    fn tiling_exactly_at_the_cell_limit_still_tiles() {
+        // 62 tiles each way and the borders: 64 x 64 = 4096 cells = MAX_CELLS.
+        let c = nine_slice(
+            rect(0.0, 0.0, 126.0, 126.0),
+            Insets::uniform(1.0),
+            (4, 4),
+            1.0,
+            Fill::Tile,
+        );
+        assert_eq!(c.len(), MAX_CELLS);
+    }
+
+    #[test]
     fn tiling_that_would_make_too_many_cells_falls_back_to_stretching() {
         let c = nine_slice(
             rect(0.0, 0.0, 10_000.0, 10_000.0),
