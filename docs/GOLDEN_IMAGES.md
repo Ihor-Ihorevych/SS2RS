@@ -55,6 +55,21 @@ so I added the boundary and name tests and fixed the mutation scripts that had s
 - **A CI job that installs a software adapter** (Mesa's lavapipe on Linux, WARP on Windows) and sets `SS2_FORCE_SOFTWARE_ADAPTER=1`. **GitHub Actions jobs do not start at the moment (billing), so I
   could not try it, and the goldens are checked only on this one Windows machine.** Until a job exists, the golden tests skip without an adapter (a green run proves nothing about rendering).
   Goldens made on a Linux software adapter may need `max_differing_fraction` loosened; nobody has measured it.
-- **Goldens for the rest** (HUD, 3D passes) and the **resolutions and aspect ratios** of T10-015 and T10-017b.
+- **Goldens for the rest** (HUD, 3D passes, the settings, lobby and loading screens once they draw; see "The screen matrix" below) and **portrait** (T10-017b).
 - **Subfolders** in the golden folder (names are flat today).
 - Comparing **audio or simulation traces** (the same `UPDATE_GOLDEN` workflow applies, but no helper exists).
+
+## The screen matrix (T10-015)
+
+`crates/ss2-render/tests/golden_screens.rs` photographs **six screens at five sizes**, thirty goldens (`menu_<screen>_<w>x<h>.png`, `ui_<screen>_<w>x<h>.png`, about 1.4 MB in all):
+
+- the screens: the four menu screens (main, options, pause, about), the **developer console** with scrollback in all three line colours and typed text, and the **frame-time overlay** over the main menu;
+- the sizes: **three resolutions at 16:9** (1280x720, 1920x1080, 2560x1440), **21:9** (2560x1080, pillarboxed) and **4:3** (1024x768, letterboxed).
+
+Each image is also checked **without** a golden, so that regenerating a golden cannot hide a fault: it has the size asked for; the bars outside the canvas are exactly the background colour (and there are bars exactly when the window is not 16:9); the canvas is centred; and on a menu the focused button is orange at the place `Canvas::fit` puts it. One more test checks that the 1280x720 and 2560x1440 pictures of the main menu agree pixel for pixel on every flat region (the same layout at 1x and 2x), and one that a different screen fails against each size's golden. `every_screen_has_a_golden_at_every_size` needs **no adapter**: a golden missing from the matrix fails even where the rendering tests skip.
+
+**Regenerate** with `SS2_FORCE_SOFTWARE_ADAPTER=1 cargo xtask golden update` (the software adapter, so the goldens do not depend on the machine; `golden_screens` is in the list of targets). The goldens were made with the software adapter and **pass on this machine's Vulkan, DX12, GL and software adapters** (the three older 1280x720 goldens were made on another adapter and differ from a software render by one level in two percent of the pixels, far inside the tolerance, so they were left alone).
+
+**What it caught.** Four deliberate breakages of the canvas fit (the pillarbox not centred, the scale taken from the larger side, the letterbox top-aligned, `to_screen` ignoring the offset): **the old 1280x720 tests passed all four** (at 16:9 the offset is zero), the matrix failed all four. Three of them were also run with the goldens **regenerated from the broken code**: the golden-free checks still failed, as they are meant to.
+
+**Not covered (T10-015b).** Screens that do not draw yet (the HUD, the settings, lobby, loading and subtitle screens: add each to `SHOTS` as it lands); portrait (T10-017b); a CI job on a software adapter (see T04-021b: **GitHub Actions jobs do not start at the moment, so these tests ran only on this one Windows machine**, and goldens from a Linux software adapter may need a looser tolerance, which nobody has measured); the text in the pictures is not checked beyond the golden (a changed font would change every golden on purpose).
