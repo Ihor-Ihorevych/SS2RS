@@ -9,7 +9,8 @@
 //! Keyboard and mouse input arrive as [`InputEvent`]s (T03-002): physical keys with auto-repeat,
 //! typed text, raw mouse motion for aiming, absolute cursor position for menus, buttons and
 //! scrolling. Losing focus releases every held key and button, as the contract promises. Gamepads
-//! are T03-003.
+//! (T03-003, see [`crate::gamepad`]) are polled once per loop iteration and arrive as the same
+//! [`InputEvent`]s; the standard `SDL_GAMECONTROLLERCONFIG` environment variable adds pad mappings.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,6 +28,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
 use crate::display;
+use crate::gamepad::{GamepadConfig, GamepadSource};
 use crate::input::{self, HeldInputs};
 use crate::translate::{self, Observed, ResizeFilter};
 
@@ -245,9 +247,13 @@ pub fn run(config: &WindowConfig, app: &mut dyn PlatformApp) -> Result<(), Platf
     let event_loop =
         EventLoop::new().map_err(|e| PlatformError::EventLoop(format!("cannot create it: {e}")))?;
     event_loop.set_control_flow(ControlFlow::Poll);
+    // A machine without gamepad support (or one where the system library will not start) just has no pads.
+    let mappings = std::env::var("SDL_GAMECONTROLLERCONFIG").ok();
+    let gamepads = GamepadSource::new(GamepadConfig::default(), mappings.as_deref()).ok();
     let mut driver = Driver {
         config,
         app,
+        gamepads,
         window: None,
         main_window: None,
         resizes: ResizeFilter::default(),
@@ -269,6 +275,7 @@ pub fn run(config: &WindowConfig, app: &mut dyn PlatformApp) -> Result<(), Platf
 struct Driver<'a> {
     config: &'a WindowConfig,
     app: &'a mut dyn PlatformApp,
+    gamepads: Option<GamepadSource>,
     window: Option<PlatformWindow>,
     main_window: Option<WindowId>,
     resizes: ResizeFilter,
@@ -527,7 +534,14 @@ impl ApplicationHandler for Driver<'_> {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(source) = &mut self.gamepads {
+            let mut events = Vec::new();
+            source.poll(&mut events);
+            if !events.is_empty() {
+                self.deliver_input(event_loop, events);
+            }
+        }
         if let Some(window) = &self.window {
             window.window().request_redraw();
         }
