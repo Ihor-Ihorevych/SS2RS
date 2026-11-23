@@ -409,3 +409,167 @@ fn skip_values_changes_neither_the_coverage_nor_the_opaque_count() {
         assert!(a.objects.iter().all(|o| o.value.is_some()));
     }
 }
+
+#[test]
+fn span_helpers() {
+    use meta_dump::Span;
+    let s = Span { start: 3, end: 7 };
+    assert_eq!(s.len(), 4);
+    assert!(!s.is_empty());
+    assert!(Span { start: 5, end: 5 }.is_empty());
+    assert!(Span { start: 9, end: 5 }.is_empty(), "never negative");
+    let data = [0u8, 1, 2, 3, 4, 5, 6, 7, 8];
+    assert_eq!(s.bytes(&data), &[3, 4, 5, 6]);
+    assert_eq!(Span { start: 7, end: 100 }.bytes(&data), &[7, 8], "clamped");
+    assert!(Span { start: 50, end: 60 }.bytes(&data).is_empty());
+}
+
+#[test]
+fn a_damaged_report_counts_decoded_bytes_exactly() {
+    let mut bytes = sample();
+    bytes.truncate(bytes.len() - 1);
+    let Outcome::Damaged(d) = analyze(&bytes, "c", &Options::default()) else {
+        panic!("must be damaged");
+    };
+    assert_eq!(d.coverage.total, bytes.len());
+    assert_eq!(d.coverage.decoded, 75, "exactly the readable header");
+    assert_eq!(d.coverage.undecoded_bytes(), bytes.len() - 75);
+    let v = json(&bytes, &Options::default());
+    assert_eq!(v["coverage"]["decoded"], 75);
+    // Bad magic: nothing is explained.
+    let mut bad = sample();
+    bad[1] = b'X';
+    assert_eq!(json(&bad, &Options::default())["coverage"]["decoded"], 0);
+}
+
+#[test]
+fn damaged_json_in_unknown_mode_has_no_header_key() {
+    let mut bytes = sample();
+    bytes.truncate(bytes.len() - 1);
+    let u = Options {
+        unknown_only: true,
+        ..Options::default()
+    };
+    let v = json(&bytes, &u);
+    assert_eq!(v["status"], "damaged");
+    assert!(v.get("header").is_none());
+    assert!(json(&bytes, &Options::default()).get("header").is_some());
+    // The parsed report in unknown mode has only the short keys, too.
+    let v = json(&sample(), &u);
+    assert!(v.get("header").is_none() && v.get("types").is_none());
+    assert!(v.get("coverage").is_some() && v.get("problems").is_some());
+}
+
+#[test]
+fn hex_truncated_is_false_when_the_whole_region_is_shown() {
+    let v = json(
+        &sample(),
+        &Options {
+            raw: true,
+            ..Options::default()
+        },
+    );
+    let edty = &v["chunks"][8];
+    assert_eq!(edty["tag"], "EDTY");
+    assert_eq!(edty["size"], 8);
+    assert_eq!(edty["hex"], "45445459".to_owned() + "00000000");
+    assert_eq!(edty["hex_truncated"], false);
+    // A preview of exactly the region size is not truncated either; one byte less is.
+    let eight = json(
+        &sample(),
+        &Options {
+            raw: true,
+            preview: 8,
+            ..Options::default()
+        },
+    );
+    assert_eq!(eight["chunks"][8]["hex_truncated"], false);
+    let seven = json(
+        &sample(),
+        &Options {
+            raw: true,
+            preview: 7,
+            ..Options::default()
+        },
+    );
+    assert_eq!(seven["chunks"][8]["hex_truncated"], true);
+}
+
+#[test]
+fn a_trailing_adim_block_has_true_offsets() {
+    use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, TypeBlock};
+    let mut b = MetaBuilder::new();
+    b.type_block(TypeBlock::primitive(0, "FLOAT", 4, 4));
+    b.array_dims(&[2, 3]);
+    b.type_block(TypeBlock::fixed_array(1, "FLOAT[6]", 0));
+    b.array_dims(&[6]);
+    b.array_dims(&[1, 2, 3]);
+    let bytes = b.build().unwrap();
+    let r = parsed(&bytes, &Options::default());
+    assert_eq!(r.array_dims.len(), 3);
+    assert_eq!(r.array_dims[2].dims, [1, 2, 3]);
+    assert_offsets_are_true(&bytes, &r);
+    let last = &r.array_dims[2];
+    assert_eq!(last.span.len(), 8 + 4 * 3);
+    // The type table ends where the next section (EXOB) starts.
+    let exob = r.chunks.iter().find(|c| c.tag == "EXOB").unwrap();
+    assert_eq!(last.span.end, exob.span.start);
+    assert_eq!(r.array_dims[1].span.end, last.span.start);
+}
+
+#[test]
+fn a_failing_extra_record_leaves_the_edob_header_explained_and_the_rest_not() {
+    use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
+    let mut b = MetaBuilder::new();
+    b.type_block(TypeBlock::primitive(0, "SLONG", 4, 4));
+    b.type_block(TypeBlock::class(1, "CEditThing", 1, 5, None, &[("1", 0)]));
+    b.object(0, 1, ObjectBytes::new().i32(1).finish());
+    b.edty_pair(50, 1);
+    // The record header says object 51, the EDTY entry says 50.
+    b.after_edob(1, &ObjectBytes::new().u32(51).u32(1).i32(77).finish());
+    let bytes = b.build().unwrap();
+    let r = parsed(&bytes, &Options::default());
+    assert!(r.extra.is_empty());
+    let edob = r.chunks.iter().find(|c| c.tag == "EDOB").unwrap();
+    assert_eq!(r.coverage.undecoded.len(), 1);
+    let gap = &r.coverage.undecoded[0];
+    assert_eq!(
+        gap.span.start,
+        edob.span.start + 8,
+        "EDOB tag and count are explained"
+    );
+    assert_eq!(gap.span.end, bytes.len() - 8, "up to the footer");
+    assert_eq!(
+        gap.section, "OBJS",
+        "the OBJS section runs to the footer when there are extra records"
+    );
+    assert!(
+        gap.reason.contains("differs from the table entry"),
+        "{}",
+        gap.reason
+    );
+}
+
+#[test]
+fn the_reason_is_given_only_to_the_range_that_holds_the_failure() {
+    // Object 0 and the extra record both fine: no problem, no reason.
+    let rich_bytes = rich();
+    let r = parsed(&rich_bytes, &Options::default());
+    assert!(r.coverage.undecoded.is_empty());
+    // A stray byte: the reason is the generic one, not a decode error.
+    let mut bytes = sample();
+    let at = parsed(&bytes, &Options::default())
+        .chunks
+        .iter()
+        .find(|c| c.tag == "EDOB")
+        .unwrap()
+        .span
+        .start;
+    bytes.insert(at, 0xAA);
+    let r = parsed(&bytes, &Options::default());
+    assert!(
+        r.coverage.undecoded[0].reason.contains("object data ends"),
+        "{}",
+        r.coverage.undecoded[0].reason
+    );
+}

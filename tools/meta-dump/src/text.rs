@@ -547,6 +547,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn quote_escapes_control_characters_and_only_those() {
+        assert_eq!(quote("a\u{1}b\u{7f}c"), "\"a\\x01b\\x7fc\"");
+        assert_eq!(quote("tab\t\r\n\"\\"), "\"tab\\t\\r\\n\\\"\\\\\"");
+        // A printable character that is neither below 0x20 nor 0x7f stays as it is (0x20, 0x7e).
+        assert_eq!(quote(" ~\u{e9}"), "\" ~\u{e9}\"");
+        // 0x7f alone and a control below 0x20 alone are each enough.
+        assert_eq!(quote("\u{7f}"), "\"\\x7f\"");
+        assert_eq!(quote("\u{1f}"), "\"\\x1f\"");
+    }
+
+    #[test]
+    fn booleans_print_as_words() {
+        assert_eq!(inline(&Node::Bool(true)), "true");
+        assert_eq!(inline(&Node::Bool(false)), "false");
+    }
+
+    #[test]
+    fn a_long_map_is_broken_over_lines_like_a_list() {
+        let long = Node::map([("ref", Node::int(3)), ("file", Node::str("x".repeat(120)))]);
+        let mut s = String::new();
+        block(&long, 0, &mut s);
+        assert!(s.starts_with("{\n  ref: 3\n  file: \""), "{s}");
+        assert!(s.ends_with("\n}"), "{s}");
+        // A struct member that is a long map breaks the struct too.
+        let st = Node::Struct {
+            name: "S".into(),
+            members: vec![("S.1".into(), long)],
+        };
+        let mut s = String::new();
+        block(&st, 0, &mut s);
+        assert!(s.starts_with("S {\n  S.1 = {\n"), "{s}");
+    }
+
+    #[test]
+    fn the_line_width_limit_is_inclusive() {
+        // `[` + 98 digits + `]` is exactly 100 columns at indent 0: it stays on one line.
+        let exact = Node::List(vec![Node::Num("1".repeat(98))]);
+        let mut s = String::new();
+        block(&exact, 0, &mut s);
+        assert_eq!(s.len(), 100);
+        assert!(!s.contains('\n'));
+        // One column more and it is broken.
+        let over = Node::List(vec![Node::Num("1".repeat(99))]);
+        let mut s = String::new();
+        block(&over, 0, &mut s);
+        assert!(s.contains('\n'));
+        // The indent counts against the width.
+        let mut s = String::new();
+        block(&exact, 1, &mut s);
+        assert!(s.contains('\n'));
+    }
+
+    #[test]
     fn percent_is_exact_integer_arithmetic() {
         assert_eq!(percent(1, 3), "33.3333%");
         assert_eq!(percent(2, 3), "66.6666%");
