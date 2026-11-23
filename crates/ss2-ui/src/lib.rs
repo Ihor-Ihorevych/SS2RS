@@ -1,6 +1,9 @@
 //! ss2-ui — UI framework, HUD, menus and localization (track T10)
 
 pub mod accessibility;
+pub mod coop_overlays;
+#[cfg(test)]
+mod coop_overlays_tests;
 pub mod devconsole;
 pub mod draw;
 pub mod focus;
@@ -18,6 +21,9 @@ pub mod layout;
 pub mod loading;
 mod pointer;
 pub mod scale;
+pub mod session_screens;
+#[cfg(test)]
+mod session_screens_tests;
 pub mod settings_model;
 mod skin;
 pub mod subtitles;

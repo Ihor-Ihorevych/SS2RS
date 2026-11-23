@@ -19,7 +19,12 @@ use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_render::golden::{self, Mode, Tolerance};
 use ss2_render::{ImageRgba8, RenderError, Renderer};
+use ss2_ui::coop_overlays::{
+    ChatBox, ChatConfig, ChatKey, ChatKind, CoopOverlays, Nameplate, PingKind, PingProjection,
+    Projected, ScoreEntry, VoiceSample,
+};
 use ss2_ui::devconsole::{ConsoleView, Corner, FrameStats, LineKind, draw_overlay, stats_lines};
+use ss2_ui::session_screens::{DeathMode, DeathScreen, LevelStats, SummaryScreen};
 use ss2_ui::{Canvas, Color, DrawList, Menu, ScreenId, UiInput, Vec2, theme};
 
 /// (width, height): three resolutions at 16:9, then 21:9, then 4:3.
@@ -37,15 +42,33 @@ enum Shot {
     Menu(ScreenId),
     Console,
     Overlay,
+    DeathSolo,
+    DeathCoop,
+    SummaryDone,
+    SummaryCounting,
+    CoopScoreboard,
+    CoopChat,
+    CoopNameplates,
+    CoopPings,
+    CoopVoice,
 }
 
-const SHOTS: [Shot; 6] = [
+const SHOTS: [Shot; 15] = [
     Shot::Menu(ScreenId::Main),
     Shot::Menu(ScreenId::Options),
     Shot::Menu(ScreenId::Pause),
     Shot::Menu(ScreenId::About),
     Shot::Console,
     Shot::Overlay,
+    Shot::DeathSolo,
+    Shot::DeathCoop,
+    Shot::SummaryDone,
+    Shot::SummaryCounting,
+    Shot::CoopScoreboard,
+    Shot::CoopChat,
+    Shot::CoopNameplates,
+    Shot::CoopPings,
+    Shot::CoopVoice,
 ];
 
 /// The software adapter crashed a test process once when several tests made devices at the same time (see
@@ -83,6 +106,15 @@ fn word(shot: Shot) -> &'static str {
         Shot::Menu(ScreenId::About) => "about",
         Shot::Console => "console",
         Shot::Overlay => "overlay",
+        Shot::DeathSolo => "death_solo",
+        Shot::DeathCoop => "death_coop",
+        Shot::SummaryDone => "summary",
+        Shot::SummaryCounting => "summary_counting",
+        Shot::CoopScoreboard => "coop_scoreboard",
+        Shot::CoopChat => "coop_chat",
+        Shot::CoopNameplates => "coop_nameplates",
+        Shot::CoopPings => "coop_pings",
+        Shot::CoopVoice => "coop_voice",
     }
 }
 
@@ -112,8 +144,232 @@ fn menu_at(screen: ScreenId) -> Menu {
 }
 
 /// What the shot draws, in canvas units.
+fn level_stats() -> LevelStats {
+    LevelStats {
+        level: "The Jungle".into(),
+        kills: 137,
+        kills_total: 164,
+        secrets: 2,
+        secrets_total: 5,
+        elapsed_secs: 1325,
+        par_secs: Some(1500),
+        score: Some(48_250),
+    }
+}
+
+fn score(
+    id: u32,
+    name: &str,
+    kills: u32,
+    deaths: u32,
+    score: i64,
+    ping: Option<u32>,
+) -> ScoreEntry {
+    ScoreEntry {
+        id,
+        name: name.into(),
+        kills,
+        deaths,
+        score,
+        ping_ms: ping,
+        local: false,
+        talking: false,
+    }
+}
+
+fn projected(x: f32, y: f32, distance: f32) -> Projected {
+    Projected {
+        screen: Vec2 { x, y },
+        distance,
+        in_front: true,
+    }
+}
+
+fn teammate(id: u32, name: &str, health: f32, armor: f32, at: Projected) -> Nameplate {
+    Nameplate {
+        id,
+        name: name.into(),
+        health,
+        max_health: 100.0,
+        armor,
+        max_armor: 100.0,
+        talking: false,
+        at,
+    }
+}
+
+fn voice(id: u32, name: &str, level: f32, local: bool) -> VoiceSample {
+    VoiceSample {
+        id,
+        name: name.into(),
+        level,
+        local,
+    }
+}
+
+/// A co-op overlay shot: the same `CoopOverlays` a game would hold, with only the part under test filled in.
+fn coop_draw(shot: Shot) -> DrawList {
+    let mut all = CoopOverlays::default();
+    let mut players: Vec<Nameplate> = Vec::new();
+    let mut projections: Vec<PingProjection> = Vec::new();
+    match shot {
+        Shot::CoopScoreboard => {
+            all.scoreboard.set_held(true);
+            let mut me = score(3, "Ihor", 21, 6, 2100, Some(32));
+            me.local = true;
+            let mut talker = score(5, "Mia", 25, 4, 2650, Some(95));
+            talker.talking = true;
+            all.scoreboard.set_entries(&[
+                score(1, "Tom", 18, 9, 1650, Some(48)),
+                score(2, "Ann", 12, 3, 1300, Some(171)),
+                me,
+                score(
+                    4,
+                    "a very long player name that is cut",
+                    8,
+                    12,
+                    500,
+                    Some(60),
+                ),
+                talker,
+                score(6, "Bot Sam", 15, 7, 1450, None),
+                score(7, "Zed", 2, 14, -150, Some(1200)),
+            ]);
+        }
+        Shot::CoopChat => {
+            let mut chat = ChatBox::new(ChatConfig::default());
+            chat.push(ChatKind::Player, "Tom", "anyone near the gate?");
+            // Ten seconds go by; with the input open (below) old lines are shown at full strength anyway.
+            for _ in 0..630 {
+                chat.update();
+            }
+            chat.push(ChatKind::System, "", "Ann joined the game");
+            chat.push(ChatKind::Player, "Ann", "on my way, wait for me before you open the big door because there is a lot behind it");
+            chat.push(ChatKind::Team, "Mia", "left side is clear");
+            chat.push(ChatKind::Player, "Ihor", "ok go");
+            chat.open(true);
+            chat.handle_text("push right now");
+            chat.handle_key(ChatKey::Left);
+            chat.handle_key(ChatKey::Left);
+            all.chat = chat;
+        }
+        Shot::CoopNameplates => {
+            players = vec![
+                teammate(1, "Tom", 100.0, 0.0, projected(520.0, 620.0, 6.0)),
+                teammate(2, "Ann", 62.0, 80.0, projected(960.0, 560.0, 22.0)),
+                teammate(3, "Mia", 18.0, 0.0, projected(1380.0, 640.0, 38.0)),
+                teammate(4, "Edge Walker", 80.0, 30.0, projected(20.0, 300.0, 10.0)),
+                teammate(5, "Far Away", 100.0, 0.0, projected(1700.0, 420.0, 58.0)),
+                teammate(6, "Zed", 0.0, 0.0, projected(1100.0, 840.0, 12.0)),
+                Nameplate {
+                    talking: true,
+                    ..teammate(7, "Talker", 45.0, 0.0, projected(760.0, 330.0, 15.0))
+                },
+                Nameplate {
+                    at: Projected {
+                        in_front: false,
+                        ..projected(300.0, 300.0, 5.0)
+                    },
+                    ..teammate(8, "Behind", 100.0, 0.0, projected(0.0, 0.0, 5.0))
+                },
+            ];
+        }
+        Shot::CoopPings => {
+            let a = all
+                .pings
+                .add(1, "Tom", PingKind::Danger, "Boss here", 400)
+                .unwrap();
+            let b = all
+                .pings
+                .add(2, "Ann", PingKind::Item, "Ammo", 400)
+                .unwrap();
+            let c = all.pings.add(3, "Mia", PingKind::Go, "Go", 400).unwrap();
+            let d = all
+                .pings
+                .add(4, "Zed", PingKind::Look, "Secret?", 400)
+                .unwrap();
+            let e = all
+                .pings
+                .add(5, "Bot Sam", PingKind::Danger, "", 20)
+                .unwrap();
+            projections = vec![
+                PingProjection {
+                    id: a,
+                    at: projected(1280.0, 380.0, 64.0),
+                },
+                PingProjection {
+                    id: b,
+                    at: projected(560.0, 760.0, 12.0),
+                },
+                PingProjection {
+                    id: c,
+                    at: projected(2900.0, 500.0, 40.0),
+                },
+                PingProjection {
+                    id: d,
+                    at: Projected {
+                        screen: Vec2 { x: 700.0, y: 400.0 },
+                        distance: 25.0,
+                        in_front: false,
+                    },
+                },
+                PingProjection {
+                    id: e,
+                    at: projected(180.0, 1200.0, 8.0),
+                },
+            ];
+        }
+        Shot::CoopVoice => {
+            // Tom spoke a moment ago and is still listed, dimmed.
+            let mut earlier = CoopOverlays::default();
+            earlier.update(&[voice(1, "Tom", 0.5, false)]);
+            earlier.update(&[
+                voice(2, "Ann", 0.8, false),
+                voice(3, "Ihor", 0.35, true),
+                voice(5, "Mia", 1.0, false),
+                voice(7, "A very long player name", 0.1, false),
+            ]);
+            all = earlier;
+        }
+        _ => unreachable!("not a co-op shot"),
+    }
+    let mut list = DrawList::default();
+    all.draw_into(&players, &projections, &mut list);
+    list
+}
+
 fn draw(shot: Shot) -> DrawList {
     match shot {
+        Shot::CoopScoreboard
+        | Shot::CoopChat
+        | Shot::CoopNameplates
+        | Shot::CoopPings
+        | Shot::CoopVoice => coop_draw(shot),
+        Shot::DeathSolo => DeathScreen::new(DeathMode::Solo).draw(),
+        Shot::DeathCoop => {
+            let mut screen = DeathScreen::new(DeathMode::Coop {
+                respawn_in_ticks: Some(250),
+                ticks_per_second: 60,
+            });
+            for _ in 0..10 {
+                screen.update();
+            }
+            screen.draw()
+        }
+        Shot::SummaryDone => {
+            let mut screen = SummaryScreen::new(level_stats());
+            while screen.counting() {
+                screen.update();
+            }
+            screen.draw()
+        }
+        Shot::SummaryCounting => {
+            let mut screen = SummaryScreen::new(level_stats());
+            for _ in 0..70 {
+                screen.update();
+            }
+            screen.draw()
+        }
         Shot::Menu(screen) => menu_at(screen).draw(),
         Shot::Console => {
             let mut view = ConsoleView::new(100);
@@ -230,7 +486,10 @@ fn check_geometry(shot: Shot, size: (u32, u32), list: &DrawList, img: &ImageRgba
     );
 
     // The focused button of a menu is where the canvas puts it, and orange. Sample near its left edge, away from the label.
-    if matches!(shot, Shot::Menu(_) | Shot::Overlay) {
+    if matches!(
+        shot,
+        Shot::Menu(_) | Shot::Overlay | Shot::DeathSolo | Shot::DeathCoop | Shot::SummaryDone
+    ) {
         let focused = list
             .quads
             .iter()
@@ -293,6 +552,51 @@ fn console_matches_its_goldens_at_every_size() {
 #[test]
 fn frame_time_overlay_matches_its_goldens_at_every_size() {
     one_shot(Shot::Overlay);
+}
+
+#[test]
+fn solo_death_screen_matches_its_goldens_at_every_size() {
+    one_shot(Shot::DeathSolo);
+}
+
+#[test]
+fn coop_death_screen_matches_its_goldens_at_every_size() {
+    one_shot(Shot::DeathCoop);
+}
+
+#[test]
+fn finished_summary_matches_its_goldens_at_every_size() {
+    one_shot(Shot::SummaryDone);
+}
+
+#[test]
+fn counting_summary_matches_its_goldens_at_every_size() {
+    one_shot(Shot::SummaryCounting);
+}
+
+#[test]
+fn coop_scoreboard_matches_its_goldens_at_every_size() {
+    one_shot(Shot::CoopScoreboard);
+}
+
+#[test]
+fn coop_chat_matches_its_goldens_at_every_size() {
+    one_shot(Shot::CoopChat);
+}
+
+#[test]
+fn coop_nameplates_match_their_goldens_at_every_size() {
+    one_shot(Shot::CoopNameplates);
+}
+
+#[test]
+fn coop_ping_markers_match_their_goldens_at_every_size() {
+    one_shot(Shot::CoopPings);
+}
+
+#[test]
+fn coop_voice_indicators_match_their_goldens_at_every_size() {
+    one_shot(Shot::CoopVoice);
 }
 
 #[test]
@@ -377,7 +681,7 @@ fn every_screen_has_a_golden_at_every_size() {
     );
     assert_eq!(
         SHOTS.len() * SIZES.len(),
-        30,
-        "the matrix is six screens by five sizes"
+        75,
+        "the matrix is fifteen screens by five sizes"
     );
 }
