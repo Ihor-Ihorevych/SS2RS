@@ -19,7 +19,7 @@ PC first; mobile audio/memory work is Phase 2.
 - [ ] **T06-004** · Sound collections (`.scs`): random variants, pitch/volume jitter, material-based impact/footstep selection · `M` · `P1` · Deps: T01-013
 - [ ] **T06-005** · Music system: streaming playback, crossfades, level-state-driven layers/cues, loop points · `L` · `P1`
 - [ ] **T06-016** · Weapon/enemy audio event hooks from animation events (fire, reload, step) · `M` · `P1` · Deps: T02-016
-- [ ] **T06-015** · Replicated audio events API for co-op (who hears what; one-shots vs loops; late-joiner behavior) · `M` · `P1` · Deps: T08-012
+- [~] **T06-015** [INPRG @Ihor-Ihorevych/agent · branch `T06-015-replicated-audio-events` · 2026-11-23] · Replicated audio events API for co-op (who hears what; one-shots vs loops; late-joiner behavior) · `M` · `P1` · Deps: T08-012
 - [x] **T06-017** · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause: in the mixer core (`docs/MIXER.md`): bus volumes with master, clamping, ducking, a suspend that fades without dropping voices; **no `impl Audio` for the mixer, no settings screen or file, no Android pause wiring** (T06-017b) · `S` · `P1` · 🟢
 - [ ] **T06-017b** · `impl Audio` for the mixer (sound resolution by path through the sound bank), wire `set_suspended` to the platform lifecycle and the volumes to the settings file and screen (T10-012) · `S` · `P1` · Deps: T06-017, T06-002
 - [ ] **T06-018** · Audio API contract mocks and sound-test scene in asset viewer · `S` · `P1` · 🟢
