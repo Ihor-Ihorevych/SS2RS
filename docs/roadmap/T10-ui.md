@@ -33,7 +33,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Localization & accessibility
 - [ ] **T10-011** · Localization pipeline: string tables from game data (languages per T01-041) + our own UI strings, runtime language switch · `L` · `P2`
-- [ ] **T10-010** · Accessibility: text scale, colorblind-safe HUD options, subtitle size/background, reduced flashing, hold/toggle options · `M` · `P2`
+- [~] **T10-010** [INPRG @Ihor-Ihorevych/agent · branch `T10-010-accessibility-settings` · 2026-11-23] · Accessibility: text scale, colorblind-safe HUD options, subtitle size/background, reduced flashing, hold/toggle options · `M` · `P2`
 
 ## Quality
 - [ ] **T10-015** · UI golden-image tests for each screen at 3 resolutions + 2 aspect ratios · `M` · `P1`
