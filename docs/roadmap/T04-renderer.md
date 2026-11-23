@@ -50,7 +50,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-028** · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
 - [ ] **T04-032** · GLES3 fallback validation (naga output limits, UBO sizes, no compute) and device blocklist · `M` · `PHASE 2`
 - [ ] **T04-033** · Render settings hot-reload, shader hot-reload · `S` · `P2`
-- [~] **T04-034** [INPRG @lxstyo/agent · branch `T04-034-multi-view-split-screen` · 2026-11-23] · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
+- [x] **T04-034** · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
+  Decision recorded in [RFC 0011](../rfcs/0011-split-screen.md).
 
 ## Menu slice (PC, placeholder skin)
 - [x] **T04-035** · wgpu context (windowed + offscreen), 2D quad batch and `glyphon` text with an embedded OFL font; partial T04-001/T04-017 · `L` · `P1` · Deps: T10-032
