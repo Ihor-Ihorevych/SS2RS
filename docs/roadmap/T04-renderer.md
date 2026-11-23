@@ -14,7 +14,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-017** · 2D/UI renderer: batched quads, text glyph quads, scissor, 9-slice, render-to-texture (shared with T10) · `M` · `P0` · 🟢
 - [x] **T04-018** · Debug draw (lines/AABB/spheres/text/labels), toggleable overlays: the GPU-free recorder `ss2_render_api::DebugDraw` (`docs/DEBUG_DRAW.md`); the wgpu line pass is T04-018b · `S` · `P1` · 🟢
 - [ ] **T04-018b** · Debug draw GPU pass: draw `DebugDraw::lines()` as a line list (depth test on/off) in the debug-overlay stage of the frame graph, labels through the 2D renderer (`project_labels`), the `r_debug <category>` console command · `S` · `P1` · Deps: T04-002, T04-017
-- [ ] **T04-019** · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
+- [~] **T04-019** [INPRG @Ihor-Ihorevych/agent · branch `T04-019-frame-profiler` · 2026-11-23] · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
 - [ ] **T04-026** · `RenderWorld` extract implementation + double-buffering between sim and render thread · `L` · `P0` · Deps: T00-015
 
 ## Models & materials (Wave 1) — M1/M2
@@ -22,7 +22,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-006** · GPU skinning, bone palette upload, animation pose → buffer, attachments (weapon on hand) · `L` · `P0` · Deps: T02-015/016
 - [ ] **T04-007** · Material system: `MaterialDesc` (from `.mtr`) → pipeline + bind groups; permutation cache; **on-disk pipeline cache** to avoid shader-compile hitches (esp. Android) · `L` · `P0` · Deps: T02-018, T05-*
 - [ ] **T04-008** · Texture sampling: filtering, anisotropy, mip bias, sRGB/linear rules, normal-map decode, cubemaps · `M` · `P0`
-- [~] **T04-016** [INPRG @Ihor-Ihorevych/agent · branch `T04-016-transparency-sorting-blend-modes` · 2026-11-23] · Transparency: sorting, blend modes (additive/alpha/premult), alpha-to-coverage option, soft particles · `M` · `P1`
+- [x] **T04-016** · Transparency: sorting, blend modes (additive/alpha/premult), alpha-to-coverage option, soft particles: `ss2_render_api::transparency` (`docs/TRANSPARENCY.md`): blend equations, a deterministic draw sort (opaque by material, blended back to front with layers and bias), the alpha-to-coverage rule, the soft-particle fade and reverse-Z depth conversion; **no pipelines or passes use it yet, per-draw sorting only** (T04-016b) · `M` · `P1`
+- [ ] **T04-016b** · Map `BlendFactors` to wgpu pipeline state, the transparent pass and the soft-particle depth read in the frame graph, call `sort_draws` from the renderer, measure the sort on thousands of particles · `M` · `P1` · Deps: T04-016, T04-002, T04-007
 - [ ] **T04-023** · Instancing & batching for hordes (hundreds of animated enemies), animation texture/instanced skinning option · `L` · `P1`
 - [x] **T04-024** · LOD & distance culling policy (model LODs, impostors for far enemies), quality-tier aware: `ss2_render_api::lod` (`docs/LOD.md`): selection by screen coverage with levels, an impostor, size and distance culling, quality bias and view distance, hysteresis, a per-thing tracker; **nothing feeds it yet (no mesh levels, no impostors, no renderer calls it), no cross-fade** (T04-024b) · `M` · `P1`
 - [ ] **T04-024b** · Use the LOD policy in the mesh path (levels from `.bmf`, T04-005), impostor generation and drawing, cross-fade or dithered transitions, per-class distances and shadow-caster LOD, and a benchmark of selection for thousands of things · `M` · `P1` · Deps: T04-024, T04-005
