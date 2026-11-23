@@ -36,5 +36,5 @@ PC first; mobile audio/memory work is Phase 2.
 - [x] **T06-012** · Subtitles/captions overlay timing (source per T01-041): `ss2_ui::subtitles` (`docs/SUBTITLES.md`): a device-free cue queue with reading-time-based minimum durations, fades, a line limit with priority eviction and bounded waiting, late/out-of-order cues, pause, seek and skip; scope: timing model only, nothing draws it and no audio clock or subtitle data is connected (T06-012b) · `M` · `P2`
 - [ ] **T06-012b** · Draw the subtitle overlay (text, outline, box and wrapping on the HUD skin using `AccessibilitySettings::subtitle_style`), drive it from the real audio/video clock (T06-010, T06-011), and read cues from the localization tables and cutscene data per T01-041 (T10-011); tune the defaults on a screen · `M` · `P2`
 - [ ] **T06-020** · Large-video storage on Android (stream from SAF/content URI without copying) · `M` · `PHASE 2`
-- [ ] **T06-021** · `.xmv` (Xbox) explicitly ignored; document + test that it's skipped · `S` · `P3` · 🟢
+- [~] **T06-021** [INPRG @Ihor-Ihorevych/agent · branch `T06-021-xmv-ignored` · 2026-11-23] · `.xmv` (Xbox) explicitly ignored; document + test that it's skipped · `S` · `P3` · 🟢
 - [ ] **T06-014** · Voice chat for co-op (Opus, push-to-talk, VAD), optional · `L` · `P3`
