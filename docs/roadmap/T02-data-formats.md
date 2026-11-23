@@ -20,7 +20,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-007** · `ss2-meta`: type system / reflection decoder into a generic `Value` tree (structs, arrays, enums, refs) · `L` · `P0` · Deps: T01-005, T02-006 — `ss2_meta::{TypeSystem, Value, Container::decode_objects}` (all 8,141 containers of the retail install decode: 989,763 objects, 231,643 extra records)
 - [x] **T02-008** · `ss2-meta`: writer + round-trip tests (needed for fixtures, cooked cache, tools) · `M` · `P1` — `ss2_meta::write` (all 8,141 containers of the retail install, 1.39 GB, are rewritten byte for byte)
 - [x] **T02-008b** · `serde`-style derive layer: typed structs from `Value` (`#[derive(MetaDeserialize)]`) · `L` · `P1` — `ss2_meta::FromValue`, `Decoded::typed`, new crate `ss2-meta-derive`
-- [~] **T02-009** [INPRG @lxstyo · branch `T02-009-ss2-assets-assetmanager-handles` · 2026-11-23] · `ss2-assets`: `AssetManager` (handles, refcount, async load, dependency graph from `RFIL`, error reporting) · `L` · `P0` · Deps: T00-014
+- [x] **T02-009** · `ss2-assets`: `AssetManager` (handles, refcount, async load, dependency graph from `RFIL`, error reporting) · `L` · `P0` · Deps: T00-014 — `AssetOptions` (worker pool, eviction), `Handle::wait/wait_all`, `LoadContext::load_any`, `dependency_graph`, `stats`, `failures`; decisions in RFC 0001
 - [x] **T02-010** · Loader registry & extension → loader mapping; plugin-style registration per format crate · `S` · `P0`
 - [ ] **T02-011** · Cooked cache: processed-asset store with content hash, invalidation on archive/version change, background cooking · `L` · `P1`
 - [ ] **T02-011b** · Hot reload of loose files (dev mode) · `S` · `P2` · 🟢
