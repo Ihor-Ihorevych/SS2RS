@@ -2756,6 +2756,7 @@ dependencies = [
 name = "ss2-ui"
 version = "0.0.0"
 dependencies = [
+ "proptest",
  "ss2-core",
 ]
 

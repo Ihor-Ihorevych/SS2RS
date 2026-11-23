@@ -2,6 +2,7 @@
 
 pub mod devconsole;
 pub mod draw;
+pub mod focus;
 pub mod geometry;
 
 pub use draw::*;
