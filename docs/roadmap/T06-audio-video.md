@@ -18,7 +18,7 @@ PC first; mobile audio/memory work is Phase 2.
 - [ ] **T06-005** · Music system: streaming playback, crossfades, level-state-driven layers/cues, loop points · `L` · `P1`
 - [ ] **T06-016** · Weapon/enemy audio event hooks from animation events (fire, reload, step) · `M` · `P1` · Deps: T02-016
 - [ ] **T06-015** · Replicated audio events API for co-op (who hears what; one-shots vs loops; late-joiner behavior) · `M` · `P1` · Deps: T08-012
-- [ ] **T06-017** · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause · `S` · `P1` · 🟢
+- [~] **T06-017** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause · `S` · `P1` · 🟢
 - [ ] **T06-018** · Audio API contract mocks and sound-test scene in asset viewer · `S` · `P1` · 🟢
 
 ## PHASE 2 — Mobile
