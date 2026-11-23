@@ -33,7 +33,8 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Localization & accessibility
 - [ ] **T10-011** · Localization pipeline: string tables from game data (languages per T01-041) + our own UI strings, runtime language switch · `L` · `P2`
-- [~] **T10-010** [INPRG @Ihor-Ihorevych/agent · branch `T10-010-accessibility-settings` · 2026-11-23] · Accessibility: text scale, colorblind-safe HUD options, subtitle size/background, reduced flashing, hold/toggle options · `M` · `P2`
+- [x] **T10-010** · Accessibility: text scale, colorblind-safe HUD options, subtitle size/background, reduced flashing, hold/toggle options: `ss2_ui::accessibility` (`docs/ACCESSIBILITY_OPTIONS.md`): ten named settings with strict parsing, colour-blindness simulation and a status palette checked to stay distinguishable, WCAG contrast and `ensure_contrast`, subtitle style, a flash limiter and hold/toggle state; **no settings screen or file, nothing consumes the options yet, and the colour-blindness matrices were typed from memory and are not independently verified** (T10-010b) · `M` · `P2`
+- [ ] **T10-010b** · Use the accessibility options: verify the Machado matrices against the paper, the settings screen and file (T10-012), text scale in layout, the status palette in the HUD (T10-003), subtitle drawing (T06-012), `flash_strength` and the limiter in `ScreenEffects`, `reduce_motion` for camera bob and the underwater warp, `HoldToggle` in the input layer; then set IN-4, SU-3, VC-2 and MO-3 in `docs/ACCESSIBILITY.md` to Done with evidence · `M` · `P2` · Deps: T10-010, T10-012, T10-003
 
 ## Quality
 - [ ] **T10-015** · UI golden-image tests for each screen at 3 resolutions + 2 aspect ratios · `M` · `P1`
