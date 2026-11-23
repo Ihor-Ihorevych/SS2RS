@@ -34,7 +34,8 @@ the server can reconcile (T08-009).
 ## World instance & navigation
 - [ ] **T07-023** · `World` instance: load `.wld` → entities+static geometry+nav; spawn by class via registry; level restart/unload; streaming hooks · `L` · `P0` · Deps: T02-020, T08-002
 - [ ] **T07-013** · Navigation: use authored nav data if present else generate navmesh from collision; A* + funnel, dynamic obstacles, off-mesh links (jumps/doors) · `XL` → split · `P1` · Deps: T01-025, T02-020e
-- [~] **T07-024** [INPRG @Ihor-Ihorevych/agent · branch `T07-024-visibility` · 2026-11-23] · Visibility queries for AI & gameplay (line of sight, hearing propagation through sectors) · `M` · `P1`
+- [x] **T07-024** · Visibility queries for AI & gameplay (line of sight, hearing propagation through sectors): `ss2_physics::visibility` (`docs/VISIBILITY.md`): line of sight and partial exposure over any `SpatialQuery`, a cosine field-of-view test, a looker (range, cone, lines) and a sound graph (shortest way through portals, closed-door penalty); **no level data feeds it yet** (T07-024b) · `M` · `P1`
+- [ ] **T07-024b** · Visibility follow-ups: build the sound graph from level sectors and portals (T07-015) and hook doors to `set_open`, in-sector distance and sound categories, scheduling looks every N ticks and a measured cost for a level of enemies, noticing and memory (with T09 AI) · `M` · `P1` · Deps: T07-024, T07-015
 - [ ] **T07-015** · Sector/portal data shared with renderer culling (`ss2-world` owns, renderer reads) · `M` · `P1`
 
 ## Tooling & quality
