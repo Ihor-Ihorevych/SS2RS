@@ -7,9 +7,9 @@ PC first; mobile audio/memory work is Phase 2.
 ## Audio engine (Wave 0)
 - [ ] **T06-001** · Output device + mixer thread (`cpal`): sample-rate conversion, buffer sizing, device change/loss recovery, headless null device for servers/tests · `L` · `P0`
 - [ ] **T06-002** · Decoders: PCM/IMA-ADPCM `.wav`, Vorbis `.ogg` (symphonia/lewton), streaming vs fully-decoded policy by size · `M` · `P0` · 🟢
-- [ ] **T06-013** · Offline renderer: run the mixer to a WAV buffer deterministically; golden-audio tests with tolerance · `M` · `P1`
+- [~] **T06-013** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Offline renderer: run the mixer to a WAV buffer deterministically; golden-audio tests with tolerance · `M` · `P1`
 - [ ] **T06-003** · 3D positional audio: distance attenuation curves (from T01-034), panning, occlusion low-pass, Doppler, listener orientation · `L` · `P0`
-- [ ] **T06-006** · Voice management: priority, max voices per tier (mobile), virtualization/culling of inaudible voices, bus ducking · `M` · `P1`
+- [~] **T06-006** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Voice management: priority, max voices per tier (mobile), virtualization/culling of inaudible voices, bus ducking · `M` · `P1`
 - [ ] **T06-007** · Environment reverb (EAX-style zones → simple FDN/Schroeder reverb), per-zone presets, mobile toggle · `L` · `P2`
 - [ ] **T06-009** · Streaming from archives without full load; prefetch via `.preload` lists; seek support · `M` · `P1`
 
@@ -18,7 +18,7 @@ PC first; mobile audio/memory work is Phase 2.
 - [ ] **T06-005** · Music system: streaming playback, crossfades, level-state-driven layers/cues, loop points · `L` · `P1`
 - [ ] **T06-016** · Weapon/enemy audio event hooks from animation events (fire, reload, step) · `M` · `P1` · Deps: T02-016
 - [ ] **T06-015** · Replicated audio events API for co-op (who hears what; one-shots vs loops; late-joiner behavior) · `M` · `P1` · Deps: T08-012
-- [ ] **T06-017** · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause · `S` · `P1` · 🟢
+- [~] **T06-017** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause · `S` · `P1` · 🟢
 - [ ] **T06-018** · Audio API contract mocks and sound-test scene in asset viewer · `S` · `P1` · 🟢
 
 ## PHASE 2 — Mobile
