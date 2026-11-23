@@ -8,17 +8,18 @@ use gilrs::{Axis, EventType, Gilrs};
 use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_platform::nav::{StickNavigator, map_gamepad_button, map_key};
+use ss2_platform_api::PlatformPaths;
 use ss2_render::Renderer;
 use ss2_ui::{Canvas, Color, DrawList, Menu, UiInput, Vec2, theme};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::profiling;
 use crate::state::{AppState, Effects, Scene};
+use crate::{profiling, screenshot};
 
 /// Clear color of the placeholder "game" scene.
 const PLAYING_CLEAR: Color = Color([0.02, 0.03, 0.05, 1.0]);
@@ -29,6 +30,8 @@ struct App {
     /// Reused every frame, so that drawing a screen allocates nothing (`docs/UI_BUDGET.md`).
     draw_list: DrawList,
     settings_path: Option<PathBuf>,
+    screenshot_dir: Option<PathBuf>,
+    capture_pending: bool,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     gilrs: Option<Gilrs>,
@@ -58,14 +61,16 @@ pub(crate) fn effective_settings(
 }
 
 /// Run the interactive app. With `smoke_frames`, exits after that many frames. `overrides` are
-/// the `--set KEY=VALUE` settings overrides of this run; `settings_path` is where the settings
-/// are read and saved (the OS default when `None`).
+/// the `--set KEY=VALUE` settings overrides of this run. `paths` provides the settings and capture
+/// locations for an interactive run.
 pub fn run(
     smoke_frames: Option<u32>,
     overrides: &[String],
-    settings_path: Option<PathBuf>,
+    paths: Option<&PlatformPaths>,
 ) -> Result<(), String> {
-    let settings_path = settings_path.or_else(Settings::default_path);
+    let settings_path = paths
+        .map(PlatformPaths::settings_file)
+        .or_else(Settings::default_path);
     let settings = effective_settings(settings_path.as_deref(), overrides)?;
     let gilrs = match Gilrs::new() {
         Ok(g) => Some(g),
@@ -79,6 +84,8 @@ pub fn run(
         menu: Menu::new(settings),
         draw_list: DrawList::default(),
         settings_path,
+        screenshot_dir: paths.map(|paths| paths.save_dir.join("screenshots")),
+        capture_pending: false,
         window: None,
         renderer: None,
         gilrs,
@@ -193,6 +200,19 @@ impl App {
             event_loop.exit();
             return;
         }
+        if self.capture_pending && self.canvas().is_some() {
+            self.capture_pending = false;
+            if let (Some(renderer), Some(dir)) = (&mut self.renderer, &self.screenshot_dir) {
+                let capture = renderer
+                    .capture_frame(Some(&self.draw_list), clear)
+                    .map_err(|error| error.to_string())
+                    .and_then(|image| screenshot::save_interactive(dir, &image));
+                match capture {
+                    Ok(path) => tracing::info!(path = %path.display(), "saved screenshot"),
+                    Err(error) => tracing::warn!(%error, "cannot save screenshot"),
+                }
+            }
+        }
         if let Some(left) = self.frames_left.as_mut() {
             *left = left.saturating_sub(1);
             if *left == 0 {
@@ -269,10 +289,17 @@ impl ApplicationHandler for App {
                 self.pointer(event_loop, make);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let PhysicalKey::Code(code) = event.physical_key
-                    && let Some(nav) = map_key(code)
-                {
-                    self.dispatch(event_loop, UiInput::Nav(nav));
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    if code == KeyCode::F12 {
+                        if !event.repeat {
+                            self.capture_pending = self.screenshot_dir.is_some();
+                            if !self.capture_pending && self.frames_left.is_none() {
+                                tracing::warn!("no screenshot folder is available");
+                            }
+                        }
+                    } else if let Some(nav) = map_key(code) {
+                        self.dispatch(event_loop, UiInput::Nav(nav));
+                    }
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(event_loop),

@@ -5,8 +5,8 @@
 //! or everything next to the executable with `--portable` or an `ss2-portable` marker file), then
 //! writes `ss2-app.log` (rotated, [`ss2_core::logfile`]) and one text file per panic
 //! ([`ss2_core::crash`]) to the log folder, and reads and saves `settings.toml` in the config
-//! folder. The other modes (`--help`, `--version`, `--smoke-frames`, `--screenshot`) create no
-//! files.
+//! folder. The other modes (`--help`, `--version`, `--smoke-frames`, `--screenshot`) skip writing
+//! diagnostics files.
 
 use std::path::{Path, PathBuf};
 

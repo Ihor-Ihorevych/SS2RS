@@ -50,7 +50,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-021b** · CI job for the golden tests with a software adapter (Mesa lavapipe on Linux, WARP on Windows) and `SS2_FORCE_SOFTWARE_ADAPTER=1`; measure whether goldens made on one platform pass on the other and set per-check tolerances · `S` · `P1` · Deps: T04-021, T12-001
 - [ ] **T04-022** · Visual parity workflow: compare to oracle screenshots (T01-038) side by side; checklist per level · `M` · `P2`
 - [ ] **T04-027** · Mobile optimization pass: tile-based friendly passes, ASTC/ETC2, limited MRT, half precision, thermal-adaptive scaling · `L` · `PHASE 2`
-- [~] **T04-028** [INPRG @lxstyo/agent · branch `T04-028-screenshot-capture-photo-mode` · 2026-11-23] · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
+- [x] **T04-028** · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
+  F12 writes a PNG. Photo tooling can request capture without the UI draw list.
 - [ ] **T04-032** · GLES3 fallback validation (naga output limits, UBO sizes, no compute) and device blocklist · `M` · `PHASE 2`
 - [ ] **T04-033** · Render settings hot-reload, shader hot-reload · `S` · `P2`
 - [x] **T04-034** · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
