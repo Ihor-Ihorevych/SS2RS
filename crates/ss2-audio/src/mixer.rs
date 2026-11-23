@@ -16,7 +16,7 @@
 //!
 //! **Deterministic**: voices are visited in id order, all arithmetic is `f32` (the playback cursor is `f64`), nothing reads a clock: the same calls give the
 //! same samples on one machine and build (across architectures the samples may differ in the last bits: golden tests compare with a tolerance, see
-//! [`compare`]). Stale voice ids are harmless: operations on a finished voice do nothing.
+//! [`crate::compare`]). Stale voice ids are harmless: operations on a finished voice do nothing.
 //!
 //! Not here: decoding, streaming from archives, the output device and its thread (T06-001), music layers (T06-005), reverb (T06-007), the Doppler effect,
 //! occlusion, the original game's attenuation curves (T06-003: the default is linear) and `impl Audio` for the mixer (it needs sound resolution by path).
