@@ -42,7 +42,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-031** · Screen-space effects: damage flashes, underwater overlay, fades, letterbox for cutscenes · `S` · `P1` · 🟢
 
 ## Quality, tooling, mobile
-- [~] **T04-020** [INPRG @Ihor-Ihorevych/agent · branch `T04-020-quality-presets` · 2026-11-23] · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings · `M` · `P1`
+- [x] **T04-020** · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings: `ss2_render_api::quality` (`docs/QUALITY.md`): four presets, eleven named settings with strict parsing, a deterministic dynamic-resolution controller; **nothing in the renderer reads them yet, the preset values are unmeasured guesses, and there is no settings file or screen** (T04-020b) · `M` · `P1`
+- [ ] **T04-020b** · Make the renderer honour `QualitySettings` (render scale first, then each pass as it lands), feed `DynamicResolution` from a real frame timer, pick a default tier from the GPU, tune the presets on real GPUs (a phone in Phase 2) · `M` · `P1` · Deps: T04-020, T04-002
 - [x] **T04-021** · Golden-image test harness: `ss2_render::golden` (`docs/GOLDEN_IMAGES.md`): a two-limit tolerance, failure evidence (rendered and difference images), the update workflow (with T11-015), `SS2_FORCE_SOFTWARE_ADAPTER`; **no CI job with a software adapter yet** (T04-021b) · `M` · `P0`
 - [ ] **T04-021b** · CI job for the golden tests with a software adapter (Mesa lavapipe on Linux, WARP on Windows) and `SS2_FORCE_SOFTWARE_ADAPTER=1`; measure whether goldens made on one platform pass on the other and set per-check tolerances · `S` · `P1` · Deps: T04-021, T12-001
 - [ ] **T04-022** · Visual parity workflow: compare to oracle screenshots (T01-038) side by side; checklist per level · `M` · `P2`
