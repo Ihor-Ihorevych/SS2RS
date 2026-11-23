@@ -5,7 +5,7 @@ T01-036); HUD params from `HudParams.rsc`-style databases. **PC first: mouse, ke
 Touch/mobile layout is Phase 2; the framework just must not bake in "mouse always exists".
 
 ## Framework (Wave 0 — no game data needed)
-- [ ] **T10-001** · UI framework decision + core: retained vs immediate mode; layout (anchors/flex), styling/skins, event routing, focus system; renders via T04-017 · `L` · `P0`
+- [~] **T10-001** [INPRG @Ihor-Ihorevych/agent · branch `T10-001-ui-framework-rfc` · 2026-11-23] · UI framework decision + core: retained vs immediate mode; layout (anchors/flex), styling/skins, event routing, focus system; renders via T04-017 · `L` · `P0`
 - [ ] **T10-002** · Text rendering: glyph atlas from `.fnt` or fallback TTF, shaping basics, Unicode ranges (Latin/Cyrillic/…), wrapping, colored runs · `L` · `P0` · Deps: T02-025
 - [ ] **T10-005** · Navigation model: mouse hover, keyboard/gamepad focus graph, consistent back/confirm; input-device-agnostic focus so touch can be added later · `M` · `P0`
 - [x] **T10-017** · Resolution/scale policy: virtual canvas, DPI scaling, aspect ratios (16:9 → 21:9 ultrawide): `ss2_ui::scale` (`docs/UI_SCALING.md`): letterbox or expand, a safe area, the user's smaller-UI scale, a text floor with the OS scale factor, anchors; **nothing uses it yet** (T10-017b) · `M` · `P0`
