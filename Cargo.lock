@@ -2586,7 +2586,11 @@ version = "0.0.0"
 name = "ss2-server"
 version = "0.0.0"
 dependencies = [
+ "serde",
  "ss2-core",
+ "ss2-sim",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
