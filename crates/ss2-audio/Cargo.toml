@@ -10,3 +10,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-audio-api = { path = "../ss2-audio-api" }

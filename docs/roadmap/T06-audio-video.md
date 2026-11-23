@@ -7,9 +7,11 @@ PC first; mobile audio/memory work is Phase 2.
 ## Audio engine (Wave 0)
 - [ ] **T06-001** · Output device + mixer thread (`cpal`): sample-rate conversion, buffer sizing, device change/loss recovery, headless null device for servers/tests · `L` · `P0`
 - [ ] **T06-002** · Decoders: PCM/IMA-ADPCM `.wav`, Vorbis `.ogg` (symphonia/lewton), streaming vs fully-decoded policy by size · `M` · `P0` · 🟢
-- [~] **T06-013** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Offline renderer: run the mixer to a WAV buffer deterministically; golden-audio tests with tolerance · `M` · `P1`
+- [x] **T06-013** · Offline renderer: run the mixer to a WAV buffer deterministically; golden-audio tests with tolerance: `ss2_audio::{render_offline, wav, compare}` (`docs/MIXER.md`): deterministic rendering, WAV writing, a peak and RMS tolerance, an analytic golden test; **no stored golden files yet** (T06-013b) · `M` · `P1`
+- [ ] **T06-013b** · Stored golden-audio files for scenes without a closed form, and a cross-architecture check of the tolerance (with T07-026) · `S` · `P1` · Deps: T06-013
 - [ ] **T06-003** · 3D positional audio: distance attenuation curves (from T01-034), panning, occlusion low-pass, Doppler, listener orientation · `L` · `P0`
-- [~] **T06-006** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Voice management: priority, max voices per tier (mobile), virtualization/culling of inaudible voices, bus ducking · `M` · `P1`
+- [x] **T06-006** · Voice management: priority, max voices per tier (mobile), virtualization/culling of inaudible voices, bus ducking: in the mixer core (`docs/MIXER.md`): priority, then loudness, then age; virtualized voices keep their place; critical voices never culled; music ducking under voice-overs; **the limit is a parameter, nothing sets it from a quality tier, and nothing was measured on a phone** (T06-006b) · `M` · `P1`
+- [ ] **T06-006b** · Wire the voice limit to quality tiers (mobile), measure the mixer on phone CPUs (Phase 2), per-bus voice caps · `S` · `P1` · Deps: T06-006, T04-020
 - [ ] **T06-007** · Environment reverb (EAX-style zones → simple FDN/Schroeder reverb), per-zone presets, mobile toggle · `L` · `P2`
 - [ ] **T06-009** · Streaming from archives without full load; prefetch via `.preload` lists; seek support · `M` · `P1`
 
@@ -18,7 +20,8 @@ PC first; mobile audio/memory work is Phase 2.
 - [ ] **T06-005** · Music system: streaming playback, crossfades, level-state-driven layers/cues, loop points · `L` · `P1`
 - [ ] **T06-016** · Weapon/enemy audio event hooks from animation events (fire, reload, step) · `M` · `P1` · Deps: T02-016
 - [ ] **T06-015** · Replicated audio events API for co-op (who hears what; one-shots vs loops; late-joiner behavior) · `M` · `P1` · Deps: T08-012
-- [~] **T06-017** [INPRG @Ihor-Ihorevych/agent · branch `T06-mixer-core` · 2026-11-23] · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause · `S` · `P1` · 🟢
+- [x] **T06-017** · Mixer buses & volume settings (master/music/sfx/voice/UI), mute on focus loss/Android pause: in the mixer core (`docs/MIXER.md`): bus volumes with master, clamping, ducking, a suspend that fades without dropping voices; **no `impl Audio` for the mixer, no settings screen or file, no Android pause wiring** (T06-017b) · `S` · `P1` · 🟢
+- [ ] **T06-017b** · `impl Audio` for the mixer (sound resolution by path through the sound bank), wire `set_suspended` to the platform lifecycle and the volumes to the settings file and screen (T10-012) · `S` · `P1` · Deps: T06-017, T06-002
 - [ ] **T06-018** · Audio API contract mocks and sound-test scene in asset viewer · `S` · `P1` · 🟢
 
 ## PHASE 2 — Mobile
