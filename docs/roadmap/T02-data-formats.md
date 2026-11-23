@@ -26,7 +26,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-011b** · Hot reload of loose files (dev mode) · `S` · `P2` · 🟢
 
 ## Asset format loaders (each: crate + spec ID + fuzz target + data-gated full-install test)
-- [~] **T02-012** [INPRG @lxstyo · branch `T02-012-tex-cpu-image-mip` · 2026-11-23] · `.tex` → CPU image + mip chain + metadata · `M` · `P0` · Deps: T01-006
+- [x] **T02-012** · `.tex` → CPU image + mip chain + metadata · `M` · `P0` · Deps: T01-006 — new crate `ss2-format-tex` (`Texture`, `TexLoader`): all 2,563 version-8 textures of the retail install load (31 cube maps); the 125 old-version ones need T01-083
 - [ ] **T02-013** · Texture transcoding: BCn upload path + software decode fallback, normal-map handling (ETC2/ASTC targets added in Phase 2) · `L` · `P1`
 - [ ] **T02-014** · `.bmf` mesh loader (vertex streams, LODs, bounds) · `M` · `P0` · Deps: T01-007
 - [~] **T02-015** [INPRG @lxstyo/agent · branch `T02-015-skl-skeleton-loader` · 2026-11-23] · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
