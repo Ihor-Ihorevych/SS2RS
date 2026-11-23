@@ -3,4 +3,5 @@
 pub mod cheats;
 pub mod freefly;
 pub mod physics_debug;
+pub mod settings;
 pub mod spectate;

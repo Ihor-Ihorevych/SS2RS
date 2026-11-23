@@ -15,3 +15,6 @@ workspace = true
 ss2-core = { path = "../ss2-core" }
 ss2-physics = { path = "../ss2-physics" }
 ss2-render-api = { path = "../ss2-render-api" }
+ss2-ui = { path = "../ss2-ui" }
+ss2-audio-api = { path = "../ss2-audio-api" }
+ss2-platform-api = { path = "../ss2-platform-api" }
