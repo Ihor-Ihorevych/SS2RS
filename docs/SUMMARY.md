@@ -57,6 +57,7 @@
 - [Joining a game in progress](JOIN.md)
 - [AI performance budget](AI_BUDGET.md)
 - [Starting the GPU, and getting it back](GPU_INIT.md)
+- [Sound decoders](AUDIO_DECODERS.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
