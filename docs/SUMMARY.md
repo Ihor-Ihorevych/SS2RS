@@ -44,6 +44,7 @@
 - [Instancing and batching](BATCHING.md)
 - [Texture sampling rules](TEXTURE_SAMPLING.md)
 - [Anti-aliasing planning](ANTI_ALIASING.md)
+- [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)

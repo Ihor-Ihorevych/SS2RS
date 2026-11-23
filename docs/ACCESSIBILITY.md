@@ -66,7 +66,7 @@ Every row starts as **Open**.
 | IN-1 | All game, menu and console actions can be rebound on keyboard, mouse and gamepad | new requirement | T03-005, T10-012 | must | Open |
 | IN-2 | No hard-coded keys in gameplay, menu or console code; defaults come from the action map | new requirement | T03-005 | must | Open |
 | IN-3 | Bindings are saved in the settings file and survive upgrades (migration) | new requirement | T03-014 | must | Open |
-| IN-4 | Hold or toggle option for actions such as crouch, zoom and run | new requirement (listed in T10-010) | T10-010 | should | Open |
+| IN-4 | Hold or toggle option for actions such as crouch, zoom and run | new requirement (listed in T10-010) | T10-010 | should | In progress |
 | IN-5 | Gamepad dead zone and sensitivity settings; rumble can be turned off or reduced | fx.md (vibration patterns exist); new requirement | T03-003 | should | Open |
 | IN-6 | Invert look and mouse sensitivity options | spec: localization.md (`opslInvertLook`) | T10-012 | must | Open |
 | IN-7 | Menus are fully usable with keyboard or gamepad only, with a visible focus marker | new requirement | T10-005 | must | Open |
@@ -81,7 +81,7 @@ Every row starts as **Open**.
 |---|---|---|---|---|---|
 | SU-1 | Subtitles for every spoken line in movies and in-game conversations, timed to the voice cue | spec: misc-types.md, cutscenes.md | T06-012, T10-021 | must | Open |
 | SU-2 | Text for objective, Netricsa and pickup messages, readable without audio | spec: player-rules.md (texts from localization tables); new requirement | T10-003 (partial) | must | Open |
-| SU-3 | Subtitle size, font and background box options | spec: fx.md (`.tfx` background box); new requirement | T10-010 | should | Open |
+| SU-3 | Subtitle size, font and background box options | spec: fx.md (`.tfx` background box); new requirement | T10-010 | should | In progress |
 | SU-4 | Shown text comes from a string table (key and default text), never from baked textures | spec: localization.md (`CTransString`) | T10-011, T10-002 | must | Open |
 | SU-5 | Language choice from a documented table format, with fallback to the default text | spec: localization.md (tables absent from install) | T10-011 | should | Open |
 | SU-6 | Localized subtitle and credit files replace base files by path (overlay) | spec: localization.md, mods.md | T10-011 | should | Open |
@@ -93,7 +93,7 @@ Every row starts as **Open**.
 | ID | Requirement | Source | Owner | Priority | Status |
 |---|---|---|---|---|---|
 | VC-1 | Health, armor, ammo and crosshair state readable without colour alone (shape, number or icon as well) | new requirement | T10-003 | must | Open |
-| VC-2 | Colour-blind-safe HUD palette option | new requirement (listed in T10-010) | T10-010 | should | Open |
+| VC-2 | Colour-blind-safe HUD palette option | new requirement (listed in T10-010) | T10-010 | should | In progress |
 | VC-3 | Keyboard focus shown by more than colour (the menu test checks an orange focus highlight; add a shape or outline cue) | new requirement; spec-level test: TESTING.md 3.4 | T10-005 | must | Open |
 | VC-4 | Contrast goals: body text at least 4.5:1 and HUD icons and large text at least 3:1 against their background | new requirement | no task yet | should | Open |
 | VC-5 | Global UI scale setting, tested at three resolutions and two aspect ratios | new requirement | T10-017, T10-015 | should | Open |
@@ -105,7 +105,7 @@ Every row starts as **Open**.
 |---|---|---|---|---|---|
 | MO-1 | Option to reduce or disable camera shake (shaker entities are data) | spec: environment.md (`SShakerEffectEntity`) | T09-008 (no toggle task) | should | Open |
 | MO-2 | Option to reduce or disable head bob and sway | new requirement (named in T09-008) | T09-008 (no toggle task) | should | Open |
-| MO-3 | Option to disable screen flashes: damage flashes, fades and effect flashes | spec: environment.md (not stored in data); new requirement | T10-010, T04-031 | must | Open |
+| MO-3 | Option to disable screen flashes: damage flashes, fades and effect flashes | spec: environment.md (not stored in data); new requirement | T10-010, T04-031 | must | In progress |
 | MO-4 | Bloom and haze strength can be lowered or turned off | spec: environment.md (bloom and haze entities) | T04-020 | should | Open |
 | MO-5 | Field-of-view setting; default 80 degrees horizontal | spec: player-rules.md (`gpp_fFOV`) | T10-012 | must | Open |
 | MO-6 | Weapon viewmodel keeps its own FOV so a wide view does not distort the weapon | new requirement (T04-030 has a separate FOV pass) | T04-030 | could | Open |
@@ -152,7 +152,9 @@ Every row starts as **Open**.
   [TRIAGE.md](TRIAGE.md), sections 2 and 3.
 - **Automated checks.** The menu golden-image test is the only one that exists today
   ([TESTING.md](TESTING.md), section 3.4). UI golden images for each screen are planned (T10-015).
-  No automated contrast or flash check exists.
+  The logic behind IN-4, SU-3, VC-2 and MO-3 (contrast ratios, a palette checked to stay distinguishable for colour-blind
+  players, a limit of three flashes a second, hold or toggle) is unit-tested in `ss2_ui::accessibility`; see
+  [ACCESSIBILITY_OPTIONS.md](ACCESSIBILITY_OPTIONS.md). Nothing checks a drawn screen for contrast or flashing yet.
 
 ## 6. Gaps (items with no task yet)
 
