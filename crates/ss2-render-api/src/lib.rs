@@ -36,6 +36,7 @@
 //! assert_eq!(stats.renderables, 1);
 //! ```
 
+pub mod anti_aliasing;
 pub mod batching;
 mod camera;
 mod culling;
