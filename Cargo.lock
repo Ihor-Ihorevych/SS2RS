@@ -2639,6 +2639,8 @@ dependencies = [
  "ss2-platform-api",
  "ss2-render-api",
  "ss2-vfs",
+ "tempfile",
+ "zip",
 ]
 
 [[package]]

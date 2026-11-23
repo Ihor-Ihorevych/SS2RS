@@ -73,7 +73,7 @@ HDD is not a reference tier.
 | Cold start to main menu | TBD | TBD | TBD | measurement |
 | Warm level load (cache present) | TBD | TBD | TBD | measurement |
 | First-run archive indexing and cooking | TBD | TBD | TBD | T02-011, cooker T11-009 |
-| Loader throughput (MB/s) and memory | TBD | TBD | TBD | T02-032 |
+| Loader throughput (MB/s) and memory | TBD | TBD | TBD | [PC loader baseline](#58-loader-throughput-and-working-set-t02-032) |
 
 ### 4.2 What the original data implies
 
@@ -201,6 +201,59 @@ Findings (and what they do not say):
   (`O(n log^2 n)`); a selection instead of a sort would remove a log. Rebuilding 800 colliders each tick (0.78 ms) is cheap enough now.
 - **No mobile numbers and no thread scaling**: the task asks for a re-run on mobile CPUs in Phase 2, and queries are single-threaded here.
 - The workload has **no gameplay** in it (no AI decisions, no animation, no character controller), so the real tick will cost more.
+
+### 5.8 Loader throughput and working set (T02-032)
+
+The `assets` benchmark measures cold asset-manager batches and the archive reader's stored and
+deflated paths. Each cold batch reads 100 files of 4 KiB through `MemoryVfs` and the `LenLoader`
+test loader. The timed batch starts with a fresh manager and registry. The archive cases read
+one 4 MiB entry per iteration, with alternating fixed and pseudorandom bytes, through `ArchiveVfs`.
+Archive creation and mount happen before timed reads. The archive reads use a warm OS file cache.
+Throughput counts uncompressed bytes. The cached asset-manager case reports time because the
+cache hits do not read asset bytes.
+
+Measured on 2026-11-23 with the bench profile, Rust 1.99.1, an Intel Core Ultra 5 225U,
+15.4 GiB visible RAM, and Windows 11 build 26100. Throughput is the middle estimate from one
+20-sample Criterion run. Peak working set is the highest observed OS high-water mark per
+benchmark process in a separate profiling run. It includes the harness and fixture setup.
+Use these measurements as a baseline for this machine and workload.
+
+| Benchmark | Throughput (MB/s) | Peak working set (MiB) |
+|---|---:|---:|
+| `assets/load_cold_100` | 4,702.9 | 12.01 |
+| `asset_archive/stored_4mib` | 2,177.0 | 9.05 |
+| `asset_archive/deflated_4mib` | 276.19 | 9.18 |
+
+Run the same throughput cases from the repository root.
+
+```sh
+cargo bench --locked -p ss2-bench --bench assets -- 'asset_archive|^assets/load_cold_100$' --sample-size 20 --warm-up-time 1 --measurement-time 4 --color never
+```
+
+Collect a fresh five-second working-set sample per case in Windows PowerShell.
+
+```powershell
+$messages = cargo bench --locked -p ss2-bench --bench assets --no-run --message-format=json
+if ($LASTEXITCODE -ne 0) { throw 'Benchmark build failed' }
+$bench = $messages | ConvertFrom-Json |
+    Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'assets' -and $_.executable } |
+    Select-Object -ExpandProperty executable -First 1
+if (-not $bench) { throw 'Benchmark executable not found' }
+
+foreach ($case in 'assets/load_cold_100', 'asset_archive/stored_4mib', 'asset_archive/deflated_4mib') {
+    $process = Start-Process -FilePath $bench -PassThru -WindowStyle Hidden -ArgumentList @(
+        $case, '--exact', '--bench', '--profile-time', '5'
+    )
+    $peak = 0L
+    while (-not $process.WaitForExit(50)) {
+        $process.Refresh()
+        try { $peak = [Math]::Max($peak, $process.PeakWorkingSet64) }
+        catch { if (-not $process.HasExited) { throw } }
+    }
+    if ($process.ExitCode -ne 0 -or $peak -eq 0) { throw "Measurement failed for $case" }
+    '{0} {1:F2} MiB' -f $case, ($peak / 1MB)
+}
+```
 
 ## 6. Regression policy
 
