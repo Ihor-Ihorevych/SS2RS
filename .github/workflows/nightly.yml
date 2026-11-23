@@ -42,6 +42,7 @@ jobs:
           - install_check
           - archive_names
           - replay_parse
+          - save_parse
           - session_message
     steps:
       - uses: actions/checkout@v4
