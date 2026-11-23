@@ -90,6 +90,7 @@
 - [0006 Network transport](rfcs/0006-network-transport.md)
 - [0007 Physics query API](rfcs/0007-physics-query-api.md)
 - [0008 Physics engine](rfcs/0008-physics-engine.md)
+- [0009 Simulation contract](rfcs/0009-sim-contract.md)
 
 # Reverse-engineering specs
 
