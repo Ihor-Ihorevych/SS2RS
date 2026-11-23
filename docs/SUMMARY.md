@@ -51,6 +51,7 @@
 - [Roadmap progress report](PROGRESS.md)
 - [Replicated audio events](AUDIO_REPLICATION.md)
 - [The scenario harness](SCENARIOS.md)
+- [Reconnecting and dropping in and out](RECONNECT.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
