@@ -21,7 +21,7 @@ The `kind` word of a `DTTY` block has **two different roles**, told apart by the
 
 ## Evidence
 
-`tools/re/dtty_verify.py` over the 8,063 effective format-8 files (every type table of every file, 1,043 distinct classes), plus the older formats (versions 4–7) of `ctsemeta-leftovers.md`.
+`tools/re/dtty_verify.py` over the 8,063 version-8 files (the newest version-8 copy of each path) (every type table of every file, 1,043 distinct classes), plus the older formats (versions 4–7) of `ctsemeta-leftovers.md`.
 
 ## Short blocks: the complete list of forms
 

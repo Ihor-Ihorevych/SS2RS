@@ -52,7 +52,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 
 | Index | Meaning | Confidence |
 |---:|---|---|
-| 0 | unknown: 1 in 7,294 effective files (never in a file with extra records), 0 in 769 (all 119 files with extra records, plus 650 others); a reader ignores it (`ctsemeta-leftovers.md`); absent in versions 4–7 | open |
+| 0 | unknown: 1 in 7,294 version-8 files (never in a file with extra records), 0 in 769 (all 119 files with extra records, plus 650 others); a reader ignores it (`ctsemeta-leftovers.md`); absent in versions 4–7 | open |
 | 1 | number of `RFIL` entries | **high** (9,269/9,269) |
 | 2 | number of `IDNT` entries | **high** (9,269/9,269) |
 | 3 | total number of types = `EXTY` count + `INTY` value | medium (holds in every sampled row; exact in only part of a first, incomplete check) |

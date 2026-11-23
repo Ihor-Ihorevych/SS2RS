@@ -10,3 +10,10 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-vfs = { path = "../ss2-vfs" }
