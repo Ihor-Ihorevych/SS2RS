@@ -39,6 +39,7 @@
 - [Transparency and draw order](TRANSPARENCY.md)
 - [Frame timing and overlay](FRAME_TIMING.md)
 - [The frame graph](FRAME_GRAPH.md)
+- [GPU resource bookkeeping](GPU_RESOURCES.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
