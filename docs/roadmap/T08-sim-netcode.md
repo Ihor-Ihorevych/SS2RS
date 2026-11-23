@@ -11,7 +11,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [ ] **T08-002** · Entity/class model: class registry, property reflection compatible with `.ep`/`.wld` records, spawn-from-record, lifecycle (spawn/init/tick/destroy), parenting · `L` · `P0` · Deps: T08-001, T01-014/026
 - [x] **T08-003** · Fixed-timestep sim loop: tick rate from T01-022 (a setting until that spec exists, default 30), pause, time scale, slow-mo, deterministic ordering of systems, phases (input→AI→move→physics→damage→cleanup→replicate): `ss2_sim::{TickLoop, Schedule, Simulation}` (`docs/SIMLOOP.md`) · `M` · `P0`
 - [ ] **T08-004** · Server/client split: `ServerSim`, `ClientSim`, shared game code, loopback transport for SP, listen server (host plays) and dedicated server · `L` · `P0`
-- [~] **T08-028** [INPRG @Ihor-Ihorevych/agent · branch `T08-028-event-bus` · 2026-11-23] · Event bus (gameplay events, triggers I/O) with replication-aware events · `M` · `P1`
+- [x] **T08-028** · Event bus (gameplay events, triggers I/O) with replication-aware events: `ss2_sim::EventBus` (`docs/EVENTBUS.md`): ordered delivery in rounds, delays and cancelling, audiences recorded for `ss2_net::events`; what the trigger names mean is the entity model's job (T08-002) · `M` · `P1`
 
 ## Transport & sessions
 - [x] **T08-005** · **SPIKE** transport: QUIC (`quinn`) vs custom UDP (renet/laminar-style) vs WebRTC-ish; need: unreliable + reliable-ordered channels, MTU/fragmentation, encryption, NAT-friendliness, small overhead, and nothing that blocks a later Android build; RFC: `docs/rfcs/0006-network-transport.md` (in review; proposes QUIC datagrams for gameplay and one stream for bulk, behind an `ss2-transport` trait; benchmark in `spikes/transport/`) · `M` · `P0`

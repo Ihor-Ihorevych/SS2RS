@@ -25,6 +25,7 @@
 - [Net statistics](NETSTATS.md)
 - [Replay files](REPLAY.md)
 - [Simulation tick loop](SIMLOOP.md)
+- [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)
 - [Free-fly debug camera](FREEFLY.md)
 - [Spatial acceleration (BVH)](SPATIAL.md)
