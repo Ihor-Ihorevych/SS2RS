@@ -72,9 +72,5 @@ fn launch(
     if let Some(dir) = &options.data_dir {
         tracing::info!("game data folder {} (not used yet)", dir.display());
     }
-    app::run(
-        None,
-        &options.set,
-        paths.map(ss2_platform_api::PlatformPaths::settings_file),
-    )
+    app::run(None, &options.set, paths)
 }

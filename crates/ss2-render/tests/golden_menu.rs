@@ -9,7 +9,7 @@ use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_render::golden::{self, Mode, Tolerance};
 use ss2_render::{ImageRgba8, RenderError, Renderer};
-use ss2_ui::{Menu, UiInput, theme};
+use ss2_ui::{Color, Menu, UiInput, theme};
 
 const SIZE: (u32, u32) = (1280, 720);
 
@@ -45,6 +45,39 @@ fn check_golden(name: &str, img: &ImageRgba8) {
 
 fn render(r: &mut Renderer, menu: &Menu) -> ImageRgba8 {
     r.render_to_image(&menu.draw(), theme::BACKGROUND).unwrap()
+}
+
+#[test]
+fn capture_uses_the_current_size_and_can_omit_the_overlay() {
+    let Some((_gpu, mut renderer)) = renderer() else {
+        return;
+    };
+    let (width, height) = (193, 109);
+    renderer.resize(width, height);
+    let clear = Color([1.0, 0.0, 0.0, 1.0]);
+    let without_overlay = renderer.capture_frame(None, clear).unwrap();
+    assert_eq!(
+        (without_overlay.width, without_overlay.height),
+        (width, height)
+    );
+    assert_eq!(without_overlay.pixels.len(), (width * height * 4) as usize);
+    assert!(
+        without_overlay
+            .pixels
+            .chunks_exact(4)
+            .all(|pixel| pixel == [255, 0, 0, 255])
+    );
+
+    let menu = Menu::new(Settings::default()).draw();
+    let with_overlay = renderer.capture_frame(Some(&menu), clear).unwrap();
+    assert_ne!(with_overlay.pixels, without_overlay.pixels);
+    assert_eq!(
+        renderer.render_to_image(&menu, clear).unwrap(),
+        with_overlay
+    );
+
+    renderer.resize(0, height);
+    assert!(renderer.capture_frame(Some(&menu), clear).is_err());
 }
 
 fn pixel(img: &ImageRgba8, x: u32, y: u32) -> [u8; 4] {

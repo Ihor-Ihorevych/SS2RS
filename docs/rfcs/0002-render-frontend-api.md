@@ -65,6 +65,12 @@ pub trait Renderer {
 
 Not in the contract (deliberately): window/surface creation and resize (platform contract, T00-016), GPU resource upload (T04-003 sits *behind* `RenderResources`), render graph, quality settings (T04-020), screenshots (T04-028).
 
+T04-028 provides screenshots on the concrete `ss2_render::Renderer`. `capture_frame` reads back
+an RGBA8 image at the current framebuffer size. It accepts an optional `DrawList`, so photo
+tooling can omit HUD and menu drawing. Window capture renders into a separate GPU texture in the
+window's RGBA8 or BGRA8 format. The app handles PNG output and saves F12 captures in its platform
+saves directory. [Screenshots](../user/install.md#screenshots)
+
 ### The mocks
 
 - `NullRenderer`: validates and counts, draws nothing, keeps the last two worlds inspectable (`previous()`, `newest()`). Used by the headless server and by tests of code that feeds a renderer.

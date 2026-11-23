@@ -123,3 +123,14 @@ cargo run -p ss2-app -- --smoke-frames 5
 
 This opens the window, renders five frames and exits. If it fails, see
 [troubleshooting](troubleshooting.md).
+
+## Screenshots
+
+Press **F12** in the interactive window to save a PNG at the current framebuffer size. Look in
+the app's saves directory under `screenshots/`. In portable mode this is
+`ss2-data/saves/screenshots/` next to the executable. The log records the saved path or a capture
+error.
+
+To capture a placeholder menu screen from the command line, run
+`ss2-app --screenshot main menu.png --size 1280x720`. The other screen names are `options`,
+`pause` and `about`.
