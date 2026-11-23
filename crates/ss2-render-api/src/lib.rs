@@ -38,6 +38,7 @@
 
 mod camera;
 mod culling;
+mod debug_draw;
 mod ids;
 mod renderer;
 mod resources;
@@ -45,6 +46,9 @@ mod scene;
 
 pub use camera::{Camera, Projection};
 pub use culling::{Aabb, Frustum, Plane, Sphere, Visibility, jitter_for_frame};
+pub use debug_draw::{
+    DebugCategory, DebugColor, DebugDraw, DebugLabel, DebugLine, DebugOverlays, ScreenLabel,
+};
 pub use ids::{ClipId, MaterialId, ModelId, RenderId, TextureId};
 pub use renderer::{FrameStats, NullRenderer, Renderer};
 pub use resources::{MockResources, RenderResources};
