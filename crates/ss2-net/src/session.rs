@@ -1802,14 +1802,14 @@ mod tests {
             }
         }
         assert_eq!(c.state(), &ClientState::TimedOut);
-        assert!(sent >= 4 && sent <= 12, "{sent} hellos");
+        assert!((4..=12).contains(&sent), "{sent} hellos");
         let gaps: Vec<u64> = times.windows(2).map(|p| p[1] - p[0]).collect();
         assert!(
             gaps.windows(2).all(|g| g[1] >= g[0]),
             "the gaps never shrink: {gaps:?}"
         );
         assert!(
-            now >= 10 * SECOND && now < 11 * SECOND,
+            (10 * SECOND..11 * SECOND).contains(&now),
             "gave up after the connect timeout: {now}"
         );
     }
