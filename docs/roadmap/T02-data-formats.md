@@ -10,7 +10,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
   Done: lists all 12,288 file entries across the 14 archives of a real install (10,933 distinct paths after overrides) in <1 s (data-gated).
 - [x] **T02-002** · Mount stack & override semantics: `Patch_*` over `All_PC_*`, ordering by name/version, later wins, case-insensitive normalized paths (`/` and `\`), directory listing merge · `M` · `P0`
 - [x] **T02-003** · Loose-directory mount (dev, mods, cooked cache) with same API · `S` · `P1` · 🟢
-- [ ] **T02-004** · `.mod`/`.nfo`/`DefaultMod.txt` descriptor parsing and mod mount ordering · `S` · `P1` · 🟢 · Deps: T01-040
+- [~] **T02-004** [INPRG @lxstyo · branch `T02-004-mod-nfo-defaultmod-txt` · 2026-11-23] · `.mod`/`.nfo`/`DefaultMod.txt` descriptor parsing and mod mount ordering · `S` · `P1` · 🟢 · Deps: T01-040
 - [ ] **T02-005** · IO backends behind a file-provider trait: memory-mapped (desktop) + buffered/streaming fallback, read-ahead for 1 GB+ worlds. The trait is what lets Phase 2 add Android content URIs/SAF without touching loaders · `M` · `P0`
 - [ ] **T02-005b** · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
 

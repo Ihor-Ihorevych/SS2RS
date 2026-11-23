@@ -69,7 +69,7 @@ Verified by the object-data decoder (`ctsemeta-objects.md`):
 
 ### `kind` codes of struct/class blocks
 
-Observed values (block counts over the install): `1` (60,854 with members, e.g. `CFont`) · `2` (20,658) · `3` (13,179) · `4` (12,754) · `6` (9,326) · `12` (3,813) · `18` (3,066) · further values up to `99`, and `1000`. The code does **not** separate structs from primitives and its meaning is **not understood** (it may be an engine-specific class category id); object decoding does not need it.
+Observed values (block counts over the install): `1` (60,854 with members, e.g. `CFont`) · `2` (20,658) · `3` (13,179) · `4` (12,754) · `6` (9,326) · `12` (3,813) · `18` (3,066) · further values up to `99`, and `1000`. The code does **not** separate structs from primitives. **Explained in `dtty-kinds.md` (T01-052): for struct blocks `kind` is the version number of the class layout** (it grows with the writer build; `flags` is always 5), and for short blocks it is a category (0 constructed type, 1 primitive or alias); object decoding does not need it.
 
 ## Worked example (measured, abridged)
 
@@ -84,7 +84,7 @@ Observed values (block counts over the install): `1` (60,854 with members, e.g. 
 
 ## Open questions
 
-- Meaning of the struct `kind` codes and of `flags` (observed 5 in all examples read) → T01-052.
+- Meaning of the struct `kind` codes and of `flags` (always 5): answered in `dtty-kinds.md` (T01-052); the bits of `flags` remain unexplained.
 - What the `ADIM` blocks are for: fixed-array counts are taken from the type name, and decoding needed nothing else.
 - Object value layout: **specified in `ctsemeta-objects.md`** (T01-050a/b/c).
 - How `kind` and member order relate to the original game classes (`Sam2Game.dll` entity classes) → T01-021/T01-026.

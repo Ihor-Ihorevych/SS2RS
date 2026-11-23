@@ -122,6 +122,6 @@ Evidence (`tools/re/edob_verify.py`): of **60 distinct non-world files** with a 
 - **Worlds:** the objects of all worlds now decode (the `CMetaHandle` rule above). What the world classes mean is the subject of the world spec (T01-012).
 - **Data after `EDOB`:** solved for all files, worlds included (see "The EDOB section"). The meaning of the individual extra classes is left to the spec of the format they belong to.
 - What the per-file `ADIM` blocks are for (fixed-array counts come from the type *name*; no other use was needed).
-- Meaning of the `kind` codes and `flags` words (T01-052). `INFO[0]`, `RFIL.flags`, `EXOB.flags`, `EDTY` and the old versions 4–7: `ctsemeta-leftovers.md` (T01-051).
+- Meaning of the `kind` codes and `flags` words: `dtty-kinds.md` (T01-052; the struct `kind` is a class version). `INFO[0]`, `RFIL.flags`, `EXOB.flags`, `EDTY` and the old versions 4–7: `ctsemeta-leftovers.md` (T01-051).
 - Whether `UUUU` (seen in 43 `.tex` files) is a payload marker.
 - An **independent walker** written only from this document (T01-050d) is still needed to prove the text is complete; the author's decoder is not independent evidence.
