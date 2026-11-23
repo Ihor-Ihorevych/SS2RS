@@ -35,7 +35,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Quality
 - [ ] **T10-015** · UI golden-image tests for each screen at 3 resolutions + 2 aspect ratios · `M` · `P1`
-- [ ] **T10-023** · UI performance budget (draw calls; zero steady-state allocations per frame) · `S` · `P2`
+- [~] **T10-023** [INPRG @Ihor-Ihorevych/agent · branch `T10-023-ui-budget` · 2026-11-23] · UI performance budget (draw calls; zero steady-state allocations per frame) · `S` · `P2`
 
 ## PHASE 2 — Mobile UI (not scheduled before M8)
 - [ ] **T10-006** · Touch HUD (virtual controls from T03-009), responsive layout, customization screen, left-handed mode · `L` · `PHASE 2`
