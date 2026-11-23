@@ -517,6 +517,163 @@ impl TypeSystem {
     }
 }
 
+impl TypeSystem {
+    fn mismatch<T>(type_id: u32, what: &str, value: &Value) -> Result<T> {
+        Err(Error::invalid(
+            "CTSEMETA value to write",
+            format!("type {type_id} expects {what}, got {value:?}"),
+        ))
+    }
+
+    /// Append the encoding of `value` as a value of type `type_id` to `out`: the exact inverse of
+    /// [`TypeSystem::decode_value`] (writing what was decoded gives back the same bytes).
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if `value` does not fit the type: another variant, a fixed array of the
+    /// wrong length, a struct of another class or with the wrong number of members, an enumeration
+    /// value too big for its size, a string with a character above U+00FF (the files are Latin-1),
+    /// or an unsupported type.
+    pub fn encode_value(&self, out: &mut Vec<u8>, type_id: u32, value: &Value) -> Result<()> {
+        self.encode_at(out, type_id, value, 0)
+    }
+
+    fn put_str(out: &mut Vec<u8>, s: &str) -> Result<()> {
+        let mut bytes = Vec::with_capacity(s.len());
+        for c in s.chars() {
+            match u8::try_from(u32::from(c)) {
+                Ok(b) => bytes.push(b),
+                Err(_) => {
+                    return Err(Error::invalid(
+                        "CTSEMETA value to write",
+                        format!("the character {c:?} cannot be stored (the files are Latin-1)"),
+                    ));
+                }
+            }
+        }
+        let len = u32::try_from(bytes.len())
+            .map_err(|_| Error::invalid("CTSEMETA value to write", "string longer than 4 GiB"))?;
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&bytes);
+        Ok(())
+    }
+
+    fn put_count(out: &mut Vec<u8>, n: usize) -> Result<()> {
+        let n = u32::try_from(n).map_err(|_| {
+            Error::invalid("CTSEMETA value to write", "more than 4 billion elements")
+        })?;
+        out.extend_from_slice(&n.to_le_bytes());
+        Ok(())
+    }
+
+    fn encode_at(
+        &self,
+        out: &mut Vec<u8>,
+        type_id: u32,
+        value: &Value,
+        depth: usize,
+    ) -> Result<()> {
+        if depth > MAX_DEPTH {
+            return Err(Error::invalid(
+                "CTSEMETA value to write",
+                "values are nested too deeply",
+            ));
+        }
+        let Some(codec) = self.codecs.get(&type_id) else {
+            return Err(Error::invalid(
+                "CTSEMETA value to write",
+                format!("type {type_id} is not defined"),
+            ));
+        };
+        match (codec, value) {
+            (Codec::Prim(Prim::U8), Value::U8(v)) => out.push(*v),
+            (Codec::Prim(Prim::I8), Value::I8(v)) => out.push(*v as u8),
+            (Codec::Prim(Prim::U16), Value::U16(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::I16), Value::I16(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::U32), Value::U32(v))
+            | (Codec::Prim(Prim::Ident), Value::Ident(v)) => {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+            (Codec::Prim(Prim::I32), Value::I32(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::U64), Value::U64(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::I64), Value::I64(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::F32), Value::F32(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(Prim::F64), Value::F64(v)) => out.extend_from_slice(&v.to_le_bytes()),
+            (Codec::Prim(p), v) => return Self::mismatch(type_id, &format!("a {p:?} scalar"), v),
+            (Codec::Enum { size }, Value::Enum { value: v, .. }) => {
+                if *size < 4 && u64::from(*v) >> (8 * *size) != 0 {
+                    return Self::mismatch(
+                        type_id,
+                        &format!("a value that fits {size} byte(s)"),
+                        value,
+                    );
+                }
+                out.extend_from_slice(&v.to_le_bytes()[..*size]);
+            }
+            (Codec::Ref, Value::Ref(id)) => {
+                out.extend_from_slice(&id.unwrap_or(NULL_ID).to_le_bytes());
+            }
+            (Codec::String, Value::String(s)) => Self::put_str(out, s)?,
+            (Codec::Struct { marker }, Value::Struct(s)) => {
+                let layout = self.layouts.get(&type_id);
+                if s.type_id != type_id || layout.is_none_or(|l| l.len() != s.values.len()) {
+                    return Self::mismatch(
+                        type_id,
+                        "a struct of this class with all its members",
+                        value,
+                    );
+                }
+                if let Some(m) = marker {
+                    out.extend_from_slice(m);
+                }
+                for (m, v) in layout.into_iter().flatten().zip(&s.values) {
+                    self.encode_at(out, m.type_id, v, depth + 1)?;
+                }
+            }
+            (Codec::List { marker, elem }, Value::Bytes(b)) => {
+                if !matches!(self.codecs.get(elem), Some(Codec::Prim(Prim::U8))) {
+                    return Self::mismatch(type_id, "a list", value);
+                }
+                out.extend_from_slice(marker);
+                Self::put_count(out, b.len())?;
+                out.extend_from_slice(b);
+            }
+            (Codec::List { marker, elem }, Value::List(items)) => {
+                out.extend_from_slice(marker);
+                Self::put_count(out, items.len())?;
+                for v in items {
+                    self.encode_at(out, *elem, v, depth + 1)?;
+                }
+            }
+            (Codec::Objects, Value::List(items)) => {
+                out.extend_from_slice(b"DCON");
+                Self::put_count(out, items.len())?;
+                for v in items {
+                    let Value::Ref(id) = v else {
+                        return Self::mismatch(type_id, "object ids", v);
+                    };
+                    out.extend_from_slice(&id.unwrap_or(NULL_ID).to_le_bytes());
+                }
+            }
+            (Codec::Fixed { n, elem }, Value::List(items)) => {
+                if items.len() != *n {
+                    return Self::mismatch(type_id, &format!("{n} elements"), value);
+                }
+                for v in items {
+                    self.encode_at(out, *elem, v, depth + 1)?;
+                }
+            }
+            (Codec::Unsupported(why), _) => {
+                return Err(Error::invalid(
+                    "CTSEMETA value to write",
+                    format!("unsupported type {type_id}: {why}"),
+                ));
+            }
+            (_, v) => return Self::mismatch(type_id, "another kind of value", v),
+        }
+        Ok(())
+    }
+}
+
 /// All objects of a file.
 #[derive(Clone, Debug)]
 pub struct Decoded {
