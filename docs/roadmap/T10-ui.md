@@ -22,7 +22,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [ ] **T10-009b** · Draw the loading screen (bar, status, tips on the menu skin, T10-033), report progress from the loaders, the world load and the shader/pipeline-cache warm-up, the game's own tips and their localization (T10-011), and tune the bar speed and the estimate on real loads · `S` · `P1` · Deps: T10-009, T10-033
 - [x] **T10-016** · Credits, legal/attribution screens: the **About** screen (unofficial-fan-engine notice, licence, bundled-font credit, pointer to `NOTICE`); a per-dependency licence list is not shown (it is in `NOTICE` and `cargo deny` output) · `S` · `P2` · 🟢
 - [ ] **T10-019** · First-run data-location wizard (desktop): find/select the SS2 install, validate version/patch level via `ss2-doctor` (T11-013), remember choice · `M` · `P0`
-- [ ] **T10-020** · Pause menu, death/respawn screens, end-of-level summary · `M` · `P1`
+- [~] **T10-020** [INPRG @Ihor-Ihorevych/agent · branch `T10-020-session-screens` · 2026-11-23] · Pause menu, death/respawn screens, end-of-level summary · `M` · `P1`
 
 ## HUD & in-game UI
 - [ ] **T10-003** · HUD elements: health, armor, ammo, weapon list, crosshair (per weapon), damage indicators, pickup messages, score/kill feed, boss bar, objectives · `L` · `P1`
