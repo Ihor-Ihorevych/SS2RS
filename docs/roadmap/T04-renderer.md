@@ -44,7 +44,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-012** · Post: HDR target, tonemap, bloom, color grading, vignette, motion blur?, DOF? (as used per T01-044), quality tiers · `L` · `P1`
 - [ ] **T04-029** · Anti-aliasing: MSAA (mobile-friendly), FXAA, optional TAA · `M` · `P2`
 - [ ] **T04-030** · Weapon viewmodel pass (separate FOV/depth range), muzzle flash, shell ejection · `M` · `P1`
-- [ ] **T04-031** · Screen-space effects: damage flashes, underwater overlay, fades, letterbox for cutscenes · `S` · `P1` · 🟢
+- [~] **T04-031** [INPRG @Ihor-Ihorevych/agent · branch `T04-031-screen-space-effects` · 2026-11-23] · Screen-space effects: damage flashes, underwater overlay, fades, letterbox for cutscenes · `S` · `P1` · 🟢
 
 ## Quality, tooling, mobile
 - [x] **T04-020** · Quality presets (Ultra→Low), dynamic resolution scale, per-setting toggles exposed to settings: `ss2_render_api::quality` (`docs/QUALITY.md`): four presets, eleven named settings with strict parsing, a deterministic dynamic-resolution controller; **nothing in the renderer reads them yet, the preset values are unmeasured guesses, and there is no settings file or screen** (T04-020b) · `M` · `P1`
