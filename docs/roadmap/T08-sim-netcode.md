@@ -17,7 +17,7 @@ Not goals: original protocol compatibility, lockstep determinism.
 - [x] **T08-005** · **SPIKE** transport: QUIC (`quinn`) vs custom UDP (renet/laminar-style) vs WebRTC-ish; need: unreliable + reliable-ordered channels, MTU/fragmentation, encryption, NAT-friendliness, small overhead, and nothing that blocks a later Android build; RFC: `docs/rfcs/0006-network-transport.md` (in review; proposes QUIC datagrams for gameplay and one stream for bulk, behind an `ss2-transport` trait; benchmark in `spikes/transport/`) · `M` · `P0`
 - [x] **T08-006** · Connection lifecycle: handshake, protocol/version/mod-hash check, session password, auth token, timeouts, graceful disconnect, kick/ban: `ss2_net::session` (`docs/SESSION.md`), tested over the network simulator and fuzzed; not yet run over a real transport · `L` · `P0`
 - [ ] **T08-019** · Session discovery: LAN broadcast, direct IP, invite code via lightweight relay/rendezvous (optional master server later), NAT traversal/hole punching · `L` · `P1`
-- [ ] **T08-020** · Dedicated server binary: headless, config file, console/RCON-lite, log rotation, metrics endpoint, Docker image · `M` · `P1`
+- [~] **T08-020** [INPRG @Ihor-Ihorevych/agent · branch `T08-020-dedicated-server` · 2026-11-23] · Dedicated server binary: headless, config file, console/RCON-lite, log rotation, metrics endpoint, Docker image · `M` · `P1`
 - [ ] **T08-027** · Encryption/auth if transport lacks it (DTLS/noise), replay protection · `M` · `P2`
 
 ## Replication & prediction
