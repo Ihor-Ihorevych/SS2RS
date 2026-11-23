@@ -64,6 +64,7 @@
 - [Difficulty levels and modifiers](DIFFICULTY.md)
 - [Starting the GPU, and getting it back](GPU_INIT.md)
 - [Sound decoders](AUDIO_DECODERS.md)
+- [Video formats (`.ogv` plays, `.xmv` ignored)](VIDEO_FORMATS.md)
 - [Death and end-of-level screens](SESSION_SCREENS.md)
 - [Co-op overlays](COOP_OVERLAYS.md)
 - [Navigation model](NAVIGATION.md)
