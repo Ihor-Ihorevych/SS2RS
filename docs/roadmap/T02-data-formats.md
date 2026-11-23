@@ -39,7 +39,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-022** · `.ep` entity params → typed `EntityParams` (inheritance merge) · `M` · `P0` · Deps: T01-014 — new crate `ss2-format-ep` (`EntityParams`, `ParamObject`, `ParamValue`, `EpLoader`): all 322 files load with the 43 root classes and the 596 file references of `ep.md`; the class chain is the inheritance (nothing is inherited between files)
 - [~] **T02-023** [INPRG @lxstyo · branch `T02-023-rsc-databases-and-ctl` · 2026-11-23] · `.rsc` databases and `.ctl` loaders · `S` · `P1`
 - [~] **T02-024** [INPRG @lxstyo · branch `T02-024-pfx-particle-loader-lfx` · 2026-11-23] · `.pfx` particle loader; `.lfx`, `.tfx`, `.vfx` loaders · `M` · `P1`
-- [~] **T02-025** [INPRG @lxstyo · branch `T02-025-fnt-font-loader-glyph` · 2026-11-23] · `.fnt` font loader (+ glyph atlas data) · `S` · `P1`
+- [x] **T02-025** · `.fnt` font loader (+ glyph atlas data) · `S` · `P1` · Deps: T01-018 — new crate `ss2-format-fnt` (`Font`, `Glyph`, `FntLoader`; the atlas is an `ss2_format_tex::Texture`; glyph lookup, `layout`, `text_width`, `uv`): all 21 `.fnt` files of the retail install load with the counts of `fnt.md` (code tables 127 x 5, 8,231 x 3, 8,483 x 13; atlases DXT5 10, 32-bit 7, DXT3 4) and the GameConsoleFont test vector
 - [ ] **T02-026** · Sound loaders: `.wav` (PCM/ADPCM?), `.ogg` (Vorbis, streaming) · `M` · `P1` · 🟢
 - [ ] **T02-027** · Text/localization loaders (`.srt`?, `.dsc`, `.nfo`, string tables) · `S` · `P2`
 - [ ] **T02-028** · `.preload` lists → prefetch plan · `S` · `P2` · 🟢
