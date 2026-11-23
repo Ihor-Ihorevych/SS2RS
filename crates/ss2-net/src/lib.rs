@@ -3,6 +3,7 @@
 pub mod discovery;
 pub mod events;
 pub mod inputstream;
+pub mod join;
 pub mod netsim;
 pub mod netstats;
 pub mod protocol;
