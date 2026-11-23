@@ -12,7 +12,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [ ] **T04-003** · GPU resource manager: buffers/textures, staging ring, upload budget per frame, streaming API for assets · `L` · `P0`
 - [x] **T04-004** · Camera, projection (reverse-Z, infinite far; from the contract T00-015), frustum, culling primitives, jitter slot for AA: `ss2_render_api::culling` (`docs/CULLING.md`) · `M` · `P0`
 - [ ] **T04-017** · 2D/UI renderer: batched quads, text glyph quads, scissor, 9-slice, render-to-texture (shared with T10) · `M` · `P0` · 🟢
-- [ ] **T04-018** · Debug draw (lines/AABB/spheres/text/labels), toggleable overlays · `S` · `P1` · 🟢
+- [~] **T04-018** [INPRG @Ihor-Ihorevych/agent · branch `T04-018-debug-draw` · 2026-11-23] · Debug draw (lines/AABB/spheres/text/labels), toggleable overlays · `S` · `P1` · 🟢
 - [ ] **T04-019** · GPU profiling via timestamp queries + CPU spans; frame time overlay · `S` · `P1`
 - [ ] **T04-026** · `RenderWorld` extract implementation + double-buffering between sim and render thread · `L` · `P0` · Deps: T00-015
 
