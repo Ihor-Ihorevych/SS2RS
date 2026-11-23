@@ -87,7 +87,13 @@ pub fn compare(a: &ImageRgba8, b: &ImageRgba8, channel_threshold: u8) -> Option<
         return None;
     }
     let (mut max_channel, mut differing, mut total) = (0u8, 0usize, 0u64);
-    for (pa, pb) in a.pixels.chunks_exact(4).zip(b.pixels.chunks_exact(4)) {
+    for (pa, pb) in a
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.pixels.as_chunks::<4>().0)
+    {
         let mut pixel_max = 0u8;
         for (&x, &y) in pa.iter().zip(pb) {
             let d = x.abs_diff(y);
@@ -119,7 +125,13 @@ pub fn diff_image(a: &ImageRgba8, b: &ImageRgba8) -> Option<ImageRgba8> {
         return None;
     }
     let mut pixels = Vec::with_capacity(a.pixels.len());
-    for (pa, pb) in a.pixels.chunks_exact(4).zip(b.pixels.chunks_exact(4)) {
+    for (pa, pb) in a
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.pixels.as_chunks::<4>().0)
+    {
         let d = pa
             .iter()
             .zip(pb)
