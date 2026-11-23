@@ -41,6 +41,7 @@
 - [The frame graph](FRAME_GRAPH.md)
 - [GPU resource bookkeeping](GPU_RESOURCES.md)
 - [Screen effects](SCREEN_EFFECTS.md)
+- [Instancing and batching](BATCHING.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
