@@ -2694,7 +2694,9 @@ dependencies = [
  "ss2-platform",
  "ss2-platform-api",
  "ss2-render",
+ "ss2-testkit",
  "ss2-ui",
+ "ss2-vfs",
  "tempfile",
  "tracing",
  "winit",
@@ -2994,9 +2996,11 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "serde",
  "ss2-core",
  "ss2-testkit",
  "tempfile",
+ "toml",
  "zip",
 ]
 

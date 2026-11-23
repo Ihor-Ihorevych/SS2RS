@@ -38,7 +38,7 @@ asks for the store, version and patch level so the project can collect that info
 
 A checker for the folder exists: `ss2-doctor <folder>` (T11-013) lists the archives, tells you which are missing or damaged
 and reports the patch level from the newest patch file name. It is not in the download archives yet; from a source checkout run
-`cargo run -p ss2-vfs --bin ss2-doctor -- <folder>`. The first-run wizard (T10-019) is still planned.
+`cargo run -p ss2-vfs --bin ss2-doctor -- <folder>`. The first-run wizard (T10-019) exists as a screen and a tested start-up decision, but the window does not show it yet (see [First run](../FIRST_RUN.md)).
 
 With `--mod <Name>` (or `--all-mods`) the same command also checks the mods in `Content/<Name>/` of the install: missing
 files, bad references, version mismatch and files that two mods both replace. What it checks, and what it does not,
@@ -114,8 +114,11 @@ cargo run -p gro-tool -- stats
 Today only two things read the data: `gro-tool`, an inspection tool, and the data-gated tests. The
 placeholder window (`ss2-app`) uses no game data.
 
-**Planned:** a first-run wizard in the window that finds the install, checks it and remembers the
-choice (T10-019). Until then, `SS2_DATA_DIR` is the only way to point the project at the data.
+**Built but not connected:** the first-run wizard (T10-019) finds the install (Steam libraries, the
+usual GOG and disc places, `SS2_DATA_DIR`, the current folder), checks it with the same code as `ss2-doctor`,
+warns about a patch level older than 2.100, and remembers the choice in `data_location.toml` in the
+config folder. The window does not show it yet (T10-019b), so until then `SS2_DATA_DIR` is the only
+way to point the project at the data. How it works and what is not verified: [First run](../FIRST_RUN.md).
 
 ## Checking that the program starts
 

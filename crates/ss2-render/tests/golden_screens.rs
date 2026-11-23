@@ -26,6 +26,7 @@ use ss2_ui::coop_overlays::{
     ChatBox, ChatConfig, ChatKey, ChatKind, CoopOverlays, Nameplate, PingKind, PingProjection,
     Projected, ScoreEntry, VoiceSample,
 };
+use ss2_ui::data_wizard::{DataWizard, WizardCandidate, WizardCommand, WizardInput, WizardReport};
 use ss2_ui::devconsole::{ConsoleView, Corner, FrameStats, LineKind, draw_overlay, stats_lines};
 use ss2_ui::session_screens::{DeathMode, DeathScreen, LevelStats, SummaryScreen};
 use ss2_ui::{Canvas, Color, DrawList, Menu, Rect, ScreenId, TextAlign, UiInput, Vec2, theme};
@@ -54,9 +55,15 @@ enum Shot {
     CoopNameplates,
     CoopPings,
     CoopVoice,
+    WizardCandidates,
+    WizardEmpty,
+    WizardManual,
+    WizardResultOk,
+    WizardResultWarn,
+    WizardResultBad,
 }
 
-const SHOTS: [Shot; 15] = [
+const SHOTS: [Shot; 21] = [
     Shot::Menu(ScreenId::Main),
     Shot::Menu(ScreenId::Options),
     Shot::Menu(ScreenId::Pause),
@@ -72,6 +79,12 @@ const SHOTS: [Shot; 15] = [
     Shot::CoopNameplates,
     Shot::CoopPings,
     Shot::CoopVoice,
+    Shot::WizardCandidates,
+    Shot::WizardEmpty,
+    Shot::WizardManual,
+    Shot::WizardResultOk,
+    Shot::WizardResultWarn,
+    Shot::WizardResultBad,
 ];
 
 /// The software adapter crashed a test process once when several tests made devices at the same time (see
@@ -118,6 +131,12 @@ fn word(shot: Shot) -> &'static str {
         Shot::CoopNameplates => "coop_nameplates",
         Shot::CoopPings => "coop_pings",
         Shot::CoopVoice => "coop_voice",
+        Shot::WizardCandidates => "wizard_candidates",
+        Shot::WizardEmpty => "wizard_empty",
+        Shot::WizardManual => "wizard_manual",
+        Shot::WizardResultOk => "wizard_result_ok",
+        Shot::WizardResultWarn => "wizard_result_warn",
+        Shot::WizardResultBad => "wizard_result_bad",
     }
 }
 
@@ -341,8 +360,131 @@ fn coop_draw(shot: Shot) -> DrawList {
     list
 }
 
+fn nav(wizard: &mut DataWizard, key: NavInput) -> Option<WizardCommand> {
+    wizard.handle(WizardInput::Ui(UiInput::Nav(key)))
+}
+
+fn wizard_candidate(dir: &str, detail: &str) -> WizardCandidate {
+    WizardCandidate {
+        dir: PathBuf::from(dir),
+        detail: detail.into(),
+    }
+}
+
+/// The first-run wizard as the app drives it, up to the screen under test. Only ASCII text, so that a golden does not depend on the fonts of the machine.
+fn wizard_draw(shot: Shot) -> DrawList {
+    let reason =
+        r"The folder you chose before no longer works (D:\Games\Serious Sam 2): choose it again";
+    let mut wizard = DataWizard::new(Some(reason.into()));
+    assert_eq!(wizard.start(), WizardCommand::Search);
+    let steam = r"C:\Program Files (x86)\Steam\steamapps\common\Serious Sam 2";
+    let found = match shot {
+        Shot::WizardEmpty | Shot::WizardManual => Vec::new(),
+        _ => vec![
+            wizard_candidate(steam, "Steam library - patch 2.100 (build 800000)"),
+            wizard_candidate(
+                r"D:\Games\Serious Sam 2",
+                "usual GOG place, current folder - patch 2.068",
+            ),
+            wizard_candidate(
+                r"E:\Backups\2019\a very long folder name that goes on and on\More Games\Serious Sam 2 (copy)",
+                "SS2_DATA_DIR - no patch",
+            ),
+        ],
+    };
+    wizard.set_candidates(found);
+    let report =
+        |dir: &str, usable: bool, warnings: usize, headline: &str, lines: &[&str]| WizardReport {
+            dir: PathBuf::from(dir),
+            usable,
+            warnings,
+            headline: headline.into(),
+            lines: lines.iter().map(|l| (*l).to_owned()).collect(),
+        };
+    match shot {
+        Shot::WizardCandidates | Shot::WizardEmpty => {}
+        Shot::WizardManual => {
+            // "Enter a folder path" is the first row of an empty list.
+            assert_eq!(nav(&mut wizard, NavInput::Activate), None);
+            let typed = r"D:\Old Disks\Backup 2019\Games and Programs\Croteam\Serious Sam 2\Serious Sam 2 (Retail)";
+            assert_eq!(wizard.handle(WizardInput::Text(typed.into())), None);
+            for _ in 0..30 {
+                nav(&mut wizard, NavInput::Left);
+            }
+        }
+        Shot::WizardResultOk => {
+            assert!(matches!(
+                nav(&mut wizard, NavInput::Activate),
+                Some(WizardCommand::Validate(_))
+            ));
+            wizard.set_report(report(
+                steam,
+                true,
+                0,
+                "Serious Sam 2 found: the install looks complete",
+                &[
+                    "Archives: 14 found, 14 readable",
+                    "Patch level: 2.100 (build 800000)",
+                ],
+            ));
+        }
+        Shot::WizardResultWarn => {
+            nav(&mut wizard, NavInput::Down);
+            assert!(matches!(
+                nav(&mut wizard, NavInput::Activate),
+                Some(WizardCommand::Validate(_))
+            ));
+            wizard.set_report(report(
+                r"D:\Games\Serious Sam 2",
+                true,
+                2,
+                "Usable, with 2 warnings",
+                &[
+                    "Archives: 6 found, 6 readable",
+                    "Patch level: 2.068",
+                    "WARNING: Movies_PC_02.gro is missing, so the cutscenes will not play",
+                    "  -> Copy the file back from the original install if you want the movies.",
+                    "WARNING: the patch level 2.068 is older than 2.100 (build 800000), the newest the project has seen",
+                    "  -> Update the game, or copy all the Patch_02_*.gro files of the newest patch into the folder",
+                ],
+            ));
+        }
+        Shot::WizardResultBad => {
+            nav(&mut wizard, NavInput::Down);
+            nav(&mut wizard, NavInput::Down);
+            assert!(matches!(
+                nav(&mut wizard, NavInput::Activate),
+                Some(WizardCommand::Validate(_))
+            ));
+            wizard.set_report(report(
+                r"E:\Backups\2019\a very long folder name that goes on and on\More Games\Serious Sam 2 (copy)",
+                false,
+                1,
+                "This folder cannot be used: 2 errors",
+                &[
+                    "Archives: 2 found, 1 readable",
+                    "Patch level: none found",
+                    "ERROR: All_PC_02.gro is damaged or is not a .gro archive (invalid Zip archive)",
+                    "  -> Copy the file again from the original install, or reinstall the game.",
+                    "ERROR: All_PC_03.gro is missing",
+                    "  -> Reinstall the game, or copy the file back from the original install.",
+                    "WARNING: no patch archives (Patch_*.gro) found: only the original release data is available",
+                ],
+            ));
+        }
+        _ => unreachable!("not a wizard shot"),
+    }
+    wizard.draw()
+}
+
 fn draw(shot: Shot) -> DrawList {
     match shot {
+        Shot::WizardCandidates
+        | Shot::WizardEmpty
+        | Shot::WizardManual
+        | Shot::WizardResultOk
+        | Shot::WizardResultWarn
+        | Shot::WizardResultBad => wizard_draw(shot),
         Shot::CoopScoreboard
         | Shot::CoopChat
         | Shot::CoopNameplates
@@ -491,15 +633,31 @@ fn check_geometry(shot: Shot, size: (u32, u32), list: &DrawList, img: &ImageRgba
     // The focused button of a menu is where the canvas puts it, and orange. Sample near its left edge, away from the label.
     if matches!(
         shot,
-        Shot::Menu(_) | Shot::Overlay | Shot::DeathSolo | Shot::DeathCoop | Shot::SummaryDone
+        Shot::Menu(_)
+            | Shot::Overlay
+            | Shot::DeathSolo
+            | Shot::DeathCoop
+            | Shot::SummaryDone
+            | Shot::WizardCandidates
+            | Shot::WizardEmpty
+            | Shot::WizardManual
+            | Shot::WizardResultOk
+            | Shot::WizardResultWarn
+            | Shot::WizardResultBad
     ) {
         let focused = list
             .quads
             .iter()
             .find(|q| q.color == theme::FOCUSED)
             .unwrap_or_else(|| panic!("{what}: a screen with a focused button"));
+        // The text field's focus is a ring four units wide around the field: sample inside the ring, not 12 units in.
+        let inset = if shot == Shot::WizardManual {
+            2.0
+        } else {
+            12.0
+        };
         let at = canvas.to_screen(Vec2 {
-            x: focused.rect.x + 12.0,
+            x: focused.rect.x + inset,
             y: focused.rect.y + focused.rect.h / 2.0,
         });
         let p = pixel(img, at.x as u32, at.y as u32);
@@ -600,6 +758,36 @@ fn coop_ping_markers_match_their_goldens_at_every_size() {
 #[test]
 fn coop_voice_indicators_match_their_goldens_at_every_size() {
     one_shot(Shot::CoopVoice);
+}
+
+#[test]
+fn wizard_candidates_match_their_goldens_at_every_size() {
+    one_shot(Shot::WizardCandidates);
+}
+
+#[test]
+fn wizard_with_nothing_found_matches_its_goldens_at_every_size() {
+    one_shot(Shot::WizardEmpty);
+}
+
+#[test]
+fn wizard_path_entry_matches_its_goldens_at_every_size() {
+    one_shot(Shot::WizardManual);
+}
+
+#[test]
+fn wizard_clean_result_matches_its_goldens_at_every_size() {
+    one_shot(Shot::WizardResultOk);
+}
+
+#[test]
+fn wizard_result_with_warnings_matches_its_goldens_at_every_size() {
+    one_shot(Shot::WizardResultWarn);
+}
+
+#[test]
+fn wizard_refusal_matches_its_goldens_at_every_size() {
+    one_shot(Shot::WizardResultBad);
 }
 
 #[test]
@@ -1202,7 +1390,7 @@ fn every_screen_has_a_golden_at_every_size() {
     );
     assert_eq!(
         SHOTS.len() * SIZES.len(),
-        75,
-        "the matrix is fifteen screens by five sizes"
+        105,
+        "the matrix is twenty-one screens by five sizes"
     );
 }

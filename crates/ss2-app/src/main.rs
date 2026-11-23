@@ -2,6 +2,11 @@
 
 mod app;
 mod cli;
+// The first-run wizard's host: complete and tested, not called from `main` until T10-019b (see its module documentation).
+#[cfg_attr(not(test), allow(dead_code))]
+mod data_location;
+#[cfg(test)]
+mod data_location_tests;
 mod diagnostics;
 mod profiling;
 mod screenshot;
