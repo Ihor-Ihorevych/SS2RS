@@ -2615,6 +2615,10 @@ dependencies = [
 [[package]]
 name = "ss2-audio"
 version = "0.0.0"
+dependencies = [
+ "ss2-audio-api",
+ "ss2-core",
+]
 
 [[package]]
 name = "ss2-audio-api"
