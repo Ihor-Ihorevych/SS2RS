@@ -2671,8 +2671,18 @@ name = "ss2-meta"
 version = "0.0.0"
 dependencies = [
  "ss2-core",
+ "ss2-meta-derive",
  "ss2-testkit",
  "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-meta-derive"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

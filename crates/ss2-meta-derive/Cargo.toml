@@ -1,0 +1,20 @@
+﻿[package]
+name = "ss2-meta-derive"
+description = "#[derive(MetaDeserialize)] for ss2-meta (track T02)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
