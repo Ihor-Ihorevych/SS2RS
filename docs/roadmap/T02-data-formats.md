@@ -36,7 +36,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-019** · `.mat` physical material loader, `.scs` sound collection loader · `S` · `P1` · Deps: T01-013 — new crate `ss2-format-mat` (`PhysicalMaterial`, `SoundScheme`, `ParticleScheme`, `MatLoader`/`ScsLoader`/`ScpLoader`): all 35 `.mat`, 37 `.scs` and 7 `.scp` files of the retail install load; `.sca`/`.mas` are not specified yet
 - [ ] **T02-020** · `.wld` world loader — split: **a** geometry, **b** lighting/lightmaps, **c** visibility/sectors, **d** entity records, **e** navigation data · `XL` · `P0` · Deps: T01-012a-f (f = the world root, the others hang off it)
 - [ ] **T02-021** · World streaming/lazy resource resolution (avoid loading 100+ MB at once; matters most on low-RAM PCs and later mobile) · `M` · `P1`
-- [~] **T02-022** [INPRG @lxstyo · branch `T02-022-ep-entity-params-typed` · 2026-11-23] · `.ep` entity params → typed `EntityParams` (inheritance merge) · `M` · `P0` · Deps: T01-014
+- [x] **T02-022** · `.ep` entity params → typed `EntityParams` (inheritance merge) · `M` · `P0` · Deps: T01-014 — new crate `ss2-format-ep` (`EntityParams`, `ParamObject`, `ParamValue`, `EpLoader`): all 322 files load with the 43 root classes and the 596 file references of `ep.md`; the class chain is the inheritance (nothing is inherited between files)
 - [ ] **T02-023** · `.rsc` databases and `.ctl` loaders · `S` · `P1`
 - [ ] **T02-024** · `.pfx` particle loader; `.lfx`, `.tfx`, `.vfx` loaders · `M` · `P1`
 - [ ] **T02-025** · `.fnt` font loader (+ glyph atlas data) · `S` · `P1`
