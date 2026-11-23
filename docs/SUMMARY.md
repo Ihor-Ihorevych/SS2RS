@@ -46,6 +46,7 @@
 - [Anti-aliasing planning](ANTI_ALIASING.md)
 - [Accessibility options (code)](ACCESSIBILITY_OPTIONS.md)
 - [The loading screen model](LOADING.md)
+- [Subtitle and caption timing](SUBTITLES.md)
 - [Hot reload: change detection and settings text](HOT_RELOAD.md)
 - [Spectating when dead](SPECTATOR.md)
 - [Navigation model](NAVIGATION.md)
