@@ -91,7 +91,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 - **SBOM:** PROPOSED: CycloneDX JSON from `cargo-cyclonedx`, named `ss2rs-<version>-sbom.cdx.json`, attached to the draft and listed in `SHA256SUMS` (COMPLIANCE section 3). No generator is installed.
 - **Licences:** `cargo deny list` output is PROPOSED to attach. Bundled assets (Inter, OFL-1.1) are named in `NOTICE`. There is **no separate third-party notices file** (OPEN, COMPLIANCE section 8).
 - **Provenance and signing:** OPEN. Options: GitHub artifact attestations, Sigstore signing of `SHA256SUMS`. No task, no decision.
-- **Reproducible builds:** an OPEN goal, owned by T12-008 (not duplicated here). Present: `Cargo.lock` with `--locked`, the pinned toolchain (`rust-toolchain.toml`, 1.99.1) and the `dist` profile (`Cargo.toml`). Missing: a rebuild-and-compare job and normalised archive timestamps.
+- **Reproducible builds:** IMPLEMENTED by T12-008 ([RELEASING section 6](RELEASING.md#6-reproducible-builds-and-nightly-builds)): `Cargo.lock` with `--locked`, the pinned toolchain (`rust-toolchain.toml`, 1.99.1), the `dist` profile, the flags of `scripts/dist-flags.sh`, deterministic archives from `scripts/make_archive.py`, and a `reproducible` job that rebuilds `ss2-server` twice and compares. Verified by hand on Windows only; Linux and macOS have never run (Actions is blocked).
 - **Release notes:** the `CHANGELOG.md` section for the version, extracted by `release.yml`, with a fixed footer on unsigned binaries, no game data and `SS2_DATA_DIR` (IMPLEMENTED). The 1.0 checklist also needs the Windows baseline, unpackaged platforms and the "you need your own copy of Serious Sam 2" statement (PC_1_0_CHECKLIST sections 6 and 7).
 
 ## 4. Build and release process
@@ -145,7 +145,7 @@ only sees git paths, so this needs either a temporary git index holding the pack
 7. Linux: no AppImage or Flatpak (T03-011). The Flatpak folder-access design and whether `libudev` is needed at run time are unchecked.
 8. No clean-machine test exists for any archive (VC runtime, system libraries). The smoke run is the only check.
 9. Provenance, attestations and signing of `SHA256SUMS` are undecided.
-10. Reproducible builds (T12-008) and nightly artifacts are not built; `release.yml` has no schedule.
+10. Reproducibility is verified on Windows (MSVC) only; the Linux and macOS archives are untested. `release.yml` now has a nightly schedule, but it has never run (Actions is blocked).
 11. No SBOM generator and no third-party notices file (COMPLIANCE sections 3 and 8).
 12. Saves are open. The app uses the per-OS folders (T03-012), writes a rotating log file (T03-019) and crash reports (T03-016) and honors `--portable` (T03-020); `--data` and `--level` are parsed but not used yet, and `--connect`/`--listen` report that multiplayer is not implemented. Deleting the program folder leaves the per-user folders (settings, logs, crash reports) in place; portable mode keeps them next to the executable.
 13. No update check exists and none is in the roadmap.

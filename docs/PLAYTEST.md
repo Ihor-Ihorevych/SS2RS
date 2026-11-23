@@ -31,7 +31,7 @@ folder, the one that directly contains `All_PC_01.gro` ([install](user/install.m
 
 | Channel | What it is | How it is published | Status |
 |---|---|---|---|
-| `nightly` | Build of `main` at one commit | Archives from a manual `release` workflow run, kept as workflow artifacts for 14 days; not a GitHub Release | Workflow step IMPLEMENTED, not run. No schedule exists (T12-008). Until then a maintainer builds locally. |
+| `nightly` | Build of `main` at one commit | Archives from a manual `release` workflow run, kept as workflow artifacts for 14 days; not a GitHub Release | Workflow step and a nightly schedule IMPLEMENTED (T12-008), never run (Actions is blocked). Until then a maintainer builds locally. |
 | `playtest` | Pre-release for one test, e.g. tag `v0.1.0-beta.1` | Tag `v<version>` with a `-`; `release.yml` creates a **draft** release with `--prerelease`; a human publishes | IMPLEMENTED in the workflow, not run |
 | `stable` | Milestone or 1.0 release, e.g. `v0.1.0`, `v1.0.0` | Tag without `-`; same draft-then-publish flow, not a pre-release | IMPLEMENTED in the workflow, not run |
 
@@ -221,7 +221,7 @@ Roles, not people. One person may hold several.
 
 ## 9. Gaps and open questions
 
-1. No channel is built by CI (Actions blocked); no scheduled `nightly` exists (T12-008).
+1. No channel is built by CI (Actions blocked); the scheduled `nightly` (T12-008) has never run.
 2. Only the interactive `ss2-app` writes a log file and crash reports (section 3); `ss2-server` is a stub and the developer
    modes create no files; native crashes are not reported.
 3. `--version` omits the commit; pre-release version strings are untested.
