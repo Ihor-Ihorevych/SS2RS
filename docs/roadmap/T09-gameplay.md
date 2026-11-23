@@ -29,7 +29,7 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 
 ## AI & enemies
 - [ ] **T09-010** · AI framework: perception (sight/hearing), blackboard, behavior/state machines, steering, target selection across multiple players, aggro/leash · `XL` → split · `P0` · Deps: T07-013, T07-024, T01-025
-- [ ] **T09-017** · AI performance: rate-scaling of far enemies, budgeted path requests, horde stress test (hundreds) · `L` · `P1`
+- [~] **T09-017** [INPRG @Ihor-Ihorevych/agent · branch `T09-017-ai-budget` · 2026-11-23] · AI performance: rate-scaling of far enemies, budgeted path requests, horde stress test (hundreds) · `L` · `P1`
 - [ ] **T09-018** · Spawners & waves: trigger spawners, teleport-in effects, wave scripts, count/difficulty scaling by player count · `L` · `P1` · Deps: T01-030
 - [ ] **T09-019** · **Enemy tasks — one per enemy** from T01-029 (`T09-019a…`, each `L` · `P1`): movement kit, attacks (melee/ranged/special), pain/death, animations (`.ans`), sounds, FX, difficulty tables, replication, scenario tests. Start with 2 simple enemies for M5.
 - [ ] **T09-020** · **Boss tasks — one per boss** (`XL` · `P2`): phases, scripted arenas, special mechanics (from T01-048)
