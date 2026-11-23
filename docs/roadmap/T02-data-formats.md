@@ -18,7 +18,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-006** · `ss2-meta`: container reader (header, `$Version`, chunk iterator, string/ref tables) · `M` · `P0` · Deps: T01-004 — `ss2_meta::Container::parse` (versions 4–8; all 8,141 containers of the retail install parse)
   Done: reads every file in the install that starts with `CTSEMETA` without error; reports unknown chunk tags.
 - [x] **T02-007** · `ss2-meta`: type system / reflection decoder into a generic `Value` tree (structs, arrays, enums, refs) · `L` · `P0` · Deps: T01-005, T02-006 — `ss2_meta::{TypeSystem, Value, Container::decode_objects}` (all 8,141 containers of the retail install decode: 989,763 objects, 231,643 extra records)
-- [~] **T02-008** [INPRG @lxstyo · branch `T02-008-ss2-meta-writer-round` · 2026-11-23] · `ss2-meta`: writer + round-trip tests (needed for fixtures, cooked cache, tools) · `M` · `P1`
+- [x] **T02-008** · `ss2-meta`: writer + round-trip tests (needed for fixtures, cooked cache, tools) · `M` · `P1` — `ss2_meta::write` (all 8,141 containers of the retail install, 1.39 GB, are rewritten byte for byte)
 - [ ] **T02-008b** · `serde`-style derive layer: typed structs from `Value` (`#[derive(MetaDeserialize)]`) · `L` · `P1`
 - [ ] **T02-009** · `ss2-assets`: `AssetManager` (handles, refcount, async load, dependency graph from `RFIL`, error reporting) · `L` · `P0` · Deps: T00-014
 - [x] **T02-010** · Loader registry & extension → loader mapping; plugin-style registration per format crate · `S` · `P0`
