@@ -233,10 +233,11 @@ impl SimpleWorld {
         slot.generation = slot.generation.wrapping_add(1);
         self.free.insert(id.index());
         self.alive -= 1;
-        if let Some(parent) = entity.parent {
-            if let Ok(p) = self.entity_mut(parent) {
-                p.children.remove(&id.index());
-            }
+        if let Some(p) = entity
+            .parent
+            .and_then(|parent| self.entity_mut(parent).ok())
+        {
+            p.children.remove(&id.index());
         }
         self.changes.retain(|c| c.entity != id);
         self.lifecycle.push(LifecycleEvent::Destroyed(id));
