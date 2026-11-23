@@ -39,6 +39,7 @@ jobs:
           - bindings_toml
           - vfs_path
           - gro_archive
+          - skeleton_parse
           - install_check
           - archive_names
           - discovery_message

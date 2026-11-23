@@ -29,7 +29,8 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-012** · `.tex` → CPU image + mip chain + metadata · `M` · `P0` · Deps: T01-006
 - [ ] **T02-013** · Texture transcoding: BCn upload path + software decode fallback, normal-map handling (ETC2/ASTC targets added in Phase 2) · `L` · `P1`
 - [ ] **T02-014** · `.bmf` mesh loader (vertex streams, LODs, bounds) · `M` · `P0` · Deps: T01-007
-- [~] **T02-015** [INPRG @lxstyo/agent · branch `T02-015-skl-skeleton-loader` · 2026-11-23] · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
+- [x] **T02-015** · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
+  `ss2-format-skl` registers a typed loader with the asset manager. Verified 31 skeletons, 42 LODs, and 564 bones in the local retail install.
 - [ ] **T02-016** · `.ans` animation loader + sampling API (pose evaluation, events) · `L` · `P0` · Deps: T01-010
 - [ ] **T02-017** · `.mdl` model loader (links mesh/skeleton/materials/LOD/collision) · `L` · `P0` · Deps: T01-008, T02-014/015
 - [ ] **T02-018** · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011

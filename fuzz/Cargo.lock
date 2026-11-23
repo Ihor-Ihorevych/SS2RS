@@ -377,6 +377,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
 
 [[package]]
+name = "ss2-assets"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-vfs",
+ "tracing",
+]
+
+[[package]]
 name = "ss2-core"
 version = "0.0.0"
 dependencies = [
@@ -390,11 +399,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-skl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
 name = "ss2-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "ss2-core",
+ "ss2-format-skl",
  "ss2-game",
  "ss2-net",
  "ss2-platform-api",
@@ -409,6 +428,13 @@ dependencies = [
  "ss2-core",
  "ss2-physics",
  "ss2-render-api",
+]
+
+[[package]]
+name = "ss2-meta"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
 ]
 
 [[package]]
