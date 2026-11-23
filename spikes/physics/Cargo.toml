@@ -1,0 +1,25 @@
+[package]
+name = "ss2-spike-physics"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "Throwaway benchmark for RFC 0008 (the physics engine choice, T07-006). Not part of the main workspace."
+
+[dependencies]
+rapier3d = { version = "0.36", default-features = false, features = ["dim3", "f32", "std"] }
+ss2-core = { path = "../../crates/ss2-core" }
+ss2-physics = { path = "../../crates/ss2-physics" }
+
+[features]
+# rapier's cross-platform determinism mode (no SIMD, libm maths)
+enhanced = ["rapier3d/enhanced-determinism"]
+
+# Not a member of the main workspace: a spike must not slow down or constrain the real build, and
+# its dependencies are not meant to ship.
+[workspace]
+
+[profile.release]
+debug = false
+opt-level = 3
+lto = "thin"

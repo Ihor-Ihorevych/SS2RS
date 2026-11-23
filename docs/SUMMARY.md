@@ -89,6 +89,7 @@
 - [0005 ECS choice](rfcs/0005-ecs-choice.md)
 - [0006 Network transport](rfcs/0006-network-transport.md)
 - [0007 Physics query API](rfcs/0007-physics-query-api.md)
+- [0008 Physics engine](rfcs/0008-physics-engine.md)
 
 # Reverse-engineering specs
 
