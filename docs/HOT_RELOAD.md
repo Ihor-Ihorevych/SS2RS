@@ -21,7 +21,7 @@ A hot reload of the settings file is then: poll the watcher; on a `Changed` for 
 
 ## How it was tested
 
-Eleven tests of the watcher (plus a doctest) and six of the settings text (plus a doctest). **Twenty-two deliberate breakages: twenty failed a test at once.** Two survived: a baseline entry's `stable` count (**equivalent**: it only matters when the stamp differs from the reported one, and a difference resets it, so I simplified it to 0), and `known()` counting the stamp last seen instead of the one last reported (**real**: no test looked at `known()` while a change was unsettled; I added those assertions). One mutation did not apply the first time because rustfmt had reflowed the line; redone, it failed a test.
+Eleven tests of the watcher (plus a doctest) and six of the settings text (plus a doctest). **Twenty-two deliberate breakages: nineteen failed a test at once.** Two survived: a baseline entry's `stable` count (**equivalent**: it only matters when the stamp differs from the reported one, and a difference resets it, so I simplified it to 0), and `known()` counting the stamp last seen instead of the one last reported (**real**: no test looked at `known()` while a change was unsettled; I added those assertions). One mutation (the order of duplicate paths) did not apply the first time because rustfmt had reflowed the line; redone, it failed a test, and so did `known()` once the new assertions were in.
 
 ## Not covered (follow-up T04-033b)
 
