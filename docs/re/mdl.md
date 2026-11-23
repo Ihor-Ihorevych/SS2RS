@@ -91,7 +91,7 @@ A further 424 palette surfaces belong to models without an embedded skeleton (ex
 
 ## The data after `EDOB`
 
-29 models carry extra records (`CEditChannel`, `CWeightVertexMap`, `CEdtDestructionEffect`, `CDFXDistribution`, `CDFXDebris`, `CPlacementData`, `CEditModelConfig`, `CCustomDataHolder`), specified in `ctsemeta-objects.md`. The configuration members `.13` and `CResource.4` point at them. A runtime reader can ignore them (not checked whether any other main-section member refers to an extra record).
+29 models carry extra records (`CEditChannel`, `CWeightVertexMap`, `CEdtDestructionEffect`, `CDFXDistribution`, `CDFXDebris`, `CPlacementData`, `CEditModelConfig`, `CCustomDataHolder`), specified in `ctsemeta-objects.md`. The configuration members `.13` and `CResource.4` point at them. A runtime reader can ignore them: the main-section members that refer to an extra record are exactly nine (`ctsemeta-leftovers.md`), in `.mdl` `CResource.4`, `CModelConfiguration.13`, `CMesh.3`, `CAnimHost.2`, `CDestructionHolder.2`, `CSkeleton.2`, `CMechanismTemplateHolder.2` and `CAnimSet.2`.
 
 ## Invariants for a reader
 
