@@ -35,7 +35,8 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## Quality
 - [ ] **T10-015** · UI golden-image tests for each screen at 3 resolutions + 2 aspect ratios · `M` · `P1`
-- [~] **T10-023** [INPRG @Ihor-Ihorevych/agent · branch `T10-023-ui-budget` · 2026-11-23] · UI performance budget (draw calls; zero steady-state allocations per frame) · `S` · `P2`
+- [x] **T10-023** · UI performance budget (draw calls; zero steady-state allocations per frame): `docs/UI_BUDGET.md`: at most 24 quads and 32 text runs per frame, zero allocations in a warm frame (`Menu::draw_into`, `Cow` text, an allocation-free layout), enforced by a counting-allocator test; **the renderer side, the dev console overlay and frame time are not measured** (T10-023b) · `S` · `P2`
+- [ ] **T10-023b** · UI budget follow-ups: allocations and GPU draw calls of the renderer per frame (text buffers, vertex data), the developer console overlay (T10-007b), the HUD and every new screen added to the frame budget test, a frame-time benchmark of `draw_into` · `S` · `P2` · Deps: T10-023
 
 ## PHASE 2 — Mobile UI (not scheduled before M8)
 - [ ] **T10-006** · Touch HUD (virtual controls from T03-009), responsive layout, customization screen, left-handed mode · `L` · `PHASE 2`
