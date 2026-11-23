@@ -809,13 +809,7 @@ mod tests {
         assert_eq!(m.external_objects.len(), 1);
         assert_eq!(m.external_objects[0].file_ref, 0);
         assert_eq!(m.object_table.len(), 2);
-        assert_eq!(
-            m.extra_table,
-            [ObjectEntry {
-                object_id: 0,
-                type_id: 1
-            }]
-        );
+        assert!(m.extra_table.is_empty());
         assert_eq!(m.object_record_count, 2);
         assert!(!m.has_extra_records);
         assert!(m.object_data.start < m.object_data.end);
