@@ -31,7 +31,7 @@ A UDP service that answers a **spoofed** source address with more bytes than it 
   253 characters); a name that looks like an IPv4 address but is not one (`999.1.1.1`, `1.2.3`) is refused; ports are 1 to 65535 in at most five digits. **Resolving a host name is the caller's job.**
 - `encode_invite(addr)` makes a short, typeable code for an IP address and port: **`XXXX-XXXX-XXXX-XXX`** for IPv4 (9 bytes, 15 characters), 34 characters for IPv6. The alphabet is Crockford's base 32 (no `I`, `L`, `O`, `U`); `decode_invite`
   ignores case, dashes and spaces and reads `O`, `I`, `L` as `0`, `1`, `1`. A code has a version, the address kind, the address, the port and a **16-bit checksum**: it is refused for a wrong length, a character outside the alphabet, a bad
-  checksum, an unknown version or kind, non-zero padding bits, port 0 or an unspecified address. For the one address I tried, none of the 420 possible single-character typos was accepted as any address; in general a random error passes
+  checksum, an unknown version or kind, non-zero padding bits, port 0 or an unspecified address. For the one address I tried, none of the single-character typos (15 positions, 31 other characters each) was accepted as any address; in general a random error passes
   the checksum with probability 2^-16, so **a code is a typo guard, not a security measure**.
 
 ## What it does not do
@@ -48,9 +48,8 @@ A UDP service that answers a **spoofed** source address with more bytes than it 
 Twenty-five tests, a fuzz target and mutation checks. Messages: round trips including the worst case, the reply that is smaller than the smallest query, every field limit, every refusal reason, every prefix of a reply refused, a datagram of exactly the
 maximum size. Answering: the reply and its nonce, short queries and other traffic and info messages ignored, the per-source limit (the burst, the refill, other sources unaffected, the burst not exceeded after a long quiet time), the overall limit and
 that a refused source keeps its token, the bounded source table. Scanning: the nonce, the timeout boundary, a new scan ignoring old replies, compatibility marking and display order, the bounded list, expiry and its boundary, the game port. Addresses
-and codes: every form, thirty-odd nonsense inputs, the exact limits of host names and ports, round trips for IPv4 and IPv6, loose reading, every single-character typo, version and padding, well-formed codes with wrong content. **Thirty-five
-deliberate breakages each fail a test; eleven survived my first tests** (the expiry boundary, the port and host length limits, an invite of the wrong length with a good checksum, port 0 or an unspecified address in a code, an unknown address kind), so
-I added tests for them. One more (a length cap that a later exact length check makes redundant) is equivalent. The fuzz target `discovery_message` (see `docs/FUZZING.md`) checks that no reply is ever longer than its query, that the list
+and codes: every form, thirty-odd nonsense inputs, the exact limits of host names and ports, round trips for IPv4 and IPv6, loose reading, every single-character typo, version and padding, well-formed codes with wrong content. **Thirty
+deliberate breakages: twenty-nine each fail a test and one is equivalent** (a length cap that a later exact length check makes redundant). Five survived my first tests (the expiry boundary, the port and host length limits, an invite of the wrong length with a good checksum, port 0 or an unspecified address in a code), so I added tests for them (the unknown-address-kind breakage was added afterwards and failed a test at once). The fuzz target `discovery_message` (see `docs/FUZZING.md`) checks that no reply is ever longer than its query, that the list
 stays bounded and that a code that reads encodes back to the same address: **60 seconds, 120,202 runs, no finding**; a smoke test, not coverage, and not yet run in CI.
 
 ## Not covered (follow-up T08-019b)
