@@ -111,14 +111,14 @@ test workflow yet.
   ```
   They are not run in CI.
 
-### 3.4 Golden-image tests (exists, menu only)
+### 3.4 Golden-image tests (exists: the menu screens, the console and the overlay at five sizes)
 
 - **What:** renders a scene offscreen and compares the RGBA result against a stored PNG with a mean
   absolute difference limit **and** a limit on the share of pixels that differ by more than 16
   levels ([GOLDEN_IMAGES.md](GOLDEN_IMAGES.md)); a failure writes the rendered and the difference
   image to `target/golden-failures/`.
-- **Where:** `crates/ss2-render/tests/golden_menu.rs`. Goldens are in `testdata/golden/`
-  (`menu_main_1280x720.png`, `menu_options_1280x720.png`). The comparison helper is
+- **Where:** `crates/ss2-render/tests/golden_menu.rs` (1280x720) and `golden_screens.rs` (six screens at five sizes, [GOLDEN_IMAGES.md](GOLDEN_IMAGES.md)). Goldens are in `testdata/golden/`
+  (`menu_main_1280x720.png`, `ui_console_2560x1080.png`, …). The comparison helper is
   `ss2_render::golden` (`crates/ss2-render/src/golden.rs`); `SS2_FORCE_SOFTWARE_ADAPTER=1` forces the software adapter.
 - **Naming:** `<screen>_matches_golden` for whole-image comparisons; `<behaviour>` for pixel checks
   (for example `focus_highlight_is_orange_at_first_button`).

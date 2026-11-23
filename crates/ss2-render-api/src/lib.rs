@@ -36,16 +36,22 @@
 //! assert_eq!(stats.renderables, 1);
 //! ```
 
+pub mod anti_aliasing;
+pub mod batching;
 mod camera;
 mod culling;
 mod debug_draw;
+pub mod frame_graph;
 pub mod frame_timing;
+pub mod gpu_resources;
 mod ids;
 pub mod lod;
 pub mod quality;
 mod renderer;
 mod resources;
 mod scene;
+pub mod screen_effects;
+pub mod texture_sampling;
 pub mod transparency;
 
 pub use camera::{Camera, Projection};

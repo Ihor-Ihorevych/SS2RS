@@ -1,9 +1,12 @@
 //! The wgpu renderer: windowed or offscreen, quads + text.
 
+use std::time::Instant;
+
 use ss2_ui::{Canvas, Color, DrawList};
 use wgpu::util::DeviceExt;
 
 use crate::batch::{Vertex, quads_to_vertices};
+use crate::gpu::{self, Gpu, GpuConfig, LostSignal, RecoveryTracker, Verdict};
 use crate::text::TextPainter;
 
 /// Why the renderer could not be created or could not draw.
@@ -18,6 +21,20 @@ pub enum RenderError {
     /// The window surface could not be created or used.
     #[error("surface error: {0}")]
     Surface(String),
+    /// The GPU device was lost and could not be rebuilt (or has been lost too often in a row).
+    #[error("GPU device lost: {0}")]
+    DeviceLost(String),
+}
+
+/// What recovery has done so far (for a log line, an overlay or a test).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RenderStats {
+    /// How many times the device (and adapter) was made again after it was lost.
+    pub device_rebuilds: u32,
+    /// How many times the window surface was configured again.
+    pub surface_reconfigures: u32,
+    /// Frames not drawn because the surface was outdated or lost.
+    pub frames_skipped: u32,
 }
 
 /// An RGBA8 image (row-major, tightly packed, 4 bytes per pixel).
@@ -39,6 +56,8 @@ enum Target {
     Offscreen {
         texture: wgpu::Texture,
     },
+    /// Only while the device is being rebuilt.
+    Detached,
 }
 
 /// Draws a [`DrawList`] to a window or to an offscreen image.
@@ -53,6 +72,13 @@ pub struct Renderer {
     vertices: wgpu::Buffer,
     vertex_capacity: u64,
     text: TextPainter,
+    instance: wgpu::Instance,
+    config: GpuConfig,
+    lost: LostSignal,
+    report: gpu::DeviceReport,
+    tracker: RecoveryTracker,
+    stats: RenderStats,
+    started: Instant,
 }
 
 fn to_wgpu_color(c: Color) -> wgpu::Color {
@@ -64,61 +90,6 @@ fn to_wgpu_color(c: Color) -> wgpu::Color {
     }
 }
 
-struct Gpu {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    format: wgpu::TextureFormat,
-}
-
-async fn request_gpu(
-    instance: &wgpu::Instance,
-    surface: Option<&wgpu::Surface<'_>>,
-    format_override: Option<wgpu::TextureFormat>,
-) -> Result<(Gpu, wgpu::Adapter), RenderError> {
-    let mut last_error = String::from("no adapter returned");
-    for &fallback in crate::golden::adapter_modes(crate::golden::force_software_requested()) {
-        let options = wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: fallback,
-            compatible_surface: surface,
-            ..Default::default()
-        };
-        match instance.request_adapter(&options).await {
-            Ok(adapter) => {
-                let (device, queue) = adapter
-                    .request_device(&wgpu::DeviceDescriptor::default())
-                    .await
-                    .map_err(|e| RenderError::Device(e.to_string()))?;
-                let format = match (format_override, surface) {
-                    (Some(f), _) => f,
-                    (None, Some(s)) => {
-                        let caps = s.get_capabilities(&adapter);
-                        caps.formats
-                            .iter()
-                            .copied()
-                            .find(|f| !f.is_srgb())
-                            .or_else(|| caps.formats.first().copied())
-                            .ok_or_else(|| {
-                                RenderError::Surface("surface reports no formats".into())
-                            })?
-                    }
-                    (None, None) => wgpu::TextureFormat::Rgba8Unorm,
-                };
-                return Ok((
-                    Gpu {
-                        device,
-                        queue,
-                        format,
-                    },
-                    adapter,
-                ));
-            }
-            Err(e) => last_error = e.to_string(),
-        }
-    }
-    Err(RenderError::NoAdapter(last_error))
-}
-
 impl Renderer {
     /// Create a renderer drawing into a window. `display` is the window system's display handle
     /// (for winit: `event_loop.owned_display_handle()`), `target` the window.
@@ -128,24 +99,24 @@ impl Renderer {
         size: (u32, u32),
         vsync: bool,
     ) -> Result<Renderer, RenderError> {
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(display));
+        let gpu_config = GpuConfig::from_env();
+        let instance = gpu::make_instance(&gpu_config, Some(display));
         let surface = instance
             .create_surface(target)
             .map_err(|e| RenderError::Surface(e.to_string()))?;
-        let (gpu, adapter) = pollster::block_on(request_gpu(&instance, Some(&surface), None))?;
-        let caps = surface.get_capabilities(&adapter);
+        let gpu = pollster::block_on(gpu::request_gpu(
+            &instance,
+            Some(&surface),
+            None,
+            &gpu_config,
+        ))?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: gpu.format,
             width: size.0.max(1),
             height: size.1.max(1),
             present_mode: present_mode(vsync),
-            alpha_mode: caps
-                .alpha_modes
-                .first()
-                .copied()
-                .unwrap_or(wgpu::CompositeAlphaMode::Auto),
+            alpha_mode: gpu.alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
             color_space: wgpu::SurfaceColorSpace::Auto,
@@ -159,17 +130,23 @@ impl Renderer {
     /// Create a renderer drawing into an offscreen RGBA8 texture. Tries a hardware adapter and
     /// then a software fallback; returns [`RenderError::NoAdapter`] if neither exists.
     pub fn new_offscreen(size: (u32, u32)) -> Result<Renderer, RenderError> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let (gpu, _adapter) = pollster::block_on(request_gpu(&instance, None, None))?;
+        let gpu_config = GpuConfig::from_env();
+        let instance = gpu::make_instance(&gpu_config, None);
+        let gpu = pollster::block_on(gpu::request_gpu(&instance, None, None, &gpu_config))?;
         let texture = capture_texture(&gpu.device, gpu.format, (size.0.max(1), size.1.max(1)))?;
         Ok(Self::build(gpu, Target::Offscreen { texture }, size))
     }
 
     fn build(gpu: Gpu, target: Target, size: (u32, u32)) -> Renderer {
         let Gpu {
+            instance,
             device,
             queue,
             format,
+            lost,
+            report,
+            config,
+            alpha_mode: _,
         } = gpu;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("quads"),
@@ -254,6 +231,110 @@ impl Renderer {
             vertices,
             vertex_capacity,
             text,
+            instance,
+            config,
+            lost,
+            report,
+            tracker: RecoveryTracker::default(),
+            stats: RenderStats::default(),
+            started: Instant::now(),
+        }
+    }
+
+    /// What the adapter and device turned out to be (also logged at start-up).
+    pub fn report(&self) -> &gpu::DeviceReport {
+        &self.report
+    }
+
+    /// What recovery has done so far.
+    pub fn stats(&self) -> RenderStats {
+        self.stats
+    }
+
+    fn now_ms(&self) -> u64 {
+        u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// Notice a lost device (the callback only sets a flag) and rebuild it. `Ok(true)` if it was
+    /// rebuilt now, `Err` if it was lost too often to try again.
+    fn check_device(&mut self) -> Result<bool, RenderError> {
+        // The loss is reported while the device is polled; this is a quick no-wait poll.
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        let Some(reason) = self.lost.take() else {
+            return Ok(false);
+        };
+        match self.tracker.device_lost(self.now_ms()) {
+            Verdict::GiveUp => Err(RenderError::DeviceLost(reason)),
+            _ => self.rebuild_device(&reason).map(|()| true),
+        }
+    }
+
+    /// Ask for a new adapter and device, put the surface (or the offscreen texture) on it and
+    /// rebuild every GPU object. Everything the renderer holds is made again from the draw lists, so
+    /// nothing is lost but the frame in flight.
+    fn rebuild_device(&mut self, reason: &str) -> Result<(), RenderError> {
+        tracing::warn!("rebuilding the GPU device: {reason}");
+        let surface = match &self.target {
+            Target::Window { surface, .. } => Some(surface),
+            _ => None,
+        };
+        let gpu = pollster::block_on(gpu::request_gpu(
+            &self.instance,
+            surface,
+            None,
+            &self.config,
+        ))?;
+        let offscreen = if matches!(self.target, Target::Offscreen { .. }) {
+            let size = (self.size.0.max(1), self.size.1.max(1));
+            Some(capture_texture(&gpu.device, gpu.format, size)?)
+        } else {
+            None
+        };
+        let target = match std::mem::replace(&mut self.target, Target::Detached) {
+            Target::Window {
+                surface,
+                mut config,
+            } => {
+                config.format = gpu.format;
+                if self.size.0 > 0 && self.size.1 > 0 {
+                    surface.configure(&gpu.device, &config);
+                }
+                Target::Window { surface, config }
+            }
+            other => match offscreen {
+                Some(texture) => Target::Offscreen { texture },
+                None => other,
+            },
+        };
+        let mut fresh = Self::build(gpu, target, self.size);
+        fresh.tracker = self.tracker.clone();
+        fresh.stats = self.stats;
+        fresh.stats.device_rebuilds += 1;
+        fresh.started = self.started;
+        *self = fresh;
+        Ok(())
+    }
+
+    fn reconfigure_surface(&mut self) {
+        if let Target::Window { surface, config } = &self.target {
+            surface.configure(&self.device, config);
+            self.stats.surface_reconfigures += 1;
+        }
+    }
+
+    /// The surface was outdated or lost on this frame: skip it, and reconfigure or rebuild.
+    fn surface_unusable(&mut self) -> Result<(), RenderError> {
+        self.stats.frames_skipped += 1;
+        match self.tracker.surface_unusable(self.now_ms()) {
+            Verdict::Reconfigure => {
+                self.reconfigure_surface();
+                Ok(())
+            }
+            Verdict::RebuildDevice => self.rebuild_device("the surface stayed unusable"),
+            Verdict::GiveUp => Err(RenderError::Surface(
+                "the surface stays unusable and the device was rebuilt too often to try again"
+                    .into(),
+            )),
         }
     }
 
@@ -283,10 +364,11 @@ impl Renderer {
     /// Draw `list` into the window. Does nothing (returns `Ok`) while the window is 0x0 or
     /// occluded; reconfigures and skips the frame when the surface is outdated or lost.
     pub fn render(&mut self, list: &DrawList, clear: Color) -> Result<(), RenderError> {
+        self.check_device()?;
         if self.size.0 == 0 || self.size.1 == 0 {
             return Ok(());
         }
-        let Target::Window { surface, config } = &self.target else {
+        let Target::Window { surface, .. } = &self.target else {
             return Err(RenderError::Surface(
                 "render() needs a windowed renderer".into(),
             ));
@@ -296,11 +378,12 @@ impl Renderer {
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 return Ok(());
             }
-            wgpu::CurrentSurfaceTexture::Outdated
-            | wgpu::CurrentSurfaceTexture::Suboptimal(_)
-            | wgpu::CurrentSurfaceTexture::Lost => {
-                surface.configure(&self.device, config);
+            wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
+                self.reconfigure_surface();
                 return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                return self.surface_unusable();
             }
             wgpu::CurrentSurfaceTexture::Validation => {
                 return Err(RenderError::Surface("surface validation error".into()));
@@ -318,6 +401,7 @@ impl Renderer {
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
         self.text.trim();
+        self.tracker.frame_ok();
         Ok(())
     }
 
@@ -358,9 +442,13 @@ impl Renderer {
         clear: Color,
         size: (u32, u32),
     ) -> Result<ImageRgba8, RenderError> {
+        self.check_device()?;
         let format = match &self.target {
             Target::Window { config, .. } => config.format,
             Target::Offscreen { texture } => texture.format(),
+            Target::Detached => {
+                return Err(RenderError::Device("the renderer has no target".into()));
+            }
         };
         match format {
             wgpu::TextureFormat::Rgba8Unorm
@@ -371,9 +459,14 @@ impl Renderer {
                 let format = wgpu::TextureFormat::Rgba8Unorm;
                 let texture = capture_texture(&self.device, format, size)?;
                 let gpu = Gpu {
+                    instance: self.instance.clone(),
                     device: self.device.clone(),
                     queue: self.queue.clone(),
                     format,
+                    lost: self.lost.clone(),
+                    report: self.report.clone(),
+                    config: self.config.clone(),
+                    alpha_mode: wgpu::CompositeAlphaMode::Auto,
                 };
                 Self::build(gpu, Target::Offscreen { texture }, size)
                     .read_frame(overlay, clear, size, format)
@@ -606,10 +699,12 @@ mod tests {
 
     #[test]
     fn floating_point_target_can_be_captured_as_rgba8() {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let config = GpuConfig::from_env();
+        let instance = gpu::make_instance(&config, None);
         let format = wgpu::TextureFormat::Rgba16Float;
-        let gpu = match pollster::block_on(request_gpu(&instance, None, Some(format))) {
-            Ok((gpu, _)) => gpu,
+        let gpu = match pollster::block_on(gpu::request_gpu(&instance, None, Some(format), &config))
+        {
+            Ok(gpu) => gpu,
             Err(RenderError::NoAdapter(reason)) => {
                 eprintln!("SKIPPED (no GPU adapter): {reason}");
                 return;
@@ -632,5 +727,117 @@ mod tests {
                 .iter()
                 .all(|pixel| *pixel == [0, 0, 255, 255])
         );
+    }
+
+    fn offscreen_or_skip(size: (u32, u32)) -> Option<Renderer> {
+        match Renderer::new_offscreen(size) {
+            Ok(renderer) => Some(renderer),
+            Err(RenderError::NoAdapter(reason)) => {
+                eprintln!("SKIPPED (no GPU adapter): {reason}");
+                None
+            }
+            Err(error) => panic!("renderer creation failed: {error}"),
+        }
+    }
+
+    fn one_red_square() -> DrawList {
+        let mut list = DrawList::default();
+        list.quads.push(ss2_ui::Quad {
+            rect: ss2_ui::Rect {
+                x: 100.0,
+                y: 100.0,
+                w: 400.0,
+                h: 300.0,
+            },
+            color: Color([1.0, 0.0, 0.0, 1.0]),
+        });
+        list
+    }
+
+    #[test]
+    fn a_device_that_is_destroyed_is_rebuilt_and_the_same_picture_comes_out() {
+        let Some(mut renderer) = offscreen_or_skip((160, 90)) else {
+            return;
+        };
+        let list = one_red_square();
+        let clear = Color([0.0, 0.0, 0.2, 1.0]);
+        let before = renderer.render_to_image(&list, clear).unwrap();
+        assert_eq!(renderer.stats(), RenderStats::default());
+        assert!(
+            before
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[0] > 200 && p[1] < 50),
+            "the square is drawn before the loss"
+        );
+
+        renderer.device.destroy();
+        let after = renderer
+            .render_to_image(&list, clear)
+            .expect("the next frame rebuilds the device and draws");
+        assert_eq!(after, before, "the rebuilt renderer draws the same picture");
+        assert_eq!(renderer.stats().device_rebuilds, 1);
+        assert!(!renderer.lost.is_set(), "the new device is not lost");
+        let lines = renderer.report().lines();
+        assert!(lines[0].starts_with("GPU: "), "{lines:?}");
+
+        // And it can happen again.
+        renderer.device.destroy();
+        assert_eq!(renderer.render_to_image(&list, clear).unwrap(), before);
+        assert_eq!(renderer.stats().device_rebuilds, 2);
+    }
+
+    #[test]
+    fn a_device_that_keeps_being_lost_ends_in_an_error_not_an_endless_loop() {
+        let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
+            return;
+        };
+        let list = DrawList::default();
+        let clear = Color([0.0, 0.0, 0.0, 1.0]);
+        let mut outcome = Ok(());
+        for _ in 0..10 {
+            renderer.device.destroy();
+            outcome = renderer.render_to_image(&list, clear).map(|_| ());
+            if outcome.is_err() {
+                break;
+            }
+        }
+        assert!(
+            matches!(outcome, Err(RenderError::DeviceLost(_))),
+            "after the allowed rebuilds it gives up: {outcome:?}"
+        );
+        assert_eq!(
+            renderer.stats().device_rebuilds,
+            3,
+            "three rebuilds are allowed within the window"
+        );
+    }
+
+    #[test]
+    fn render_looks_for_a_lost_device_before_anything_else() {
+        let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
+            return;
+        };
+        renderer.device.destroy();
+        // An offscreen renderer cannot render() to a window, but the lost device is noticed first.
+        let result = renderer.render(&DrawList::default(), Color([0.0, 0.0, 0.0, 1.0]));
+        assert!(matches!(result, Err(RenderError::Surface(_))), "{result:?}");
+        assert_eq!(renderer.stats().device_rebuilds, 1);
+    }
+
+    #[test]
+    fn a_healthy_renderer_never_rebuilds() {
+        let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
+            return;
+        };
+        let list = one_red_square();
+        for _ in 0..20 {
+            renderer
+                .render_to_image(&list, Color([0.0, 0.0, 0.0, 1.0]))
+                .unwrap();
+        }
+        assert_eq!(renderer.stats(), RenderStats::default());
     }
 }

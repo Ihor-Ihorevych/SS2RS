@@ -3,9 +3,11 @@
 pub mod discovery;
 pub mod events;
 pub mod inputstream;
+pub mod join;
 pub mod netsim;
 pub mod netstats;
 pub mod protocol;
+pub mod reconnect;
 pub mod replay;
 pub mod session;
 pub mod snapshots;

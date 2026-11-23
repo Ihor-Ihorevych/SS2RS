@@ -29,7 +29,8 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 
 ## AI & enemies
 - [ ] **T09-010** · AI framework: perception (sight/hearing), blackboard, behavior/state machines, steering, target selection across multiple players, aggro/leash · `XL` → split · `P0` · Deps: T07-013, T07-024, T01-025
-- [ ] **T09-017** · AI performance: rate-scaling of far enemies, budgeted path requests, horde stress test (hundreds) · `L` · `P1`
+- [x] **T09-017** · AI performance: rate-scaling of far enemies, budgeted path requests, horde stress test (hundreds): `ss2_game::ai_budget` (`docs/AI_BUDGET.md`): distance and visibility bands for the think rate, a staggered and capped scheduler that serves the most overdue first and tells each thought the real elapsed ticks, an ageing path-request budget, and an 800-agent test of the scheduler; **no AI, enemy or path finder exists yet to use it, so the horde test is of toy agents, not of real enemies, and nothing was measured** (T09-017b) · `L` · `P1`
+- [ ] **T09-017b** · Use the AI budget: call the scheduler and the path budget from the AI framework (T09-010) and the path finder (T07-013), compute the distance and visibility inputs, a real horde stress test with enemies on the scenario harness (T09-029b), measure the cost of a thought and choose the caps and bands on PC and a phone · `M` · `P1` · Deps: T09-017, T09-010, T07-013
 - [ ] **T09-018** · Spawners & waves: trigger spawners, teleport-in effects, wave scripts, count/difficulty scaling by player count · `L` · `P1` · Deps: T01-030
 - [ ] **T09-019** · **Enemy tasks — one per enemy** from T01-029 (`T09-019a…`, each `L` · `P1`): movement kit, attacks (melee/ranged/special), pain/death, animations (`.ans`), sounds, FX, difficulty tables, replication, scenario tests. Start with 2 simple enemies for M5.
 - [ ] **T09-020** · **Boss tasks — one per boss** (`XL` · `P2`): phases, scripted arenas, special mechanics (from T01-048)
@@ -37,7 +38,8 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 ## Level logic
 - [ ] **T09-021** · Trigger/event I/O system: outputs → inputs, delays, once/multi, activators, conditions · `L` · `P0` · Deps: T01-030
 - [ ] **T09-022** · Mechanism gameplay (doors, lifts, switches, locks/keys) on top of T07-012 · `M` · `P1`
-- [ ] **T09-023** · Checkpoints, secrets, level stats, kill/secret counters, end-of-level summary · `M` · `P1`
+- [x] **T09-023** · Checkpoints, secrets, level stats, kill/secret counters, end-of-level summary: `ss2_game::level_progress` (`docs/LEVEL_PROGRESS.md`): kill counters with per-player credit and a registered total, secrets found once, a tick clock, in-order checkpoints with an opaque size-limited versioned payload, restore semantics (counters revert to the checkpoint, the clock keeps running), the `LevelSummary` (kills, secrets, time, par, score) and a checksummed byte format; **it is a model only: no world snapshot is taken or restored, nothing in the game calls it, no save file, no UI, and the retry rules are my choices because the data does not state them** (T09-023b) · `M` · `P1`
+- [ ] **T09-023b** · Use the level progress model: take and restore a world snapshot as the checkpoint payload (T08), register enemies from spawners (T09-018), record kills and secrets from the entities (`CSecretEntity` `MarkFulfilled`, T09-021), reach checkpoints from chapter entities, advance the clock from the sim loop, write the summary into the UI's `LevelStats` (T10-020), embed it in saves (T08-022b) and check the retry rules against the original · `M` · `P1` · Deps: T09-023, T09-021, T09-018
 - [ ] **T09-024** · Scripted sequences & in-engine cutscenes: camera paths, actor scripting, letterbox, skip, co-op sync · `L` · `P2` · Deps: T01-035
 - [ ] **T09-025** · Level transitions & campaign progression: level list, carry-over inventory, difficulty carry, unlocks · `M` · `P1`
 - [ ] **T09-026** · Environmental hazards & destructibles gameplay · `M` · `P2`
@@ -45,7 +47,8 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 
 ## Dev & test
 - [x] **T09-028** · Cheats/dev commands (god, noclip, notarget, give, spawn, kill-all, level skip) via console: the commands, the `sv_cheats` gate and the request queue (`docs/CHEATS.md`); applying the requests needs the simulation (T08, T09) · `S` · `P1` · 🟢
-- [ ] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached) · `M` · `P0`
+- [x] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached): `ss2_sim::scenario` (`docs/SCENARIOS.md`): exact tick stepping, probes with series statistics (total drop, first tick where), `run_until`, scripted actions, a lifecycle log and a determinism check; **it has only run against toy systems: no player, weapon or enemy exists yet to build real scenarios from** (T09-029b) · `M` · `P0`
+- [ ] **T09-029b** · The first real scenarios on the harness once the gameplay exists: a weapon's time-to-kill table, an enemy reaching a point, damage dealt per weapon (T09-005, T09-019); recorded-input playback (T07-019), a failure report that prints the series, and multi-client scenarios over the simulated network (T08-029) · `M` · `P0` · Deps: T09-029, T09-005
 - [ ] **T09-030** · Balance/parity validation vs oracle numbers (T01-038): time-to-kill tables, rate-of-fire, projectile speeds, enemy speeds · `L` · `P1`
 - [ ] **T09-031** · Difficulty system tables & modifiers · `M` · `P1`
 - [ ] **T09-032** · Gameplay documentation: how to add an entity class / weapon / enemy (template + checklist) · `M` · `P0`

@@ -4,7 +4,7 @@ Tools multiply every other track: **`meta-dump` (T11-002) is the single most val
 turns opaque `CTSEMETA` files into readable text so RE and loader work can move in parallel.
 
 - [x] **T11-001** · `gro-tool`: `list`, `extract`, `cat`, `find` (glob/regex), `stats`, `diff` between archive sets; honors mount order · `M` · `P0` · 🟢 · Deps: T02-001
-- [ ] **T11-002** · `meta-dump`: print any CTSEMETA file as annotated text/JSON/RON (header, chunks, types, refs, raw spans with offsets); `--unknown` mode highlights undecoded regions · `M` · `P0` · Deps: T02-006 (a hex-only version can precede the full reader)
+- [~] **T11-002** [INPRG @Ihor-Ihorevych/agent · branch `T11-002-meta-dump` · 2026-11-23] · `meta-dump`: print any CTSEMETA file as annotated text/JSON/RON (header, chunks, types, refs, raw spans with offsets); `--unknown` mode highlights undecoded regions · `M` · `P0` · Deps: T02-006 (a hex-only version can precede the full reader)
 - [ ] **T11-003** · `meta-diff` / `meta-survey`: compare files of one type to infer layout (constant vs variable bytes), histogram of chunk tags across the install · `M` · `P0` · Deps: T11-002
 - [ ] **T11-004** · Asset viewer (desktop, `egui`): VFS tree, search, previews for textures (mips/channels), models (turntable, LOD, skeleton, material slots), animations (scrub), sounds, particles, fonts · `XL` → split by asset type · `P1`
 - [ ] **T11-005** · World viewer: free-fly through `.wld`, layer toggles (geometry, collision, lights, sectors, nav, entities), entity inspector · `L` · `P1` · Deps: T04-009
@@ -15,7 +15,8 @@ turns opaque `CTSEMETA` files into readable text so RE and loader work can move 
 - [x] **T11-010** · Replay/netsim CLIs: `tools/net-tool` (`docs/NET_TOOL.md`): `replay inspect/verify/dump` and `netsim presets/run` (a seeded one-way packet stream through a preset with overrides, a report of loss, duplicates, reordering and latency percentiles); **it cannot record or play back a session** (no simulation yet; T11-010b) · `M` · `P2`
 - [ ] **T11-010b** · net-tool follow-ups: record and play back a session once the simulation and T08-025b exist, a two-way run with a round-trip report, game-shaped traffic (bursty snapshot streams from several clients), JSON output for the progress dashboard (T11-012), scenario files, the socket-level conditioner front-end (T08-017b) · `M` · `P2` · Deps: T11-010, T08-025b
 - [x] **T11-011** · Tracy/puffin profiling integration and capture scripts · `S` · `P1` · 🟢
-- [ ] **T11-012** · Progress dashboard: auto-generated coverage page — file types loadable, % of levels loading, weapons/enemies implemented; fed by the data-gated runner · `M` · `P2`
+- [x] **T11-012** · Progress dashboard: `cargo xtask progress [--json]` (`docs/PROGRESS.md`): done, claimed and open tasks per track and for `PHASE 2`, and the open follow-up tasks; **only the roadmap part: file types loadable, the share of levels that load and weapons/enemies implemented, fed by the data-gated runner, are NOT done (T11-012b); its GitHub issue stays open on purpose** · `M` · `P2`
+- [ ] **T11-012b** · The game part of the progress dashboard: file types loadable, the share of levels that load, weapons and enemies implemented, fed by the data-gated "load everything" runner (T02-031) and the loaders; a CI step that posts the report on each PR; a history of the numbers · `M` · `P2` · Deps: T11-012, T02-031
 - [x] **T11-013** · `ss2-doctor`: validates an install (completeness, version, patch level), prints actionable errors for end users · `S` · `P1` · 🟢
 - [ ] **T11-014** · Texture/model exporters (PNG/glTF) for modders and spec reviewers · `M` · `P2`
 - [x] **T11-015** · Golden-file update CLI (images/audio/sim traces) with review-diff output · `S` · `P1` · 🟢

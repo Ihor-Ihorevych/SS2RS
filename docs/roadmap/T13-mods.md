@@ -13,6 +13,6 @@ Data-only mods (textures, models, `.ep` tweaks) should load directly through the
 - [ ] **T13-006** · Mod-aware netcode: mod list/hash in handshake (T08-006), mismatch handling, deterministic load order across peers · `M` · `P2`
 - [ ] **T13-007** · Mod browser/loader UI (enable/disable, order, per-profile) · `M` · `P2` · Deps: T10-001
 - [ ] **T13-008** · Port `InSamnity2` gameplay (classes inventoried from its DLL via T01-040/T01-026-style specs) onto Mod API or core · `XL` · `P2`
-- [ ] **T13-009** · Mod validation tool: lints for missing assets, bad references, version mismatch (`ss2-doctor` extension) · `M` · `P2` · 🟢
+- [~] **T13-009** [INPRG @Ihor-Ihorevych/agent · branch `T13-009-mod-lints` · 2026-11-23] · Mod validation tool: lints for missing assets, bad references, version mismatch (`ss2-doctor` extension) · `M` · `P2` · 🟢
 - [ ] **T13-010** · Modder docs: file formats (from `ss2-format-*`), Mod API reference, example mod · `M` · `P2` · 🟢
 - [x] **T13-011** · Policy: what mod content may be redistributed (no Croteam assets), mod licensing guidance · `S` · `P2` · 🟢

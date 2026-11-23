@@ -3,6 +3,7 @@
 mod batch;
 mod context;
 pub mod golden;
+pub mod gpu;
 mod image_diff;
 mod text;
 

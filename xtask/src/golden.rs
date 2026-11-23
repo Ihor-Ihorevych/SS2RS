@@ -19,7 +19,10 @@ use crate::guard::git;
 pub const GOLDEN_DIR: &str = "testdata/golden";
 
 /// The test targets that regenerate goldens when `UPDATE_GOLDEN` is set: (package, test target).
-pub const GOLDEN_TESTS: &[(&str, &str)] = &[("ss2-render", "golden_menu")];
+pub const GOLDEN_TESTS: &[(&str, &str)] = &[
+    ("ss2-render", "golden_menu"),
+    ("ss2-render", "golden_screens"),
+];
 
 /// How a golden file differs from git `HEAD`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
