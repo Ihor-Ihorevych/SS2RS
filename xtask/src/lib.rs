@@ -6,4 +6,5 @@ pub mod doctor;
 pub mod fuzz_sync;
 pub mod golden;
 pub mod guard;
+pub mod progress;
 pub mod roadmap;

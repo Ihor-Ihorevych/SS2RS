@@ -41,6 +41,7 @@
 
 mod api;
 mod null;
+pub mod replication;
 mod types;
 
 pub use api::{Audio, AudioResources};
