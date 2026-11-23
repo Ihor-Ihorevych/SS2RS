@@ -57,6 +57,10 @@ HDD is not a reference tier.
   `docs/re/` (`docs/re/help-digest.md` excludes it).
 - Sim budget: a share of one tick, set after T01-022 (share TBD). Workloads already named: 300 AI and
   500 debris on a mid-range CPU (T07-017); a horde of hundreds (T09-017, T04-023).
+- **Physics queries of the named workload (MEASURED once, section 5.7):** one tick of 300 sight rays, 300 ground probes, 100 projectile
+  casts and 20 blasts over 800 moving colliders and a 131,000-triangle terrain took **about 5.8 ms** plus **0.8 ms** to rebuild the
+  moving colliders, on one laptop that is not a reference tier. At 30 ticks per second (a tick is 33 ms) that is about 20 %. **No
+  budget is set**: the tick rate and the share are T01-022, and the workload has no AI or gameplay in it yet.
 
 ## 4. Memory, load time, and what the original data implies
 
@@ -98,8 +102,8 @@ Only figures in the cited documents. "derived" means arithmetic on them.
 ### 5.1 What exists today
 
 - **Micro-benchmarks** (criterion), `crates/ss2-bench`: `src/lib.rs` holds synthetic fixtures (no game data);
-  `benches/` covers assets (VFS and loads), render extract and math, platform actions and lifecycle, and the
-  audio voice limit. Run `cargo bench -p ss2-bench`. CI compiles them but does not time them (`docs/TESTING.md` §4).
+  `benches/` covers assets (VFS and loads), render extract and math, platform actions and lifecycle, the
+  audio voice limit and physics queries. Run `cargo bench -p ss2-bench`. CI compiles them but does not time them (`docs/TESTING.md` §4).
 - **`ss2-app`:** `--smoke-frames <N>` renders N frames and exits (`crates/ss2-app/src/cli.rs`); no frame-time output was found in its source;
   `--screenshot` writes a menu screen.
 - **Missing:** scene runs, frame-time capture, GPU timing, memory counters, load-time logs. The only scene
@@ -159,6 +163,44 @@ laptop, 15 GB RAM, Windows 11. **Not re-run for this document.** Order of magnit
 
 Finding: `RenderWorld::validate` costs about 5x more per item at 10,000 than at 1,000 (a `BTreeSet`
 duplicate check). At 2,000 renderables it is about 0.1 ms, so no change now.
+
+### 5.7 Physics query baseline (MEASURED, T07-017)
+
+`cargo bench -p ss2-bench --bench physics -- --warm-up-time 1 --measurement-time 2`, release profile, 12th Gen Intel Core i5-12450HX (8
+cores, 12 threads), 23.7 GB RAM, Windows 11, one run by the author of T07-017. A laptop, not a reference tier; the numbers are the
+**middle value** of criterion's interval and are an order of magnitude, not a budget. Synthetic scenes (no game data): boxes scattered
+over a 200 by 200 arena, a hilly terrain of two triangles per cell, capsules and spheres as moving colliders.
+
+| Benchmark | Time | Per item |
+|---|---|---|
+| `physics_bvh/build/1000` | 0.76 ms | 0.76 us per box |
+| `physics_bvh/build/10000` | 19.3 ms | 1.9 us per box |
+| `physics_bvh/build/100000` | 303 ms | 3.0 us per box |
+| `physics_bvh/nearest_hit_256_rays/1000` | 1.90 ms | 7.4 us per ray |
+| `physics_bvh/nearest_hit_256_rays/10000` | 2.31 ms | 9.0 us per ray |
+| `physics_bvh/nearest_hit_256_rays/100000` | 1.64 ms | 6.4 us per ray |
+| `physics_mesh/raycast_256/8192` (triangles) | 1.15 ms | 4.5 us per ray |
+| `physics_mesh/raycast_256/131072` | 1.02 ms | 4.0 us per ray |
+| `physics_mesh/sphere_sweep_256/8192` | 1.91 ms | 7.5 us per sweep |
+| `physics_mesh/sphere_sweep_256/131072` | 2.13 ms | 8.3 us per sweep |
+| `physics_horde_tick/rebuild_800_colliders` | 0.78 ms | 1.0 us per collider |
+| `physics_horde_tick/queries_300_sight_300_ground_100_projectiles_20_blasts` | 5.77 ms | 8 us per query (720 queries) |
+
+The workload of T07-017 is the last two rows: 300 enemies (capsules) and 500 debris (small spheres), a 131,000-triangle terrain, every
+enemy looking at the player (a ray) and probing the ground (a sphere cast down), 100 projectiles (sphere casts) and 20 explosions
+(sphere overlaps). **One tick of it costs about 6.5 ms of physics queries**, single threaded.
+
+Findings (and what they do not say):
+
+- **A query costs 4 to 9 microseconds almost whatever the size of the scene** (a ray over 1,000 boxes costs about the same as over
+  100,000, and over 8,000 triangles about the same as over 131,000). So the cost is not the depth of the tree: it is **per-query
+  overhead** (the traversal stack is a fresh `Vec` per query, every box is padded and tested with the general slab routine, and the
+  results go through closures). That is a suspicion from reading the code, **not a profile**; nobody has profiled it. A query that
+  costs a few hundred nanoseconds should be possible.
+- **The BVH build is not linear:** 0.76, 1.9 and 3.0 microseconds per box at 1,000, 10,000 and 100,000. The median split sorts at every level
+  (`O(n log^2 n)`); a selection instead of a sort would remove a log. Rebuilding 800 colliders each tick (0.78 ms) is cheap enough now.
+- **No mobile numbers and no thread scaling**: the task asks for a re-run on mobile CPUs in Phase 2, and queries are single-threaded here.
+- The workload has **no gameplay** in it (no AI decisions, no animation, no character controller), so the real tick will cost more.
 
 ## 6. Regression policy
 

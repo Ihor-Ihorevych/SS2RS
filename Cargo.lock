@@ -2488,6 +2488,7 @@ dependencies = [
  "ss2-assets",
  "ss2-audio-api",
  "ss2-core",
+ "ss2-physics",
  "ss2-platform-api",
  "ss2-render-api",
  "ss2-vfs",
