@@ -4,6 +4,7 @@ pub mod cli;
 pub mod console;
 pub mod crash;
 pub mod error;
+pub mod hotreload;
 pub mod input;
 pub mod jobs;
 pub mod logfile;
