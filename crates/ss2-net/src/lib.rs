@@ -5,5 +5,6 @@ pub mod inputstream;
 pub mod netsim;
 pub mod netstats;
 pub mod protocol;
+pub mod replay;
 pub mod snapshots;
 pub mod timesync;
