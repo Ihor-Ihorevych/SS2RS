@@ -498,6 +498,29 @@ fn what_changed_says_which_parts_of_the_game_to_reapply() {
         to: "b".into(),
     }];
     assert!(affected_sections(&unknown).is_empty());
+    // the order and repeats of the input do not matter
+    let change = |id: &str| Change {
+        id: id.into(),
+        from: "a".into(),
+        to: "b".into(),
+    };
+    let shuffled = [
+        change("music_volume"),
+        change("shadows"),
+        change("fov"),
+        change("high_contrast"),
+        change("sfx_volume"),
+        change("vsync"),
+    ];
+    assert_eq!(
+        affected_sections(&shuffled),
+        [
+            Section::Video,
+            Section::Graphics,
+            Section::Audio,
+            Section::Accessibility
+        ]
+    );
 }
 
 #[test]
@@ -743,4 +766,124 @@ fn the_screen_can_be_driven_with_navigation_inputs_alone() {
     let now = applied_settings(&screen).unwrap();
     assert!(!now.video.vsync);
     assert_eq!(now.audio.music, 0.5);
+}
+
+#[test]
+fn an_option_this_build_does_not_know_still_gets_a_usable_row() {
+    // `QualitySettings` may gain options before this file does: they get a label made from the name and a step of a twentieth of the range.
+    let range = quality_row(&OptionDesc {
+        name: "new_thing",
+        kind: OptionKind::Range { min: 1.0, max: 3.0 },
+    });
+    assert_eq!(range.label, "New thing");
+    assert_eq!(
+        range.kind,
+        RowKind::Range {
+            min: 1.0,
+            max: 3.0,
+            step: 0.1
+        }
+    );
+    assert_eq!(range.format, ValueFormat::Plain);
+    assert_eq!(range.default, "1");
+    let choice = quality_row(&OptionDesc {
+        name: "mode_thing",
+        kind: OptionKind::Choice(&["first", "second", "third"]),
+    });
+    assert_eq!(choice.default, "first");
+    assert_eq!(
+        choice.kind,
+        RowKind::Choice(vec!["first".into(), "second".into(), "third".into()])
+    );
+    let count = quality_row(&OptionDesc {
+        name: "other_thing",
+        kind: OptionKind::Count { min: 0, max: 100 },
+    });
+    assert_eq!(
+        count.kind,
+        RowKind::Count {
+            min: 0,
+            max: 100,
+            step: 5
+        }
+    );
+    assert_eq!(count.default, "0");
+    let small = quality_row(&OptionDesc {
+        name: "small_thing",
+        kind: OptionKind::Count { min: 0, max: 10 },
+    });
+    assert_eq!(
+        small.kind,
+        RowKind::Count {
+            min: 0,
+            max: 10,
+            step: 1
+        }
+    );
+    let decals = quality_row(&OptionDesc {
+        name: "max_decals",
+        kind: OptionKind::Count { min: 0, max: 1000 },
+    });
+    assert_eq!(
+        decals.kind,
+        RowKind::Count {
+            min: 0,
+            max: 1000,
+            step: 50
+        }
+    );
+    let toggle = quality_row(&OptionDesc {
+        name: "t",
+        kind: OptionKind::Toggle,
+    });
+    assert_eq!(toggle.kind, RowKind::Toggle);
+    assert_eq!(toggle.default, "off");
+    assert_eq!(humanize_id(""), "");
+    assert!(accessibility_row("nope").is_none());
+}
+
+#[test]
+fn the_steps_of_the_graphics_rows_are_the_ones_documented() {
+    let screen = default_screen();
+    let step_of = |id: &str| match screen.row(id).unwrap().kind {
+        RowKind::Range { step, .. } => step,
+        _ => panic!("{id} is not a range"),
+    };
+    assert_eq!(step_of("lod_bias"), 0.25);
+    assert_eq!(step_of("view_distance"), 0.1);
+    assert_eq!(step_of("particle_density"), 0.05);
+    assert_eq!(step_of("render_scale"), 0.05);
+    assert_eq!(step_of("fov"), 5.0);
+    assert_eq!(step_of("ui_scale"), 0.05);
+    assert_eq!(step_of("text_scale"), 0.1);
+    assert_eq!(step_of("master_volume"), 0.1);
+    // formats
+    for id in [
+        "view_distance",
+        "particle_density",
+        "render_scale",
+        "ui_scale",
+        "text_scale",
+        "master_volume",
+        "music_volume",
+        "sfx_volume",
+        "voice_volume",
+        "ui_volume",
+    ] {
+        assert_eq!(screen.row(id).unwrap().format, ValueFormat::Percent, "{id}");
+    }
+    for id in ["lod_bias", "max_decals", "shadows", "bloom"] {
+        assert_eq!(screen.row(id).unwrap().format, ValueFormat::Plain, "{id}");
+    }
+    assert_eq!(screen.row("fov").unwrap().format, ValueFormat::Suffix("°"));
+    assert_eq!(
+        screen.row("anisotropy").unwrap().format,
+        ValueFormat::Suffix("x")
+    );
+    // risky rows are exactly the window mode and the resolution
+    let risky: Vec<_> = all_ids(&screen)
+        .into_iter()
+        .filter(|id| screen.row(id).unwrap().risky)
+        .collect();
+    assert_eq!(risky, ["window_mode", "resolution"]);
 }

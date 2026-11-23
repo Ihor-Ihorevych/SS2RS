@@ -69,7 +69,7 @@ pub struct VideoSettings {
     pub resolution: (u32, u32),
     /// Wait for the display refresh.
     pub vsync: bool,
-    /// The horizontal field of view in degrees, within [`FOV_RANGE`].
+    /// The field of view in degrees, within [`FOV_RANGE`] (the meaning of the `r_fov` console variable).
     pub fov: f32,
     /// How the UI meets the window (aspect mode and the player's smaller-UI scale).
     pub ui: ScaleSettings,
@@ -349,7 +349,13 @@ fn quality_row(desc: &OptionDesc) -> RowSpec {
         ),
         OptionKind::Toggle => (RowKind::Toggle, ValueFormat::Plain),
     };
-    let default = defaults.get(id).unwrap_or_default();
+    // An option this build does not know has no default of ours: use the lowest value.
+    let default = defaults.get(id).unwrap_or_else(|| match &desc.kind {
+        OptionKind::Choice(words) => words.first().map_or_else(String::new, |w| (*w).to_owned()),
+        OptionKind::Range { min, .. } => min.to_string(),
+        OptionKind::Count { min, .. } => min.to_string(),
+        OptionKind::Toggle => "off".to_owned(),
+    });
     RowSpec::new(id, &quality_label(id), kind, &default).format(format)
 }
 
@@ -637,16 +643,12 @@ pub fn pending_settings(screen: &SettingsScreen) -> Result<GameSettings, String>
 /// Set the pending value of every graphics row to the preset (it still needs Apply).
 ///
 /// # Errors
-/// [`SettingsError::Locked`] while a confirmation is open.
+/// [`SettingsError::Locked`] while a confirmation is open (nothing changes).
 pub fn set_quality_preset(
     screen: &mut SettingsScreen,
     tier: QualityTier,
 ) -> Result<(), SettingsError> {
     let preset = QualitySettings::preset(tier);
-    // Check the lock first so that a refusal changes nothing.
-    if screen.is_confirming() {
-        return Err(SettingsError::Locked);
-    }
     for desc in QualitySettings::options() {
         let text = preset.get(desc.name).unwrap_or_default();
         screen.set_text(desc.name, &text)?;
@@ -656,15 +658,9 @@ pub fn set_quality_preset(
 
 /// The name of the preset the **pending** graphics values equal, or `Custom` (what a settings screen shows beside the graphics rows).
 pub fn quality_label_of(screen: &SettingsScreen) -> String {
-    let mut q = QualitySettings::default();
-    for desc in QualitySettings::options() {
-        if let Some(text) = screen.pending(desc.name)
-            && q.set(desc.name, text).is_err()
-        {
-            return "Custom".to_owned();
-        }
-    }
-    q.tier_matching()
+    pending_settings(screen)
+        .ok()
+        .and_then(|s| s.quality.tier_matching())
         .map_or_else(|| "Custom".to_owned(), |t| t.name().to_owned())
 }
 

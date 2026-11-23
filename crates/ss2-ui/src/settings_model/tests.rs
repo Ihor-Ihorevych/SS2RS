@@ -955,6 +955,15 @@ fn left_right_activate_and_back() {
     assert_eq!(s.pending("scale"), Some("0.95"));
     assert_eq!(s.press(NavInput::Back), Ok(Nav::Back));
     assert_eq!(s.pending("scale"), Some("0.95")); // back is for the screen to act on
+    // at the end of a range the input is reported as a limit, and nothing changes
+    assert!(s.focus_row("decals"));
+    s.set_text("decals", "1000").unwrap();
+    assert_eq!(s.press(NavInput::Right), Ok(Nav::Limit));
+    assert_eq!(s.pending("decals"), Some("1000"));
+    assert_eq!(s.press(NavInput::Left), Ok(Nav::Changed));
+    s.set_text("decals", "0").unwrap();
+    assert_eq!(s.press(NavInput::Left), Ok(Nav::Limit));
+    assert_eq!(s.press(NavInput::Right), Ok(Nav::Changed));
 }
 
 #[test]
@@ -1046,4 +1055,69 @@ fn a_long_run_of_edits_keeps_every_value_valid_and_applies_only_on_apply() {
         }
         assert_eq!(s.has_changes(), !s.changed().is_empty());
     }
+}
+
+#[test]
+fn a_fine_grid_keeps_four_decimals_and_a_walk_through_zero_never_shows_minus_zero() {
+    let tab = TabSpec::new(
+        "T",
+        vec![RowSpec::new("fine", "F", range(0.0, 0.1, 0.0125), "0")],
+    );
+    let mut s = SettingsScreen::new(vec![tab], 5.0).unwrap();
+    let up: Vec<_> = (0..9)
+        .map(|_| s.step("fine", Step::Increase).unwrap())
+        .collect();
+    assert_eq!(
+        up,
+        [
+            "0.0125", "0.025", "0.0375", "0.05", "0.0625", "0.075", "0.0875", "0.1", "0.1"
+        ]
+    );
+    // A grid that starts below zero passes through zero; the text there is `0`, never `-0`, whatever the float error.
+    let mut seen_zero = 0;
+    for min in [-1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1] {
+        for step in [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.7, 0.01, 0.03] {
+            let tab = TabSpec::new(
+                "T",
+                vec![RowSpec::new(
+                    "r",
+                    "R",
+                    range(min, 1.0, step),
+                    &min.to_string(),
+                )],
+            );
+            let mut s = SettingsScreen::new(vec![tab], 5.0).unwrap();
+            for dir in [Step::Increase, Step::Decrease] {
+                for _ in 0..120 {
+                    let t = s.step("r", dir).unwrap();
+                    assert_ne!(t, "-0", "min {min} step {step}");
+                    if t == "0" {
+                        seen_zero += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(seen_zero > 20);
+}
+
+#[test]
+fn a_row_that_equals_its_default_is_marked_even_when_it_differs_from_what_is_applied() {
+    let mut s = screen();
+    s.load("shadows", "low").unwrap(); // applied and pending are `low`, the default is `high`
+    let v = s.view(0);
+    assert!(!v[0].is_default && !v[0].changed);
+    s.set_text("shadows", "high").unwrap(); // pending is the default, applied is not
+    let v = s.view(0);
+    assert!(v[0].is_default && v[0].changed);
+}
+
+#[test]
+fn the_last_row_of_a_tab_counts_in_its_badge() {
+    let mut s = screen();
+    s.set_text("crouch", "toggle").unwrap(); // the last row of the first tab
+    assert_eq!(s.changed_in_tab(0), 1);
+    s.set_text("size", "extra_large").unwrap(); // the last row of the last tab
+    assert_eq!(s.changed_in_tab(2), 1);
+    assert_eq!(s.view(0).iter().filter(|r| r.changed).count(), 1);
 }

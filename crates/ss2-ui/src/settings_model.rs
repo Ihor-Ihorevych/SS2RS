@@ -266,6 +266,8 @@ pub enum Nav {
     Moved,
     /// The focused row's pending value changed.
     Changed,
+    /// The focused row was already at the end of its range: nothing changed (a screen may play a "bump").
+    Limit,
     /// The player asked to go back; the screen decides what that means (leave, or ask about unsaved edits).
     Back,
 }
@@ -517,7 +519,7 @@ impl SettingsScreen {
                     value: format_value(row, &self.pending[i]),
                     changed: self.pending[i] != self.applied[i],
                     is_default: self.pending[i] == self.defaults[i],
-                    focused: tab == self.tab && i == self.focus,
+                    focused: i == self.focus, // `focus` is always in the current tab, and a row index is unique
                     can_decrease,
                     can_increase,
                     risky: row.risky,
@@ -764,8 +766,13 @@ impl SettingsScreen {
                     Step::Increase
                 };
                 let id = self.rows[self.focus].id.clone();
-                self.step(&id, step)?;
-                Ok(Nav::Changed)
+                let before = self.pending[self.focus].clone();
+                let after = self.step(&id, step)?;
+                Ok(if after == before {
+                    Nav::Limit
+                } else {
+                    Nav::Changed
+                })
             }
             NavInput::Back => Ok(Nav::Back),
         }
