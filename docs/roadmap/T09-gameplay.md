@@ -45,7 +45,7 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 
 ## Dev & test
 - [x] **T09-028** · Cheats/dev commands (god, noclip, notarget, give, spawn, kill-all, level skip) via console: the commands, the `sv_cheats` gate and the request queue (`docs/CHEATS.md`); applying the requests needs the simulation (T08, T09) · `S` · `P1` · 🟢
-- [ ] **T09-029** · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached) · `M` · `P0`
+- [~] **T09-029** [INPRG @Ihor-Ihorevych/agent · branch `T09-029-scenario-harness` · 2026-11-23] · Scenario test harness: headless sim, scripted player/enemy setups, assertions (damage dealt, time-to-kill, path reached) · `M` · `P0`
 - [ ] **T09-030** · Balance/parity validation vs oracle numbers (T01-038): time-to-kill tables, rate-of-fire, projectile speeds, enemy speeds · `L` · `P1`
 - [ ] **T09-031** · Difficulty system tables & modifiers · `M` · `P1`
 - [ ] **T09-032** · Gameplay documentation: how to add an entity class / weapon / enemy (template + checklist) · `M` · `P0`
