@@ -723,7 +723,9 @@ fn update_patch_minor(archive_name: &str) -> Option<u32> {
 /// `2`, `2.100` or `2.100.800000` as `(major, minor, build)`.
 fn parse_patch_requirement(text: &str) -> Option<(u32, u32, u32)> {
     let number = |p: &str| {
-        (!p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        // Digits only: `parse` alone would accept a `+` sign (and it rejects the empty string).
+        p.bytes()
+            .all(|b| b.is_ascii_digit())
             .then(|| p.parse::<u32>().ok())
             .flatten()
     };
@@ -1110,15 +1112,13 @@ impl Checker<'_> {
                 "Remove them; see docs/MODDING_POLICY.md (what a mod may contain).",
             );
         }
-        if !self.m.placeholders.is_empty() {
-            let names = self.m.placeholders.clone();
-            self.add_list(
-                Lint::PlaceholderLayers,
-                "archives that hold only the placeholder dummy.txt (they mark an optional pack and are ignored)",
-                &names,
-                "Nothing to do; they are skipped.",
-            );
-        }
+        let names = self.m.placeholders.clone();
+        self.add_list(
+            Lint::PlaceholderLayers,
+            "archives that hold only the placeholder dummy.txt (they mark an optional pack and are ignored)",
+            &names,
+            "Nothing to do; they are skipped.",
+        );
     }
 
     fn overrides(&mut self, files: &BTreeMap<VfsPath, ModFile>) -> usize {
@@ -1364,11 +1364,13 @@ pub fn check_mods(env: &ModCheckEnv<'_>, mods: &[ModUnderTest]) -> ModReport {
         let others: Vec<String> = files
             .keys()
             .filter(|p| {
-                p.parent().is_some_and(|d| d.as_str() == "content")
-                    && matches!(p.extension(), Some("mod" | "nfo"))
-                    && p.as_str()
-                        .rsplit_once('.')
-                        .is_some_and(|(stem, _)| stem != format!("content/{}", m.id))
+                p.as_str().strip_prefix("content/").is_some_and(|rest| {
+                    !rest.contains('/')
+                        && rest
+                            .strip_suffix(".mod")
+                            .or_else(|| rest.strip_suffix(".nfo"))
+                            .is_some_and(|stem| stem != m.id)
+                })
             })
             .map(ToString::to_string)
             .collect();
@@ -1520,14 +1522,14 @@ pub fn installed_mod_names(install_dir: impl AsRef<Path>) -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(&content) {
         for entry in entries.flatten() {
             let path = entry.path();
-            let has_gro = path.is_dir()
-                && std::fs::read_dir(&path).is_ok_and(|it| {
-                    it.flatten().any(|e| {
-                        e.path()
-                            .extension()
-                            .is_some_and(|x| x.eq_ignore_ascii_case("gro"))
-                    })
-                });
+            // `read_dir` fails on a plain file, so only folders get through.
+            let has_gro = std::fs::read_dir(&path).is_ok_and(|it| {
+                it.flatten().any(|e| {
+                    e.path()
+                        .extension()
+                        .is_some_and(|x| x.eq_ignore_ascii_case("gro"))
+                })
+            });
             if has_gro {
                 names.push(entry.file_name().to_string_lossy().into_owned());
             }
@@ -1554,16 +1556,18 @@ fn install_finding(
 }
 
 fn newest_patch(dir: &Path) -> Option<PatchLevel> {
-    let mut best: Option<PatchLevel> = None;
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if let Some(level) = PatchLevel::from_file_name(&name)
-            && best.as_ref().is_none_or(|b| level.key() > b.key())
-        {
-            best = Some(level);
-        }
-    }
-    best
+    // The newest by number; two names with the same numbers (`Patch_02_100.gro` and
+    // `Patch_02_100_0.gro`) are told apart by name, so the answer never depends on the order
+    // the folder is read in.
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter_map(|e| PatchLevel::from_file_name(&e.file_name().to_string_lossy()))
+        .max_by(|a, b| {
+            a.key()
+                .cmp(&b.key())
+                .then_with(|| a.archive.cmp(&b.archive))
+        })
 }
 
 fn load_installed(dir: &Path, id: &str, findings: &mut Vec<ModFinding>) -> Option<ModUnderTest> {
@@ -2345,6 +2349,181 @@ mod tests {
     }
 
     #[test]
+    fn the_override_summary_cuts_after_exactly_eight_types() {
+        let mk = |n: usize| {
+            let exts = ["aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii"];
+            let mut b = MemoryVfs::new();
+            let mut files: Vec<(String, &'static str)> = good_files()
+                .iter()
+                .map(|(a, d)| ((*a).to_owned(), *d))
+                .collect();
+            for ext in &exts[..n] {
+                b.insert(&format!("Content/x.{ext}"), vec![1]).unwrap();
+                files.push((format!("Content/x.{ext}"), "y"));
+            }
+            let refs: Vec<(&str, &str)> = files.iter().map(|(a, b)| (a.as_str(), *b)).collect();
+            run_one(&b, &refs)
+        };
+        let r = mk(8);
+        let msg = &only(&r, Lint::OverrideSummary)[0].message;
+        assert!(
+            msg.ends_with(".hh 1)"),
+            "exactly eight types: no cut: {msg}"
+        );
+        let r = mk(9);
+        let msg = &only(&r, Lint::OverrideSummary)[0].message;
+        assert!(msg.contains(".hh 1") && msg.ends_with(", ...)"), "{msg}");
+    }
+
+    #[test]
+    fn lists_fold_after_exactly_three_examples() {
+        let named = |n: usize| {
+            let owned: Vec<String> = (0..n)
+                .map(|i| format!("Content/TestMod/n{i}?.tex"))
+                .collect();
+            let mut files: Vec<(&str, &str)> = good_files();
+            for name in &owned {
+                files.push((name.as_str(), "x"));
+            }
+            run_one(&base(), &files)
+        };
+        let three = named(3);
+        let m = &only(&three, Lint::WindowsUnsafeName)[0].message;
+        assert!(m.contains("(3)") && !m.contains("..."), "{m}");
+        let four = named(4);
+        let m = &only(&four, Lint::WindowsUnsafeName)[0].message;
+        assert!(m.contains("(4)") && m.ends_with(", ..."), "{m}");
+    }
+
+    #[test]
+    fn conflict_messages_name_at_most_three_examples() {
+        let b = base();
+        let env = ModCheckEnv {
+            base: &b,
+            loose: None,
+            patch_level: None,
+        };
+        let pair = |n: usize| {
+            let mk = |id: &str, tag: &str| {
+                let mut v = MemoryVfs::new();
+                for i in 0..n {
+                    v.insert(
+                        &format!("Content/f{i}.bin"),
+                        format!("{id}{tag}").into_bytes(),
+                    )
+                    .unwrap();
+                }
+                ModUnderTest::new(id).with_layer(ModLayer::new(format!("{id}.gro"), v))
+            };
+            check_mods(&env, &[mk("a", "1"), mk("b", "2")])
+        };
+        let r = pair(3);
+        let m = &only(&r, Lint::ModConflict)[0].message;
+        assert!(
+            m.contains("f0.bin, content/f1.bin, content/f2.bin") && !m.contains("..."),
+            "{m}"
+        );
+        let r = pair(5);
+        let m = &only(&r, Lint::ModConflict)[0].message;
+        assert!(m.contains("replaces 5 files of a"), "{m}");
+        assert!(m.ends_with("content/f2.bin, ..."), "{m}");
+        assert!(!m.contains("f3.bin"), "{m}");
+    }
+
+    #[test]
+    fn foreign_descriptors_are_only_mod_and_nfo_files_at_the_content_root() {
+        let r = run_one(
+            &base(),
+            &with(&[
+                ("Content/readme.txt", "x"),
+                ("Content/Other.nfo", "NAME = \"o\""),
+                ("Content/Sub/Other2.nfo", "NAME = \"o\""),
+                ("readme.md", "x"),
+            ]),
+        );
+        let f = only(&r, Lint::ForeignDescriptor);
+        assert_eq!(f.len(), 1, "{:#?}", r.findings);
+        assert!(
+            f[0].message.contains("(1): content/other.nfo"),
+            "{}",
+            f[0].message
+        );
+    }
+
+    #[test]
+    fn requires_patch_with_a_build_names_the_build_and_updates_need_a_patch_minor() {
+        let nfo = "NAME = \"T\" ;\nAUTHOR = \"A\" ;\nREQUIRES_PATCH = \"2.095.5\" ;";
+        let files = [
+            ("Content/TestMod.mod", MOD),
+            ("Content/TestMod.nfo", nfo),
+            ("Content/TestMod/t.tex", "x"),
+        ];
+        let r = run_one(&base(), &files);
+        let m = &only(&r, Lint::PatchTooOld);
+        assert_eq!(m.len(), 0, "install 2.100 is newer: {:#?}", r.findings);
+        let b = base();
+        let patch = PatchLevel::from_file_name("Patch_02_090.gro");
+        let env = ModCheckEnv {
+            base: &b,
+            loose: None,
+            patch_level: patch.as_ref(),
+        };
+        let m2 = ModUnderTest::new("testmod").with_layer(ModLayer::new("a.gro", mem(&files)));
+        let r = check_mods(&env, &[m2]);
+        assert!(
+            r.findings[0]
+                .message
+                .contains("needs patch level 2.095 (build 5)"),
+            "{}",
+            r.findings[0].message
+        );
+        // With no patch at all, even the lowest update minor is too new.
+        let env = ModCheckEnv {
+            base: &b,
+            loose: None,
+            patch_level: None,
+        };
+        let m3 = ModUnderTest::new("testmod")
+            .with_layer(ModLayer::new("a.gro", mem(&good_files())))
+            .with_layer(ModLayer::new(
+                "z_Up_01_001.gro",
+                mem(&[("Content/TestMod/u.txt", "u")]),
+            ));
+        let r = check_mods(&env, &[m3]);
+        assert_eq!(codes(&r), ["MOD022"], "{:#?}", r.findings);
+        // Equal to the install's minor is fine.
+        let patch = PatchLevel::from_file_name("Patch_02_001.gro");
+        let env = ModCheckEnv {
+            base: &b,
+            loose: None,
+            patch_level: patch.as_ref(),
+        };
+        let m4 = ModUnderTest::new("testmod")
+            .with_layer(ModLayer::new("a.gro", mem(&good_files())))
+            .with_layer(ModLayer::new(
+                "z_Up_01_001.gro",
+                mem(&[("Content/TestMod/u.txt", "u")]),
+            ));
+        assert!(check_mods(&env, &[m4]).findings.is_empty());
+    }
+
+    #[test]
+    fn unreadable_folders_come_with_the_matching_hint() {
+        let mut layer = flaky(&good_files());
+        layer.fail_list = Some(("content/testmod", true));
+        let r = run_layer(layer);
+        assert!(
+            only(&r, Lint::CaseCollision)[0]
+                .hint
+                .contains("differ only by case")
+        );
+        let mut layer = flaky(&good_files());
+        layer.fail_list = Some(("content/testmod", false));
+        let r = run_layer(layer);
+        assert!(only(&r, Lint::Unreadable)[0].hint.contains("intact"));
+    }
+
+    #[test]
     fn the_override_summary_lists_the_biggest_types_first_and_cuts_the_rest() {
         let mut b = MemoryVfs::new();
         let mut files: Vec<(String, &'static str)> = vec![
@@ -2552,7 +2731,7 @@ mod tests {
 
     #[test]
     fn huge_descriptors_are_not_read() {
-        let big = "x".repeat(MAX_TEXT_BYTES as usize + 1);
+        let big = "x".repeat(1_048_577);
         let files = [
             ("Content/TestMod.mod", big.as_str()),
             ("Content/TestMod.nfo", big.as_str()),
@@ -2569,7 +2748,7 @@ mod tests {
         assert_eq!(only(&r, Lint::ModFileMalformed).len(), 1);
         assert_eq!(r.exit_code(), 1);
         // Exactly at the limit is still read.
-        let at = "x".repeat(MAX_TEXT_BYTES as usize);
+        let at = "x".repeat(1_048_576);
         let files = [
             ("Content/TestMod.mod", MOD),
             ("Content/TestMod.nfo", at.as_str()),
@@ -2676,14 +2855,14 @@ mod tests {
         };
         let r = check_mods(&env, &[mk("a", b"abcd"), mk("b", b"abce")]);
         assert_eq!(only(&r, Lint::ModConflict).len(), 1, "{:#?}", r.findings);
-        let big = vec![7u8; MAX_COMPARE_BYTES as usize + 1];
+        let big = vec![7u8; 8_388_609];
         let r = check_mods(&env, &[mk("a", &big), mk("b", &big)]);
         assert_eq!(
             only(&r, Lint::ModConflict).len(),
             1,
             "too big to compare: not claimed identical"
         );
-        let exactly = vec![7u8; MAX_COMPARE_BYTES as usize];
+        let exactly = vec![7u8; 8_388_608];
         let r = check_mods(&env, &[mk("a", &exactly), mk("b", &exactly)]);
         assert_eq!(
             only(&r, Lint::ModDuplicate).len(),
@@ -2950,6 +3129,28 @@ Mod testmod (\"Test Mod\"): 1 layer, 4 files, 1 override base files
         assert_eq!(r.mods[0].overrides, 1);
         assert_eq!(r.mods[0].name, "Test Mod");
         assert_eq!(installed_mod_names(dir.path()), ["TestMod"]);
+    }
+
+    #[test]
+    fn the_newest_patch_ties_are_broken_by_name_and_only_folders_with_archives_are_mods() {
+        let dir = install_with_mod();
+        let p = dir.path();
+        assert_eq!(newest_patch(p).unwrap().archive, "Patch_02_090_593613.gro");
+        write_gro(p, "Patch_02_100.gro", &[("Content/y.txt", "y")]);
+        write_gro(p, "Patch_02_100_0.gro", &[("Content/z.txt", "z")]);
+        let best = newest_patch(p).unwrap();
+        assert_eq!(
+            best.archive, "Patch_02_100_0.gro",
+            "same numbers: the later name"
+        );
+        assert_eq!(newest_patch(&p.join("absent")), None);
+        std::fs::create_dir_all(p.join("Content/NoGro")).unwrap();
+        std::fs::write(p.join("Content/NoGro/readme"), b"x").unwrap();
+        std::fs::create_dir_all(p.join("Content/Texts")).unwrap();
+        std::fs::write(p.join("Content/Texts/notes.txt"), b"x").unwrap();
+        std::fs::create_dir_all(p.join("Content/Empty")).unwrap();
+        std::fs::write(p.join("Content/loose.gro"), b"not a folder").unwrap();
+        assert_eq!(installed_mod_names(p), ["TestMod"]);
     }
 
     #[test]
