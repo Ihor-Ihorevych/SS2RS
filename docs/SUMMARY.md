@@ -28,6 +28,7 @@
 - [Geometry primitives](GEOMETRY.md)
 - [Free-fly debug camera](FREEFLY.md)
 - [Spatial acceleration (BVH)](SPATIAL.md)
+- [Physics queries](PHYSICS_QUERIES.md)
 - [Culling and TAA jitter](CULLING.md)
 - [Debug draw](DEBUG_DRAW.md)
 - [Network threat model](THREAT_MODEL_NET.md)
@@ -77,6 +78,7 @@
 - [0004 Audio API](rfcs/0004-audio-api.md)
 - [0005 ECS choice](rfcs/0005-ecs-choice.md)
 - [0006 Network transport](rfcs/0006-network-transport.md)
+- [0007 Physics query API](rfcs/0007-physics-query-api.md)
 
 # Reverse-engineering specs
 

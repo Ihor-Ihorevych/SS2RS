@@ -13,7 +13,7 @@
 
 use std::fmt;
 
-use crate::geometry::{Aabb, Ray};
+use crate::geometry::{Aabb, Capsule, Ray, SweepHit};
 use ss2_core::math::Vec3;
 
 /// A set of up to 32 layers, as bits. Things are on layers and a query has a mask: a thing is
@@ -471,6 +471,67 @@ impl Triangle {
         })
     }
 
+    /// Move a sphere from `center` by `delta` and find when it first touches this triangle. The
+    /// sphere's centre is a ray against the rounded triangle slab: the triangle moved by the radius
+    /// up and down its normal (the faces) and the three edges as capsules (whose round ends are
+    /// the corners). A sphere that already overlaps the triangle is reported at 0 with the
+    /// direction to push it out.
+    pub fn sweep_sphere(&self, center: Vec3, radius: f32, delta: Vec3) -> Option<SweepHit> {
+        if !center.is_finite() || !delta.is_finite() || !radius.is_finite() || radius < 0.0 {
+            return None;
+        }
+        let normal = (self.b - self.a).cross(self.c - self.a).try_normalize()?;
+        let nearest = self.closest_point(center);
+        if (center - nearest).length_squared() < radius * radius {
+            let push = (center - nearest)
+                .try_normalize()
+                .unwrap_or(if normal.dot(delta) <= 0.0 {
+                    normal
+                } else {
+                    -normal
+                });
+            return Some(SweepHit {
+                t: 0.0,
+                position: center,
+                normal: push,
+                overlapping_at_start: true,
+            });
+        }
+        let len = delta.length();
+        let ray = Ray::new(center, delta).filter(|_| len > 1e-12)?;
+        let mut best = f32::MAX;
+        for sign in [1.0_f32, -1.0] {
+            let lift = normal * (radius * sign);
+            let shifted = Triangle::new(self.a + lift, self.b + lift, self.c + lift);
+            if let Some(h) = shifted.raycast(&ray, len) {
+                best = best.min(h.t);
+            }
+        }
+        for (p, q) in [(self.a, self.b), (self.b, self.c), (self.c, self.a)] {
+            if let Some(h) = Capsule::new(p, q, radius).raycast(&ray, len) {
+                best = best.min(h.t);
+            }
+        }
+        if best == f32::MAX {
+            return None;
+        }
+        let t = best / len;
+        let position = center + delta * t;
+        let contact_normal = (position - self.closest_point(position))
+            .try_normalize()
+            .unwrap_or(if normal.dot(delta) <= 0.0 {
+                normal
+            } else {
+                -normal
+            });
+        Some(SweepHit {
+            t,
+            position,
+            normal: contact_normal,
+            overlapping_at_start: false,
+        })
+    }
+
     /// The point of the triangle nearest to `p`.
     pub fn closest_point(&self, p: Vec3) -> Vec3 {
         let (a, b, c) = (self.a, self.b, self.c);
@@ -646,10 +707,14 @@ impl TriMesh {
         let mut found: Option<TriHit> = None;
         let (t, triangle) = self.bvh.query_ray(ray, max_t, mask, 0.0, &mut |i, best| {
             let hit = self.triangles[*i as usize].raycast(ray, best)?;
-            found = Some(hit);
+            // The tree takes a hit only if it is nearer than the best so far (or the first): keep
+            // `found` in step with that rule, so a tie never replaces the winner's details.
+            if found.is_none() || hit.t < best {
+                found = Some(hit);
+            }
             Some(hit.t)
         })?;
-        // `found` is the hit of the last triangle offered that improved on the best: the winner.
+        // `found` is the details of the hit the tree accepted: the winner.
         let hit = found?;
         Some(MeshHit {
             t,
@@ -657,6 +722,49 @@ impl TriMesh {
             normal: hit.normal,
             triangle: *triangle,
         })
+    }
+
+    /// Move a sphere from `center` by `delta` and find the first triangle it touches, among
+    /// triangles on a layer of `mask`: the sweep, and the triangle's index. A sphere that already
+    /// overlaps a triangle is reported at `t = 0`. A zero `delta` checks for overlap only.
+    pub fn sweep_sphere(
+        &self,
+        center: Vec3,
+        radius: f32,
+        delta: Vec3,
+        mask: Layers,
+    ) -> Option<(SweepHit, u32)> {
+        if !center.is_finite() || !delta.is_finite() || !radius.is_finite() || radius < 0.0 {
+            return None;
+        }
+        let len = delta.length();
+        let mut found: Option<(SweepHit, u32)> = None;
+        if len <= 1e-12 {
+            let region = Aabb::from_center_half(center, Vec3::splat(radius));
+            self.bvh.query_aabb(&region, mask, &mut |i| {
+                if found.is_none()
+                    && let Some(h) =
+                        self.triangles[*i as usize].sweep_sphere(center, radius, Vec3::ZERO)
+                {
+                    found = Some((h, *i));
+                }
+            });
+            return found;
+        }
+        let ray = Ray::new(center, delta)?;
+        self.bvh
+            .query_ray(&ray, len, mask, radius, &mut |i, best| {
+                let hit = self.triangles[*i as usize].sweep_sphere(center, radius, delta)?;
+                let distance = hit.t * len;
+                if distance > best {
+                    return None;
+                }
+                if found.is_none() || distance < best {
+                    found = Some((hit, *i));
+                }
+                Some(distance)
+            })?;
+        found
     }
 
     /// Call `visit` with every triangle (by index) within `radius` of `center`, among triangles on
@@ -1150,6 +1258,119 @@ mod tests {
                 .collect();
             assert_eq!(got, want);
         }
+    }
+
+    /// A sphere swept along `delta` against one triangle, checked against sampling: at the hit the
+    /// sphere touches the triangle, and earlier it did not overlap it.
+    #[test]
+    fn a_sphere_sweep_against_a_triangle_matches_sampled_distance() {
+        let mut rng = Lcg(12);
+        let (mut hits, mut misses) = (0, 0);
+        for _ in 0..3000 {
+            let tri = Triangle::new(rng.vec(3.0), rng.vec(3.0), rng.vec(3.0));
+            if tri.is_degenerate() {
+                continue;
+            }
+            let radius = rng.range(0.1, 1.0);
+            let center = rng.vec(6.0);
+            // Aimed near the triangle, so that hits and misses are both common.
+            let aim = (tri.a + tri.b + tri.c) / 3.0 + rng.vec(1.5);
+            let delta = (aim - center) * rng.range(0.6, 1.6);
+            let distance = |p: Vec3| (tri.closest_point(p) - p).length();
+            match tri.sweep_sphere(center, radius, delta) {
+                Some(h) if !h.overlapping_at_start => {
+                    hits += 1;
+                    assert!((0.0..=1.0).contains(&h.t));
+                    let at = center + delta * h.t;
+                    assert!(
+                        (distance(at) - radius).abs() < 3e-3,
+                        "touching at the hit: {}",
+                        distance(at) - radius
+                    );
+                    assert!((h.normal.length() - 1.0).abs() < 1e-3);
+                    assert!(h.normal.dot(delta) <= 1e-3, "the normal opposes the motion");
+                    for i in 0..64 {
+                        assert!(
+                            distance(center + delta * (h.t * i as f32 / 64.0)) > radius - 3e-3,
+                            "overlapping before the hit"
+                        );
+                    }
+                }
+                Some(h) => {
+                    hits += 1;
+                    assert!(h.t == 0.0 && distance(center) < radius + 1e-3);
+                }
+                None => {
+                    misses += 1;
+                    for i in 0..=300 {
+                        assert!(
+                            distance(center + delta * (i as f32 / 300.0)) > radius - 3e-3,
+                            "a miss, yet overlapping"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(hits > 150 && misses > 150, "hits {hits}, misses {misses}");
+    }
+
+    #[test]
+    fn a_sphere_swept_at_a_mesh_stops_on_the_floor_and_slides_past_an_edge() {
+        let floor = [
+            Vec3::new(-5.0, 0.0, -5.0),
+            Vec3::new(5.0, 0.0, -5.0),
+            Vec3::new(5.0, 0.0, 5.0),
+            Vec3::new(-5.0, 0.0, 5.0),
+        ];
+        let mesh = TriMesh::new(&floor, &[0, 2, 1, 0, 3, 2]).unwrap();
+        let hit = mesh
+            .sweep_sphere(
+                Vec3::new(1.0, 4.0, 1.0),
+                0.5,
+                Vec3::new(0.0, -10.0, 0.0),
+                Layers::ALL,
+            )
+            .unwrap();
+        assert!(
+            (hit.0.t - 0.35).abs() < 1e-4 && hit.0.normal == Vec3::Y,
+            "{hit:?}"
+        );
+        assert!(
+            (hit.0.position.y - 0.5).abs() < 1e-4,
+            "the centre stops one radius above the floor"
+        );
+        // Falling just past the floor's edge (more than a radius outside) misses it.
+        assert!(
+            mesh.sweep_sphere(
+                Vec3::new(6.0, 4.0, 0.0),
+                0.5,
+                Vec3::new(0.0, -10.0, 0.0),
+                Layers::ALL
+            )
+            .is_none()
+        );
+        // Just inside the radius of the edge it touches the rounded edge, and the normal leans outward.
+        let edge = mesh
+            .sweep_sphere(
+                Vec3::new(5.3, 4.0, 0.0),
+                0.5,
+                Vec3::new(0.0, -10.0, 0.0),
+                Layers::ALL,
+            )
+            .unwrap();
+        assert!(edge.0.normal.x > 0.3 && edge.0.normal.y > 0.3, "{edge:?}");
+        let mut mesh = mesh;
+        mesh.set_all_layers(Layers::bit(3));
+        let down = Vec3::new(0.0, -10.0, 0.0);
+        assert!(
+            mesh.sweep_sphere(Vec3::new(1.0, 4.0, 1.0), 0.5, down, Layers::bit(2))
+                .is_none(),
+            "another layer is not seen"
+        );
+        assert!(
+            mesh.sweep_sphere(Vec3::new(1.0, 4.0, 1.0), 0.5, down, Layers::bit(3))
+                .is_some()
+        );
     }
 
     #[test]
