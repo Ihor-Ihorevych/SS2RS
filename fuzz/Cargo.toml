@@ -14,6 +14,7 @@ libfuzzer-sys = "0.4"
 ss2-core = { path = "../crates/ss2-core" }
 ss2-vfs = { path = "../crates/ss2-vfs" }
 ss2-game = { path = "../crates/ss2-game" }
+ss2-net = { path = "../crates/ss2-net" }
 ss2-platform-api = { path = "../crates/ss2-platform-api" }
 
 # Not part of the main workspace: it needs nightly Rust and libFuzzer, and must not slow down
@@ -72,6 +73,13 @@ bench = false
 [[bin]]
 name = "archive_names"
 path = "fuzz_targets/archive_names.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "replay_parse"
+path = "fuzz_targets/replay_parse.rs"
 test = false
 doc = false
 bench = false

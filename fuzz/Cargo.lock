@@ -396,6 +396,7 @@ dependencies = [
  "libfuzzer-sys",
  "ss2-core",
  "ss2-game",
+ "ss2-net",
  "ss2-platform-api",
  "ss2-vfs",
 ]
@@ -406,6 +407,10 @@ version = "0.0.0"
 dependencies = [
  "ss2-core",
 ]
+
+[[package]]
+name = "ss2-net"
+version = "0.0.0"
 
 [[package]]
 name = "ss2-platform-api"
