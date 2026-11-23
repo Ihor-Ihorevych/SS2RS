@@ -2,8 +2,8 @@
 //!
 //! This is the **v0 contract** (roadmap T00-014, `docs/rfcs/0001-vfs-and-asset-api.md`): the
 //! [`Vfs`] trait every consumer codes against, the [`VfsPath`] type that names files, and
-//! [`MemoryVfs`], an in-memory implementation for tests and mocks. The real archive/loose-dir
-//! mount stack (T02-001..005) will implement the same trait.
+//! implementations for ZIP archives ([`ArchiveVfs`]), loose files ([`DirectoryVfs`]), and tests
+//! ([`MemoryVfs`]). Combine them with [`LayeredVfs`].
 //!
 //! ```
 //! use ss2_vfs::{MemoryVfs, Vfs, VfsPath};
@@ -23,6 +23,7 @@
 
 mod archive;
 mod check;
+mod directory;
 mod install;
 mod layered;
 mod memory;
@@ -34,6 +35,7 @@ use ss2_core::{Error, Result};
 
 pub use archive::ArchiveVfs;
 pub use check::{ArchiveInfo, Finding, InstallReport, PatchLevel, Severity, check_install};
+pub use directory::DirectoryVfs;
 pub use install::{archive_load_order, mount_install};
 pub use layered::LayeredVfs;
 pub use memory::MemoryVfs;
