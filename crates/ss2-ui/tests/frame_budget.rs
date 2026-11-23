@@ -1,78 +1,35 @@
-//! The UI frame budget (roadmap T10-023): how many draw calls a screen may cost, and **zero allocations per frame once it
-//! is warm** (`docs/UI_BUDGET.md`).
+//! The UI frame budget (roadmap T10-023; `docs/UI_BUDGET.md`): how many draw calls a screen may cost, and that a **warm frame
+//! does not allocate**.
 //!
-//! A counting allocator replaces the global one for this test binary. It is one test function on purpose: the counter is
-//! process-wide, so another test running on another thread would be counted too.
+//! This test is safe code only (the workspace denies `unsafe_code`; see `docs/CODING_STANDARDS.md`, "Unsafe"), so it cannot
+//! count allocations. It checks the two things that make this code allocate: **an owned `String` in a text run** (fixed text is
+//! `Cow::Borrowed`) and **a draw list that has to grow**. A counting-allocator version was run once to measure the real number (0 allocations
+//! in 200 warm frames of each screen) and is not committed, because `unsafe` needs the approval of the crate owner and a second maintainer
+//! (T10-023b).
+
+use std::borrow::Cow;
 
 use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_ui::{DrawList, Menu, UiInput};
 
-/// The only `unsafe` in the crate's tests (docs/CODING_STANDARDS.md, "Unsafe"): a global allocator that forwards every call to the system
-/// allocator and counts the allocations. It is one small module, each `unsafe` block says why it is sound, and it needs the approval of the
-/// crate owner and a second maintainer like any other `unsafe` (named in the pull request). There is no safe way to count allocations.
-#[allow(unsafe_code)]
-mod counting {
-    use std::alloc::{GlobalAlloc, Layout, System};
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    struct Counting;
-
-    static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
-
-    // SAFETY: every method forwards its arguments unchanged to `System`, which upholds the `GlobalAlloc` contract; the only addition is a relaxed counter.
-    unsafe impl GlobalAlloc for Counting {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-            // SAFETY: `layout` is the caller's, passed on as received.
-            unsafe { System.alloc(layout) }
-        }
-
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            // SAFETY: `ptr` and `layout` come from an earlier call of this allocator, which forwarded it to `System`.
-            unsafe { System.dealloc(ptr, layout) }
-        }
-
-        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-            ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-            // SAFETY: `layout` is the caller's, passed on as received.
-            unsafe { System.alloc_zeroed(layout) }
-        }
-
-        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-            ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-            // SAFETY: `ptr` and `layout` come from an earlier call of this allocator (so from `System`), and `new_size` is the caller's.
-            unsafe { System.realloc(ptr, layout, new_size) }
-        }
-    }
-
-    #[global_allocator]
-    static COUNTING: Counting = Counting;
-
-    /// How many allocations this process has made so far.
-    pub fn allocations() -> u64 {
-        ALLOCATIONS.load(Ordering::Relaxed)
-    }
-}
-
-use counting::allocations;
-
-/// The budget of one frame of one screen: quads and text runs (each text run is a draw call in the renderer).
+/// The budget of one frame of one screen: quads and text runs (each is a draw item in the renderer).
 const MAX_QUADS: usize = 24;
 const MAX_TEXTS: usize = 32;
 
-/// A menu on each of its screens: the main menu, then options (down, activate), then back and about (down, down, activate).
+fn press(menu: &mut Menu, steps: &[NavInput]) {
+    for s in steps {
+        menu.handle(UiInput::Nav(*s));
+    }
+}
+
+/// A menu on each of its screens: the main menu, options (down, activate) and about (down, down, activate).
 fn screens() -> Vec<(&'static str, Menu)> {
-    let nav = |m: &mut Menu, steps: &[NavInput]| {
-        for s in steps {
-            m.handle(UiInput::Nav(*s));
-        }
-    };
     let main = Menu::new(Settings::default());
     let mut options = Menu::new(Settings::default());
-    nav(&mut options, &[NavInput::Down, NavInput::Activate]);
+    press(&mut options, &[NavInput::Down, NavInput::Activate]);
     let mut about = Menu::new(Settings::default());
-    nav(
+    press(
         &mut about,
         &[NavInput::Down, NavInput::Down, NavInput::Activate],
     );
@@ -80,20 +37,7 @@ fn screens() -> Vec<(&'static str, Menu)> {
 }
 
 #[test]
-fn a_warm_frame_allocates_nothing_and_stays_inside_the_draw_call_budget() {
-    // A guard for the measurements below: the counter works, so a zero means something. The allocating entry point does allocate.
-    {
-        let menu = Menu::new(Settings::default());
-        let before = allocations();
-        let list = menu.draw();
-        assert!(
-            allocations() > before,
-            "the counting allocator did not see Menu::draw allocate"
-        );
-        drop(list);
-    }
-
-    let mut report = String::new();
+fn a_warm_frame_stays_inside_the_draw_call_budget_and_needs_nothing_that_allocates() {
     for (name, mut menu) in screens() {
         let mut list = DrawList::default();
         // Warm up: the first frames may grow the lists.
@@ -107,41 +51,52 @@ fn a_warm_frame_allocates_nothing_and_stays_inside_the_draw_call_budget() {
         );
         assert!(
             quads + texts > 0,
-            "{name}: an empty screen would make the allocation count meaningless"
+            "{name}: an empty screen would make the checks below meaningless"
         );
 
-        let before = allocations();
-        for _ in 0..200 {
+        let capacities = (list.quads.capacity(), list.texts.capacity());
+        for frame in 0..200 {
             menu.draw_into(&mut list);
+            assert!(
+                list.texts
+                    .iter()
+                    .all(|t| matches!(t.text, Cow::Borrowed(_))),
+                "{name} frame {frame}: a text run owns its string, which allocates every frame: {:?}",
+                list.texts.iter().find(|t| matches!(t.text, Cow::Owned(_)))
+            );
+            assert_eq!(
+                (list.quads.capacity(), list.texts.capacity()),
+                capacities,
+                "{name} frame {frame}: the draw list had to grow"
+            );
         }
-        let per_200 = allocations() - before;
-        // What the allocating entry point costs per frame, for the record (it is not budgeted).
-        let before = allocations();
-        for _ in 0..200 {
-            drop(menu.draw());
-        }
-        let old_per_frame = (allocations() - before) / 200;
-        report.push_str(&format!(
-            "{name}: {quads} quads, {texts} text runs, {per_200} allocations in 200 warm frames of draw_into ({old_per_frame} per frame through draw())\n"
-        ));
-        assert_eq!(per_200, 0, "{name} allocated in a warm frame:\n{report}");
 
-        // Moving the focus and changing a setting must not make a warm frame allocate either.
-        menu.handle(UiInput::Nav(NavInput::Down));
-        menu.draw_into(&mut list);
-        let before = allocations();
-        for _ in 0..50 {
+        // Changing what is shown must not make a warm frame need more either: step through every item.
+        for _ in 0..8 {
+            menu.handle(UiInput::Nav(NavInput::Down));
             menu.draw_into(&mut list);
+            assert!(
+                list.texts
+                    .iter()
+                    .all(|t| matches!(t.text, Cow::Borrowed(_))),
+                "{name} after moving the focus"
+            );
+            assert_eq!(
+                (list.quads.capacity(), list.texts.capacity()),
+                capacities,
+                "{name} after moving the focus"
+            );
         }
-        assert_eq!(allocations() - before, 0, "{name} after moving the focus");
     }
+}
 
-    // The same drawing through the allocating entry point still gives the same list.
+#[test]
+fn a_reused_list_equals_a_fresh_one_and_keeps_nothing_of_the_previous_frame() {
     for (name, menu) in screens() {
         let mut reused = DrawList::default();
         menu.draw_into(&mut reused);
         assert_eq!(reused, menu.draw(), "{name}");
-        // And a list that held another screen is cleared first.
+        // A list that held another screen is cleared first.
         let mut other = Menu::new(Settings::default()).draw();
         let leftover = other.quads.len();
         menu.draw_into(&mut other);
@@ -151,5 +106,4 @@ fn a_warm_frame_allocates_nothing_and_stays_inside_the_draw_call_budget() {
             "{name}: a reused list must not keep the previous frame (it had {leftover} quads)"
         );
     }
-    println!("{report}");
 }
