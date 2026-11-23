@@ -19,6 +19,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `gro_archive` | `ArchiveVfs::from_file` on any bytes, then list and read | opened or refused; what opens can be walked and read |
 | `install_check` | `check_install` on a folder with one file of any bytes under a base, patch or foreign name | always a report |
 | `archive_names` | `archive_load_order`, `PatchLevel::from_file_name` | the order does not depend on the input order |
+| `session_message` | `ss2_net::session::decode` on any bytes, then a `SessionServer` fed the message from several peers | decoded or refused; what decodes round-trips; the server never holds more than its slots or failure records |
 | `replay_parse` | `Replay::parse` on raw bytes, and on a scripted valid replay damaged in a few places | read or refused; what reads can be played through and written out again to the same records |
 
 The `.wld`, `.tex`, `.mdl` and the other game formats are not fuzzed yet: their readers do not exist (track T02, with the

@@ -24,6 +24,7 @@
 - [Netcode architecture guide](NETCODE.md)
 - [Net statistics](NETSTATS.md)
 - [Replay files](REPLAY.md)
+- [Sessions (joining, keepalive, leaving)](SESSION.md)
 - [Simulation tick loop](SIMLOOP.md)
 - [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)

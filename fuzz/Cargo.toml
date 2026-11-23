@@ -83,3 +83,10 @@ path = "fuzz_targets/replay_parse.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "session_message"
+path = "fuzz_targets/session_message.rs"
+test = false
+doc = false
+bench = false
