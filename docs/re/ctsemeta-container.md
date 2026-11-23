@@ -42,7 +42,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 |---:|---:|---|---|
 | 0 | 8 | magic `CTSEMETA` | |
 | 8 | 4 | `0x1234ABCD` | byte-order marker; the same value in all files |
-| 12 | 4 | format version | **8** in 9,269 files; 4, 5, 6, 7 only in 155 old `.tex` files (not specified here) |
+| 12 | 4 | format version | **8** in 9,269 files; 4, 5, 6, 7 only in 155 old `.tex` files (specified in `ctsemeta-leftovers.md`: a four-word `INFO`, and in version 4 a member number before every member name) |
 | 16 | 4 | `L`, version-string length | |
 | 20 | `L` | version string | `$Version: Serious Sam 2; <maj>.<min>.<rev>:<build>; <date-tag>$` |
 
@@ -52,7 +52,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 
 | Index | Meaning | Confidence |
 |---:|---|---|
-| 0 | unknown (1 in most files, 0 in a few) | open |
+| 0 | unknown: 1 in 7,294 effective files (never in a file with extra records), 0 in 769 (all 119 files with extra records, plus 650 others); a reader ignores it (`ctsemeta-leftovers.md`); absent in versions 4–7 | open |
 | 1 | number of `RFIL` entries | **high** (9,269/9,269) |
 | 2 | number of `IDNT` entries | **high** (9,269/9,269) |
 | 3 | total number of types = `EXTY` count + `INTY` value | medium (holds in every sampled row; exact in only part of a first, incomplete check) |
@@ -63,7 +63,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 `u32 count`, then per entry: `u32 index` · `u32 flags` · `u32 len` · `len` bytes path.
 
 - `index` is always `0..count-1` in order (9,269/9,269).
-- `flags` is `0` (49,376 entries) or `0x00040000` (3,743 entries); meaning unknown.
+- `flags` is `0` (49,376 entries) or `0x00040000` (3,743 entries); meaning unknown. Observed (`ctsemeta-leftovers.md`): only worlds, `.ep`, `.rsc` and `.ctl` files carry the flag, and it sits on references made by the parameter layer (weapon, player, HUD and character databases); a reader can ignore it.
 - The path is an engine-relative resource path with `/` separators, for example `Content/SeriousSam2/Models/Weapons/AutoShotgun/AutoShotgun_FP.mdl`. It names another file that the VFS must resolve (case-insensitively; see T02-002).
 
 ### IDNT — identifiers
@@ -86,7 +86,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 
 - `fileRef` is a valid index into `RFIL` in **all** 58,528 entries checked.
 - `typeId` is listed in `EXTY` (30,971 entries) or in the `DTTY` table (2,756) in all entries checked.
-- `flags` is `1` for 84 % of entries; other observed values are `1000`, `1010`, `1020` (meaning unknown).
+- `flags` is `1` for 84 % of entries (ordinary resources); `1000` to `1070` identify the concrete shader class of an entry of `Bin/Shaders.module`; entries of type `CEntityClass` (file `Bin/Sam2Game.module`) carry a per-class code (94 codes, `ctsemeta-leftovers.md`, `ctsemeta-entity-codes.md`).
 - Reading: "object `objectId` of type `typeId` lives in the referenced file `fileRef`". This is how a file points at other resources (its models, controllers, textures).
 
 ### OBTY — object types
@@ -95,7 +95,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 
 ### EDTY
 
-`u32 count`, then `count × 8 bytes` (two `u32` each). Empty (count 0) in simple files; in all 107 worlds and 72 models/meshes/fonts/animations/skeletons it holds thousands of pairs (a world has 5,183 in one case). Meaning unknown. Frame is **high** confidence (the entry size is exactly 8 bytes in every file; the tag itself is probably "extended/ end of types").
+`u32 count`, then `count × 8 bytes` (two `u32` each). Empty (count 0) in simple files; in all 107 worlds and 72 models/meshes/fonts/animations/skeletons it holds thousands of pairs (a world has 5,183 in one case). **Each pair is `(object id, type id)` of one extra record after `EDOB`, in the same order** (the count equals the `EDOB` count in all 8,063 effective files; for the 60 non-world files with extra records the pairs equal the record headers; `ctsemeta-leftovers.md`): `EDTY` is to the extra records what `OBTY` is to the main objects. The frame is **high** confidence (the entry size is exactly 8 bytes in every file).
 
 ### OBJS, EDOB, footer
 
@@ -104,7 +104,7 @@ The section **order is identical in every one of the 9,269 format-8 files**; sec
 ## Invariants (what a reader must check / may rely on)
 
 1. Magic `CTSEMETA` and marker `0x1234ABCD`, else reject.
-2. Format version 8 is the only one specified; reject (or route to a legacy reader) other values.
+2. Format version 8 is the main one; versions 4–7 (155 old `.tex` files) differ only as described in `ctsemeta-leftovers.md`; reject other values.
 3. Sections appear in the order above; every count-prefixed section stays inside the file.
 4. `RFIL` indices and `IDNT` ids are sequential from 0.
 5. The number of `DTTY` blocks equals `INTY`.
@@ -128,6 +128,6 @@ Tail of the same file: `45 44 4f 42 00 00 00 00 4d 45 54 41 45 4e 44 20` = `EDOB
 ## Open questions
 
 - Encoding of **object data** inside `OBJS`: **specified in `ctsemeta-objects.md`** (all 9,269 file entries decode to the byte, the worlds included).
-- Meaning of `INFO[0]`, `RFIL.flags`, `EXOB.flags`, and the `EDTY` pairs; (the data after `EDOB` is solved for all files).
+- `EXOB.flags` and the `EDTY` pairs are explained, and the old versions 4–7 are specified, in `ctsemeta-leftovers.md` (T01-051). Still open: what `INFO[0]` and the `0x40000` bit of `RFIL.flags` mean to the engine (a reader needs neither); the data after `EDOB` is solved for all files.
 - Formats 4–7 (old `.tex` only) → T01-051.
 - Whether `IDNT` ids are referenced from object data and how.
