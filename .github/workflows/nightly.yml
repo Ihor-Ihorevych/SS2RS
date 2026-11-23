@@ -41,6 +41,7 @@ jobs:
           - gro_archive
           - install_check
           - archive_names
+          - discovery_message
           - replay_parse
           - save_parse
           - session_message

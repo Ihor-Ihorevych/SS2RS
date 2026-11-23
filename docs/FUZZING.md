@@ -20,6 +20,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `install_check` | `check_install` on a folder with one file of any bytes under a base, patch or foreign name | always a report |
 | `archive_names` | `archive_load_order`, `PatchLevel::from_file_name` | the order does not depend on the input order |
 | `session_message` | `ss2_net::session::decode` on any bytes, then a `SessionServer` fed the message from several peers | decoded or refused; what decodes round-trips; the server never holds more than its slots or failure records |
+| `discovery_message` | `ss2_net::discovery::decode` on raw bytes and on a scripted valid reply damaged in a few places, an `Announcer` and a `Scanner` fed the datagram, and `parse_direct` and `decode_invite` on the same bytes as text | decoded or refused; **no reply is ever longer than its query**; the scanner's list stays bounded; a code that reads encodes back to the same address |
 | `replay_parse` | `Replay::parse` on raw bytes, and on a scripted valid replay damaged in a few places | read or refused; what reads can be played through and written out again to the same records |
 | `save_parse` | `ss2_sim::save::parse` on raw bytes, and on a world built by a script, saved, damaged in a few places and **re-sealed with a correct checksum** | read or refused; what reads restores into an empty world, saves again, and reads again with the same entities and header |
 

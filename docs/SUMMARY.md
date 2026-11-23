@@ -24,6 +24,7 @@
 - [Netcode architecture guide](NETCODE.md)
 - [Net statistics](NETSTATS.md)
 - [Replay files](REPLAY.md)
+- [Session discovery](DISCOVERY.md)
 - [net-tool: replays and netsim CLI](NET_TOOL.md)
 - [Sessions (joining, keepalive, leaving)](SESSION.md)
 - [The dedicated server](DEDICATED_SERVER.md)
