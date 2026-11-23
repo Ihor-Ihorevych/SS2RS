@@ -59,6 +59,7 @@
 - [Joining a game in progress](JOIN.md)
 - [AI performance budget](AI_BUDGET.md)
 - [Level progress and the end-of-level summary](LEVEL_PROGRESS.md)
+- [Difficulty levels and modifiers](DIFFICULTY.md)
 - [Starting the GPU, and getting it back](GPU_INIT.md)
 - [Sound decoders](AUDIO_DECODERS.md)
 - [Death and end-of-level screens](SESSION_SCREENS.md)
