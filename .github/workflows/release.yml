@@ -51,7 +51,7 @@ jobs:
       - name: Linux system libraries (gamepad support needs libudev)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
 
       - name: Work out the version and target
         id: meta
@@ -133,7 +133,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
       - run: scripts/repro-check.sh ss2-server
 
   # Only for tag pushes. Creates a DRAFT release; publishing it is a manual decision.
