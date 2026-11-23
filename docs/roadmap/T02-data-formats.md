@@ -15,7 +15,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-005b** · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
 
 ## CTSEMETA container — Wave 1 (needs T01-004/005)
-- [ ] **T02-006** · `ss2-meta`: container reader (header, `$Version`, chunk iterator, string/ref tables) · `M` · `P0` · Deps: T01-004
+- [~] **T02-006** [INPRG @lxstyo · branch `T02-006-ss2-meta-container-reader` · 2026-11-23] · `ss2-meta`: container reader (header, `$Version`, chunk iterator, string/ref tables) · `M` · `P0` · Deps: T01-004
   Done: reads every file in the install that starts with `CTSEMETA` without error; reports unknown chunk tags.
 - [ ] **T02-007** · `ss2-meta`: type system / reflection decoder into a generic `Value` tree (structs, arrays, enums, refs) · `L` · `P0` · Deps: T01-005, T02-006
 - [ ] **T02-008** · `ss2-meta`: writer + round-trip tests (needed for fixtures, cooked cache, tools) · `M` · `P1`
