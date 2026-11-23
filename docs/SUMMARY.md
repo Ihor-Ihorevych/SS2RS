@@ -48,6 +48,7 @@
 - [The loading screen model](LOADING.md)
 - [Hot reload: change detection and settings text](HOT_RELOAD.md)
 - [Spectating when dead](SPECTATOR.md)
+- [Roadmap progress report](PROGRESS.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
