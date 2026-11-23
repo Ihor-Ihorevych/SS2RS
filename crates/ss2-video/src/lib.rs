@@ -307,12 +307,15 @@ mod tests {
     fn other_references_are_non_fatal_outcomes() {
         let v = vfs();
         assert_eq!(resolve_movie(&v, ""), MovieOutcome::NotSet);
+        assert!(!MovieOutcome::NotSet.is_playable());
         assert_eq!(resolve_movie(&v, "   "), MovieOutcome::NotSet);
         let (m, log) = logged(|| resolve_movie(&v, "content/movies/ntsc/gone.ogv"));
         assert!(matches!(m, MovieOutcome::Missing(_)), "{m:?}");
+        assert!(!m.is_playable());
         assert!(log.contains("not found"), "{log}");
         let (m, log) = logged(|| resolve_movie(&v, "content/movies/ntsc/readme.txt"));
         assert!(matches!(m, MovieOutcome::Unrecognized(_)), "{m:?}");
+        assert!(!m.is_playable());
         assert!(log.contains("unrecognized"), "{log}");
         let (m, log) = logged(|| resolve_movie(&v, "../escape.ogv"));
         assert_eq!(m, MovieOutcome::BadPath("../escape.ogv".into()));
