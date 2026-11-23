@@ -45,6 +45,7 @@ pub mod quality;
 mod renderer;
 mod resources;
 mod scene;
+pub mod transparency;
 
 pub use camera::{Camera, Projection};
 pub use culling::{Aabb, Frustum, Plane, Sphere, Visibility, jitter_for_frame};
