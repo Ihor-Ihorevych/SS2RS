@@ -47,7 +47,7 @@ jobs:
           - session_message
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: nightly
           # The fuzz crate has its own lock file and target directory.
@@ -62,7 +62,7 @@ jobs:
             -max_total_time=${{ github.event.inputs.seconds || '300' }} -max_len=4096
       - name: Upload the crashing input
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crash-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}/
@@ -76,7 +76,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: nightly
           components: miri, rust-src
