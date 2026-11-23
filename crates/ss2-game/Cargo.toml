@@ -13,3 +13,4 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+ss2-render-api = { path = "../ss2-render-api" }
