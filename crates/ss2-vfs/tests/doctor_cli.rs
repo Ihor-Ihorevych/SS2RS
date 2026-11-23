@@ -115,3 +115,186 @@ fn the_real_install_passes_and_reports_a_patch_level() {
     assert!(stdout.contains("Install looks complete"), "{stdout}");
     assert!(stdout.contains("Patch level: 2."), "{stdout}");
 }
+
+const MOD_FILE: &str = "MODULES = Sam2Game <TOOLS>Sam2GameGui ;";
+
+fn write_gro_with(dir: &Path, name: &str, files: &[(&str, &str)]) {
+    let mut b = ZipBuilder::new();
+    for (n, d) in files {
+        b = b.add(*n, d.as_bytes().to_vec());
+    }
+    std::fs::write(dir.join(name), b.finish().unwrap()).unwrap();
+}
+
+/// An install with one mod `TestMod` whose `.nfo` points at `model`.
+fn install_with_mod(dir: &Path, model: &str) {
+    install(dir);
+    let mod_dir = dir.join("Content/TestMod");
+    std::fs::create_dir_all(&mod_dir).unwrap();
+    std::fs::write(dir.join("Content/TestMod.mod"), MOD_FILE).unwrap();
+    std::fs::write(
+        dir.join("Content/TestMod.nfo"),
+        "NAME = \"Test Mod\" ;
+AUTHOR = \"Me\" ;
+",
+    )
+    .unwrap();
+    let nfo = format!(
+        "NAME = \"Pal\"
+MODEL = \"{model}\"
+"
+    );
+    write_gro_with(
+        &mod_dir,
+        "TestMod.gro",
+        &[
+            ("Content/TestMod/pal.nfo", nfo.as_str()),
+            ("Content/TestMod/own.mdl", "model"),
+        ],
+    );
+}
+
+#[test]
+fn a_clean_mod_is_checked_after_the_install_and_exits_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_mod(dir.path(), "Content/TestMod/own.mdl");
+    let out = run(&[dir.path().to_str().unwrap(), "--mod", "TestMod"], None);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}{}", text(&out.stderr));
+    assert!(stdout.contains("Install looks complete"), "{stdout}");
+    assert!(stdout.contains("SS2RS mod check"), "{stdout}");
+    assert!(stdout.contains("Mod testmod (\"Test Mod\")"), "{stdout}");
+    assert!(stdout.contains("no findings"), "{stdout}");
+}
+
+#[test]
+fn a_mod_with_a_missing_asset_exits_one_and_names_the_code() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_mod(dir.path(), "Content/TestMod/gone.mdl");
+    let out = run(&["--mod", "testmod", dir.path().to_str().unwrap()], None);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(stdout.contains("ERROR   MOD030"), "{stdout}");
+    assert!(stdout.contains("gone.mdl"), "{stdout}");
+    assert!(stdout.contains("1 error"), "{stdout}");
+}
+
+#[test]
+fn an_unknown_mod_is_an_error_finding_not_a_crash() {
+    let dir = tempfile::tempdir().unwrap();
+    install(dir.path());
+    let out = run(&["--mod", "Nope", dir.path().to_str().unwrap()], None);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        text(&out.stdout).contains("MOD091"),
+        "{}",
+        text(&out.stdout)
+    );
+}
+
+#[test]
+fn all_mods_checks_every_mod_folder_and_says_so_when_there_is_none() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_mod(dir.path(), "Content/TestMod/own.mdl");
+    let out = run(
+        &[
+            "--all-mods",
+            "--mod",
+            "TESTMOD",
+            dir.path().to_str().unwrap(),
+        ],
+        None,
+    );
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert_eq!(
+        stdout
+            .matches(
+                "
+Mod testmod"
+            )
+            .count(),
+        1,
+        "listed once: {stdout}"
+    );
+    let none = tempfile::tempdir().unwrap();
+    install(none.path());
+    let out = run(&["--all-mods", none.path().to_str().unwrap()], None);
+    assert_eq!(out.status.code(), Some(0));
+    assert!(
+        text(&out.stdout).contains("No mod folders"),
+        "{}",
+        text(&out.stdout)
+    );
+}
+
+#[test]
+fn a_loose_mod_folder_can_be_checked_against_the_install() {
+    let dir = tempfile::tempdir().unwrap();
+    install(dir.path());
+    let work = tempfile::tempdir().unwrap();
+    let root = work.path().join("MyMod");
+    std::fs::create_dir_all(root.join("Content/MyMod")).unwrap();
+    std::fs::write(root.join("Content/MyMod.mod"), MOD_FILE).unwrap();
+    std::fs::write(
+        root.join("Content/MyMod.nfo"),
+        "NAME = \"Mine\"
+AUTHOR = \"Me\"
+",
+    )
+    .unwrap();
+    let out = run(
+        &[
+            dir.path().to_str().unwrap(),
+            "--mod-dir",
+            root.to_str().unwrap(),
+        ],
+        None,
+    );
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert!(stdout.contains("Mod mymod (\"Mine\")"), "{stdout}");
+}
+
+#[test]
+fn mod_options_need_a_value_and_help_lists_them() {
+    let out = run(&["--mod"], None);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        text(&out.stderr).contains("--mod needs a value"),
+        "{}",
+        text(&out.stderr)
+    );
+    let out = run(&["--mod-dir", ""], None);
+    assert_eq!(out.status.code(), Some(2));
+    let help = text(&run(&["--help"], None).stdout);
+    for word in [
+        "--mod NAME",
+        "--mod-dir DIR",
+        "--all-mods",
+        "MOD_VALIDATION",
+    ] {
+        assert!(help.contains(word), "{word}: {help}");
+    }
+}
+
+#[test]
+fn a_broken_install_makes_the_mod_check_one_finding() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = run(&[dir.path().to_str().unwrap(), "--mod", "x"], None);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout.contains("no .gro archives"), "{stdout}");
+    assert!(stdout.contains("MOD090"), "{stdout}");
+}
+
+/// Needs the player's own install (`SS2_DATA_DIR`); skipped without it.
+#[test]
+fn the_real_mods_pass_through_the_command() {
+    let dir = ss2_testkit::require_game_data!();
+    let out = run(&[dir.to_str().unwrap(), "--all-mods"], None);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert!(stdout.contains("SS2RS mod check"), "{stdout}");
+    assert!(stdout.is_ascii());
+}
