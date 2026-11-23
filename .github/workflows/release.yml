@@ -110,7 +110,7 @@ jobs:
           ${py} scripts/make_archive.py "dist/${name}" "dist/${name}.${ext}"
           (cd dist && sha256sum "${name}.${ext}" | tee -a "${GITHUB_STEP_SUMMARY}")
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.name }}
           path: |
