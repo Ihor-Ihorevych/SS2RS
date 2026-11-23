@@ -410,7 +410,9 @@ impl MetaBuilder {
         self
     }
 
-    /// Add an `EDTY` pair (meaning unknown).
+    /// Add an `EDTY` pair: the `(object id, type id)` of one **extra record** after `EDOB`
+    /// (`docs/re/ctsemeta-leftovers.md`). The builder does not check that the bytes given to
+    /// [`MetaBuilder::after_edob`] hold a matching record; keep the two in step by hand.
     pub fn edty_pair(&mut self, a: u32, b: u32) -> &mut Self {
         self.edty.push((a, b));
         self
@@ -641,7 +643,6 @@ impl MetaBuilder {
         ));
 
         meta.external_object(SampleIds::MODEL_OBJECT, model, 1, SampleIds::EXTERNAL_MODEL);
-        meta.edty_pair(0, 1);
 
         // Object 0: a CTestItem (INDEX 7, FLOAT 30.0, IDENT -> "TestItem", mode 2, FLOAT[3]).
         meta.object(
@@ -1055,7 +1056,7 @@ mod tests {
             "the ADIM block is interleaved in the table"
         );
         assert_eq!(w.external_objects, [[100, 0, 1, 20]]);
-        assert_eq!(w.edty, [(0, 1)]);
+        assert!(w.edty.is_empty(), "no extra records, so no EDTY pairs");
         assert_eq!(w.after_edob, (0, Vec::new()));
         assert_eq!(w.obty, [(0, 6), (1, 9)]);
     }
