@@ -27,6 +27,7 @@
 - [Sessions (joining, keepalive, leaving)](SESSION.md)
 - [The dedicated server](DEDICATED_SERVER.md)
 - [Gamepads](GAMEPADS.md)
+- [Developer console and overlays](DEV_CONSOLE_UI.md)
 - [Simulation tick loop](SIMLOOP.md)
 - [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)

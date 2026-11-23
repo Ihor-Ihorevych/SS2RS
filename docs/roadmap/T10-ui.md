@@ -21,7 +21,8 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 
 ## HUD & in-game UI
 - [ ] **T10-003** · HUD elements: health, armor, ammo, weapon list, crosshair (per weapon), damage indicators, pickup messages, score/kill feed, boss bar, objectives · `L` · `P1`
-- [~] **T10-007** [INPRG @Ihor-Ihorevych/agent · branch `T10-007-console-ui` · 2026-11-23] · Developer console UI (T03-015 backend), FPS/net/perf overlays · `M` · `P1` · 🟢
+- [x] **T10-007** · Developer console UI (T03-015 backend), FPS/net/perf overlays: `ss2_ui::devconsole` (`docs/DEV_CONSOLE_UI.md`): the console view model with editing, history, completion, scrollback and drawing, frame statistics and a corner overlay; **the app does not call it yet and it has not been seen on screen** (T10-007b) · `M` · `P1` · 🟢
+- [ ] **T10-007b** · Wire the developer console and overlays into the app: map key and text events to `ConsoleKey` and `handle_text`, the console toggle key, draw order, feed `FrameStats`, cvars `r_show_fps` and `net_graph`, a golden screenshot of the console, the network and GPU timing overlays (T08-018b, T04-019) · `S` · `P1` · Deps: T10-007, T03-033
 - [ ] **T10-008** · Netricsa UI (T09-011 data) · `M` · `P2`
 - [ ] **T10-013** · Text effects (`.tfx`): in-game conversation/subtitle styles, typewriter effects · `M` · `P2`
 - [ ] **T10-014** · Co-op overlays: scoreboard, chat, player names/health over heads, ping markers, voice indicators · `M` · `P1`
