@@ -51,6 +51,9 @@ fn soup(max: usize) -> impl Strategy<Value = Vec<[Vec3; 3]>> {
     prop::collection::vec(triangle(), 1..max)
 }
 
+/// What a ray cast found, as bits: the distance and the point.
+type HitBits = Option<(u32, [u32; 3])>;
+
 fn mesh_of(triangles: &[[Vec3; 3]]) -> TriMesh {
     let vertices: Vec<Vec3> = triangles.iter().flatten().copied().collect();
     let indices: Vec<u32> = (0..vertices.len() as u32).collect();
@@ -144,12 +147,12 @@ proptest! {
             return Ok(());
         }
         let tris: Vec<Triangle> = triangles.iter().map(|t| Triangle::new(t[0], t[1], t[2])).collect();
-        if let Some((hit, _)) = mesh.sweep_sphere(start, radius, delta, Layers::ALL) {
-            if !hit.overlapping_at_start {
-                let nearest = tris.iter().map(|t| (hit.position - t.closest_point(hit.position)).length()).fold(f32::MAX, f32::min);
-                prop_assert!(nearest >= radius - 2e-3, "stopped {nearest} from a triangle with radius {radius}");
-                prop_assert!((hit.normal.length() - 1.0).abs() < 1e-3, "the normal is a unit vector");
-            }
+        if let Some((hit, _)) = mesh.sweep_sphere(start, radius, delta, Layers::ALL)
+            && !hit.overlapping_at_start
+        {
+            let nearest = tris.iter().map(|t| (hit.position - t.closest_point(hit.position)).length()).fold(f32::MAX, f32::min);
+            prop_assert!(nearest >= radius - 2e-3, "stopped {nearest} from a triangle with radius {radius}");
+            prop_assert!((hit.normal.length() - 1.0).abs() < 1e-3, "the normal is a unit vector");
         }
     }
 
@@ -208,7 +211,7 @@ proptest! {
     fn queries_give_the_same_bits_from_several_threads(triangles in soup(30), rays in prop::collection::vec((point(), point()), 1..40)) {
         let mesh = mesh_of(&triangles);
         let rays: Vec<Ray> = rays.iter().filter_map(|(o, t)| ray_from(*o, *t)).collect();
-        let ask = |mesh: &TriMesh| -> Vec<Option<(u32, [u32; 3])>> {
+        let ask = |mesh: &TriMesh| -> Vec<HitBits> {
             rays.iter()
                 .map(|r| {
                     mesh.raycast(r, 1000.0, Layers::ALL)
@@ -217,7 +220,7 @@ proptest! {
                 .collect()
         };
         let single = ask(&mesh);
-        let threaded: Vec<Vec<Option<(u32, [u32; 3])>>> = std::thread::scope(|s| {
+        let threaded: Vec<Vec<HitBits>> = std::thread::scope(|s| {
             let handles: Vec<_> = (0..4).map(|_| s.spawn(|| ask(&mesh))).collect();
             handles.into_iter().map(|h| h.join().expect("a query thread did not panic")).collect()
         });
