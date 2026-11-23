@@ -50,6 +50,7 @@
 - [Spectating when dead](SPECTATOR.md)
 - [Roadmap progress report](PROGRESS.md)
 - [Replicated audio events](AUDIO_REPLICATION.md)
+- [The scenario harness](SCENARIOS.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)

@@ -4,6 +4,7 @@ pub mod bus;
 pub mod entity;
 pub mod reflect;
 pub mod save;
+pub mod scenario;
 pub mod schedule;
 pub mod tick;
 pub mod world;
