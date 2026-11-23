@@ -1315,28 +1315,37 @@ impl PingMarkers {
                 }
                 detail.push_str(&format!("{} m", d.round() as u32));
             }
-            // Text goes on the side of the marker that faces the middle of the screen, so that it stays inside.
+            // Text goes on the side of the marker that faces the middle of the screen, so that it stays inside: the label is the line
+            // next to the marker on both sides. Empty lines take no room.
+            let mut lines: Vec<(String, f32, f32)> = Vec::new();
+            for (text, size, step) in [(ping.label.clone(), 22.0, 28.0), (detail, 18.0, 24.0)] {
+                if !text.is_empty() {
+                    lines.push((text, size, step));
+                }
+            }
             let below = c.y < CANVAS_H / 2.0;
-            let top = if below {
+            let mut y = if below {
                 c.y + half + 4.0
             } else {
-                c.y - half - 4.0 - 52.0
+                c.y - half - 4.0
             };
-            let (first, second) = if below { (0.0, 28.0) } else { (24.0, 0.0) };
-            for (text, size, dy) in [(ping.label.clone(), 22.0, first), (detail, 18.0, second)] {
-                if text.is_empty() {
-                    continue;
-                }
+            for (text, size, step) in lines {
                 let w = estimate_text_width(text.chars().count(), size);
                 let x = pin(c.x, w / 2.0 + 8.0, CANVAS_W - w / 2.0 - 8.0);
+                if !below {
+                    y -= step;
+                }
                 push_text(
                     list,
-                    Vec2 { x, y: top + dy },
+                    Vec2 { x, y },
                     text,
                     size,
                     faded(theme::TEXT, l.alpha),
                     TextAlign::Center,
                 );
+                if below {
+                    y += step;
+                }
             }
         }
     }
@@ -1349,6 +1358,8 @@ impl PingMarkers {
 pub const MAX_SPEAKERS: usize = 6;
 /// Ticks a speaker stays listed after the voice stops, so that a pause between words does not make the row blink.
 pub const VOICE_HOLD_TICKS: u32 = 20;
+/// The longest name in the voice list (its rows are narrow), in characters.
+pub const MAX_VOICE_NAME_CHARS: usize = 14;
 /// A level below this is silence.
 pub const VOICE_THRESHOLD: f32 = 0.02;
 
@@ -1427,7 +1438,7 @@ impl VoiceIndicators {
         for (id, level, s) in heard {
             next.push(Speaker {
                 id,
-                name: clip_text(&s.name, MAX_NAME_CHARS),
+                name: clip_text(&s.name, MAX_VOICE_NAME_CHARS),
                 level,
                 local: s.local,
                 hold: VOICE_HOLD_TICKS,
@@ -1469,14 +1480,7 @@ impl VoiceIndicators {
                 Color([0.02, 0.02, 0.05, 0.75 * alpha]),
             );
             if s.local {
-                push_quad(
-                    list,
-                    x,
-                    y,
-                    4.0,
-                    VOICE_ROW_H,
-                    Color([0.85, 0.45, 0.10, alpha]),
-                );
+                push_quad(list, x, y, 4.0, VOICE_ROW_H, faded(LOCAL_ROW, alpha));
             }
             push_quad(
                 list,

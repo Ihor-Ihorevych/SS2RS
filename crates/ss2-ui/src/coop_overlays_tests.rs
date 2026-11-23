@@ -1695,7 +1695,7 @@ fn levels_are_clamped_names_are_cut_and_the_local_player_is_marked() {
     loud.local = true;
     v.update(&[loud]);
     assert_eq!(v.speakers()[0].level, 1.0);
-    assert_eq!(v.speakers()[0].name.chars().count(), MAX_NAME_CHARS);
+    assert_eq!(v.speakers()[0].name.chars().count(), MAX_VOICE_NAME_CHARS);
     assert!(v.speakers()[0].local);
     assert_eq!(v.speakers()[0].hold, VOICE_HOLD_TICKS);
 }
@@ -2227,6 +2227,28 @@ fn the_documented_defaults_and_limits_are_what_the_documentation_says() {
         ),
         (20, 16, 16, 24, 30)
     );
-    assert_eq!((MAX_SPEAKERS, VOICE_HOLD_TICKS), (6, 20));
+    assert_eq!(
+        (MAX_SPEAKERS, VOICE_HOLD_TICKS, MAX_VOICE_NAME_CHARS),
+        (6, 20, 14)
+    );
     assert!(close(VOICE_THRESHOLD, 0.02));
+}
+
+#[test]
+fn an_empty_label_leaves_no_gap_between_the_marker_and_its_details() {
+    let mut p = PingMarkers::new();
+    let id = p.add(1, "Mia", PingKind::Look, "", 100).unwrap();
+    let detail_y = |y: f32| {
+        let mut list = DrawList::default();
+        p.draw_into(&[proj(id, 960.0, y, 10.0, true)], &mut list);
+        list.texts
+            .iter()
+            .find(|t| t.text == "Mia, 10 m")
+            .unwrap()
+            .pos
+            .y
+    };
+    // Text below the marker starts 4 under it; text above ends 4 over it, the details being 24 tall.
+    assert!(close(detail_y(200.0), 200.0 + 16.0 + 4.0));
+    assert!(close(detail_y(900.0), 900.0 - 16.0 - 4.0 - 24.0));
 }
