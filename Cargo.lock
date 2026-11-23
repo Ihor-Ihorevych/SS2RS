@@ -2512,6 +2512,7 @@ name = "ss2-game"
 version = "0.0.0"
 dependencies = [
  "ss2-core",
+ "ss2-render-api",
 ]
 
 [[package]]

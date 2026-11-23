@@ -15,7 +15,7 @@ the server can reconcile (T08-009).
 ## Movement (M3/M4)
 - [ ] **T07-005** · Character controller matching the original: accel/friction, air control, jump, gravity, step-up, slope sliding, crouch, swim/fly volumes, ladders, moving platforms · `XL` → split by mode · `P0` · Deps: T01-024
 - [ ] **T07-019** · Movement validation harness: replay recorded inputs/oracle CSV (T01-039) through controller, report positional error per tick · `M` · `P0` · Deps: T01-039
-- [~] **T07-020** [INPRG @Ihor-Ihorevych/agent · branch `T07-020-freefly-camera` · 2026-11-23] · Free-fly/noclip debug camera (needed before the controller is ready) · `S` · `P0` · 🟢
+- [x] **T07-020** · Free-fly/noclip debug camera (needed before the controller is ready): `ss2_game::freefly` (`docs/FREEFLY.md`); the app's input wiring is part of T03-033/T10 · `S` · `P0` · 🟢
 - [ ] **T07-018** · Water/liquids: swimming, buoyancy, damage/slime volumes, splash events · `M` · `P1`
 
 ## Physics objects & world interaction
