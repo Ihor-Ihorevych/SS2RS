@@ -211,3 +211,90 @@ fn netsim_run_rejects_what_makes_no_sense_with_exit_code_2() {
     let o = tool(&["netsim", "run", "--packets", "0"]);
     assert_eq!(o.status.code(), Some(2));
 }
+
+#[test]
+fn soak_passes_on_a_good_link_and_prints_the_report() {
+    let o = tool(&[
+        "netsim",
+        "soak",
+        "--preset",
+        "lan",
+        "--bots",
+        "4",
+        "--minutes",
+        "2",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
+    let text = stdout(&o);
+    assert!(
+        text.contains("bots in the session at the end: 4/4") && text.contains("result: passed"),
+        "{text}"
+    );
+    // Repeatable.
+    let again = tool(&[
+        "netsim",
+        "soak",
+        "--preset",
+        "lan",
+        "--bots",
+        "4",
+        "--minutes",
+        "2",
+    ]);
+    assert_eq!(stdout(&o), stdout(&again));
+}
+
+#[test]
+fn soak_exits_1_and_lists_the_problems_when_an_invariant_fails() {
+    // 300 ms each way needs a lead of about 20 ticks; the default of 6 leaves the server without input.
+    let o = tool(&[
+        "netsim",
+        "soak",
+        "--preset",
+        "perfect",
+        "--latency-ms",
+        "300",
+        "--bots",
+        "2",
+        "--minutes",
+        "1",
+    ]);
+    assert_eq!(o.status.code(), Some(1), "{}", stdout(&o));
+    let text = stdout(&o);
+    assert!(
+        text.contains("problem: ")
+            && text.contains("had no input")
+            && text.contains("result: FAILED"),
+        "{text}"
+    );
+    let fixed = tool(&[
+        "netsim",
+        "soak",
+        "--preset",
+        "perfect",
+        "--latency-ms",
+        "300",
+        "--lead-ticks",
+        "24",
+        "--bots",
+        "2",
+        "--minutes",
+        "1",
+    ]);
+    assert_eq!(fixed.status.code(), Some(0), "{}", stdout(&fixed));
+}
+
+#[test]
+fn soak_refuses_nonsense_with_exit_code_2() {
+    for args in [
+        ["--bots", "0"],
+        ["--minutes", "0"],
+        ["--lead-ticks", "0"],
+        ["--preset", "dialup"],
+    ] {
+        let mut full = vec!["netsim", "soak"];
+        full.extend(args);
+        let o = tool(&full);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {}", stderr(&o));
+    }
+}

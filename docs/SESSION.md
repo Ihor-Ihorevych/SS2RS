@@ -31,8 +31,10 @@ game"), built on `Compat::explanation` for builds that cannot talk.
 
 Both sides send **`Keepalive`** when they have sent nothing for the keepalive interval (default 2 s) and drop a peer that has been silent
 longer than the idle timeout (default 10 s): a server that goes quiet is `TimedOut` on the client, a client that goes quiet is `Left { TimedOut }` on the
-server. Any message from the peer counts as life. **`Disconnect`** says goodbye: `Quit`, `Kicked(reason)` (the reason is cut to 64 bytes at a
+server. Any session message from the peer counts as life (other traffic: see below). **`Disconnect`** says goodbye: `Quit`, `Kicked(reason)` (the reason is cut to 64 bytes at a
 character boundary), `Banned`, `ServerShutdown`.
+
+**Any datagram is proof of life.** The session layer only sees session messages, so the integration must call `SessionServer::heard_from(peer, now)` for every datagram that arrives from a connected peer (input packets, acknowledgements) and `SessionClient::heard_from_server(now)` for every datagram from the server; without them a player whose game traffic is flowing is dropped when five keepalives in a row are lost (found by the soak test, `docs/SOAK.md`: at 30 % loss each way every bot was dropped within half an hour). **Nothing calls them yet** (T08-004).
 
 The host can `kick(slot, reason)` (not a ban: the player may return), `ban(peer)` (disconnects it if connected and refuses it until `unban`),
 and `shutdown()`. The server's `take_events()` reports `Joined { peer, slot, name }` and `Left { peer, slot, reason }`; the client's reports
