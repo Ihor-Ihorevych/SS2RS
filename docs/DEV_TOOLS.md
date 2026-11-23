@@ -35,7 +35,7 @@ track's work · **Optional** = nice to have.
 | Track | Tool | Why | Required for |
 |---|---|---|---|
 | **T01 RE/specs** | **Ghidra** (latest stable release from the official NSA GitHub releases) + the JDK that release requires (its README states the version; JDK 17+ is the floor) | analyse `Engine.dll`, `Core.dll`, `Sam2Game.dll`, `GfxOGL.dll` | Role |
-| T01 | **ImHex** (or any hex editor with pattern language) | inspect/annotate formats next to `meta-dump` | Role |
+| T01 | **ImHex** (or any hex editor with pattern language) | inspect/annotate formats next to `meta-dump` (`cargo run -p meta-dump -- FILE`, see [META_DUMP.md](META_DUMP.md)) | Role |
 | T01 | Debugger of choice (x64dbg/WinDbg) | runtime checks, instrumentation harness (T11-008) | Optional |
 | **T02 data** | **`cargo-fuzz`** (needs nightly; works on Windows with the ASan runtime on the `PATH`, see `docs/FUZZING.md`) | parser fuzzing (T12-007, T02-030) | Role |
 | T02 | `cargo-mutants` | test-quality checks on parsers | Optional |
