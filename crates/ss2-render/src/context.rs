@@ -337,8 +337,8 @@ impl Renderer {
 
     /// Render a capture with the current framebuffer size and return tightly packed RGBA8 pixels.
     /// Pass `None` to suppress quads and text, for example when taking a photo without the HUD.
-    /// A windowed renderer draws into a separate texture with the window's color format.
-    /// This waits for GPU readback. The target must have a nonzero size and an RGBA8 or BGRA8 format.
+    /// A windowed renderer draws into a separate texture. Non-8-bit targets use an RGBA8 capture
+    /// pass on the same device. This waits for GPU readback and requires a nonzero size.
     pub fn capture_frame(
         &mut self,
         overlay: Option<&DrawList>,
@@ -356,21 +356,42 @@ impl Renderer {
         &mut self,
         overlay: Option<&DrawList>,
         clear: Color,
-        (w, h): (u32, u32),
+        size: (u32, u32),
     ) -> Result<ImageRgba8, RenderError> {
         let format = match &self.target {
             Target::Window { config, .. } => config.format,
             Target::Offscreen { texture } => texture.format(),
         };
-        let swap_red_blue = match format {
-            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => false,
-            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => true,
+        match format {
+            wgpu::TextureFormat::Rgba8Unorm
+            | wgpu::TextureFormat::Rgba8UnormSrgb
+            | wgpu::TextureFormat::Bgra8Unorm
+            | wgpu::TextureFormat::Bgra8UnormSrgb => self.read_frame(overlay, clear, size, format),
             _ => {
-                return Err(RenderError::Device(format!(
-                    "capture does not support {format:?}"
-                )));
+                let format = wgpu::TextureFormat::Rgba8Unorm;
+                let texture = capture_texture(&self.device, format, size)?;
+                let gpu = Gpu {
+                    device: self.device.clone(),
+                    queue: self.queue.clone(),
+                    format,
+                };
+                Self::build(gpu, Target::Offscreen { texture }, size)
+                    .read_frame(overlay, clear, size, format)
             }
-        };
+        }
+    }
+
+    fn read_frame(
+        &mut self,
+        overlay: Option<&DrawList>,
+        clear: Color,
+        (w, h): (u32, u32),
+        format: wgpu::TextureFormat,
+    ) -> Result<ImageRgba8, RenderError> {
+        let swap_red_blue = matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        );
         let texture = match &self.target {
             Target::Offscreen { texture } if (texture.width(), texture.height()) == (w, h) => {
                 texture.clone()
@@ -568,7 +589,7 @@ fn present_mode(vsync: bool) -> wgpu::PresentMode {
 
 #[cfg(test)]
 mod tests {
-    use super::pack_capture_rows;
+    use super::*;
 
     #[test]
     fn bgra_capture_rows_are_unpadded_and_swizzled() {
@@ -580,6 +601,36 @@ mod tests {
         assert_eq!(
             pack_capture_rows(&rows, 4, 8, false),
             [10, 20, 30, 40, 50, 60, 70, 80]
+        );
+    }
+
+    #[test]
+    fn floating_point_target_can_be_captured_as_rgba8() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let format = wgpu::TextureFormat::Rgba16Float;
+        let gpu = match pollster::block_on(request_gpu(&instance, None, Some(format))) {
+            Ok((gpu, _)) => gpu,
+            Err(RenderError::NoAdapter(reason)) => {
+                eprintln!("SKIPPED (no GPU adapter): {reason}");
+                return;
+            }
+            Err(error) => panic!("renderer creation failed: {error}"),
+        };
+        let size = (37, 19);
+        let texture = capture_texture(&gpu.device, format, size).unwrap();
+        let mut renderer = Renderer::build(gpu, Target::Offscreen { texture }, size);
+        let capture = renderer
+            .capture_frame(None, Color([0.0, 0.0, 1.0, 1.0]))
+            .unwrap();
+        assert_eq!((capture.width, capture.height), size);
+        assert_eq!(capture.pixels.len(), (size.0 * size.1 * 4) as usize);
+        assert!(
+            capture
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == [0, 0, 255, 255])
         );
     }
 }

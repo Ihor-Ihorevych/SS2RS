@@ -67,9 +67,9 @@ Not in the contract (deliberately): window/surface creation and resize (platform
 
 T04-028 provides screenshots on the concrete `ss2_render::Renderer`. `capture_frame` reads back
 an RGBA8 image at the current framebuffer size. It accepts an optional `DrawList`, so photo
-tooling can omit HUD and menu drawing. Window capture renders into a separate GPU texture in the
-window's RGBA8 or BGRA8 format. The app handles PNG output and saves F12 captures in its platform
-saves directory. [Screenshots](../user/install.md#screenshots)
+tooling can omit HUD and menu drawing. Window capture uses a separate GPU texture with the same
+8-bit format as the window when available, or an RGBA8 pass on the same device. The app handles
+PNG output and saves F12 captures in its platform saves directory. [Screenshots](../user/install.md#screenshots)
 
 ### The mocks
 
