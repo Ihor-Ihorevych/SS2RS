@@ -39,6 +39,7 @@ pub struct ArchiveVfs {
     /// Directory path -> (child name -> kind). Contains the root and every ancestor directory.
     children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>>,
     skipped: Vec<String>,
+    duplicates: Vec<String>,
     zip: Mutex<ZipArchive<File>>,
 }
 
@@ -83,6 +84,7 @@ impl ArchiveVfs {
         let mut children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>> = BTreeMap::new();
         children.insert(VfsPath::root(), BTreeMap::new());
         let mut skipped = Vec::new();
+        let mut duplicates = Vec::new();
 
         for index in 0..zip.len() {
             let raw = zip
@@ -125,14 +127,19 @@ impl ArchiveVfs {
                         .insert(file_name.to_owned(), EntryKind::File);
                 }
             }
-            files.insert(
-                vpath,
-                Entry {
-                    index,
-                    size,
-                    stored_at,
-                },
-            );
+            if files
+                .insert(
+                    vpath,
+                    Entry {
+                        index,
+                        size,
+                        stored_at,
+                    },
+                )
+                .is_some()
+            {
+                duplicates.push(entry_name);
+            }
         }
 
         Ok(Self {
@@ -141,6 +148,7 @@ impl ArchiveVfs {
             files,
             children,
             skipped,
+            duplicates,
             zip: Mutex::new(zip),
         })
     }
@@ -158,6 +166,13 @@ impl ArchiveVfs {
     /// Raw names of entries that were not exposed because they are not valid VFS paths.
     pub fn skipped_entries(&self) -> &[String] {
         &self.skipped
+    }
+
+    /// Raw names of entries that replaced an earlier entry of the same archive with the same
+    /// normalized path (the same name twice, or names that differ only by case or by `/` against
+    /// `\`). The last one wins; the earlier ones are unreachable. Used by the mod checker.
+    pub fn duplicate_entries(&self) -> &[String] {
+        &self.duplicates
     }
 
     fn entry(&self, path: &VfsPath) -> Result<&Entry> {

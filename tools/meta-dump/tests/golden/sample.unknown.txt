@@ -1,0 +1,10 @@
+# meta-dump (annotated text; offsets are file offsets, +n is a size in bytes)
+file: sample.meta
+size: 860 bytes
+status: ok
+
+== coverage
+file size   860 bytes
+explained   860 bytes (100.0000%)
+  of which opaque (a word of unknown meaning or raw byte arrays): 4 bytes
+undecoded   0 bytes in 0 range(s)

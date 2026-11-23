@@ -40,6 +40,10 @@ A checker for the folder exists: `ss2-doctor <folder>` (T11-013) lists the archi
 and reports the patch level from the newest patch file name. It is not in the download archives yet; from a source checkout run
 `cargo run -p ss2-vfs --bin ss2-doctor -- <folder>`. The first-run wizard (T10-019) is still planned.
 
+With `--mod <Name>` (or `--all-mods`) the same command also checks the mods in `Content/<Name>/` of the install: missing
+files, bad references, version mismatch and files that two mods both replace. What it checks, and what it does not,
+is in [Mod validation](../MOD_VALIDATION.md).
+
 ## Platforms
 
 - **PC first:** Windows, then Linux and macOS ([README](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/README.md)).
