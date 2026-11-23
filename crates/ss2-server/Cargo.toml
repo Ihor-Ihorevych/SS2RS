@@ -13,3 +13,7 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+ss2-sim = { path = "../ss2-sim" }
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true

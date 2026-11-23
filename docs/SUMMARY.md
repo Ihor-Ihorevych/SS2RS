@@ -25,6 +25,7 @@
 - [Net statistics](NETSTATS.md)
 - [Replay files](REPLAY.md)
 - [Sessions (joining, keepalive, leaving)](SESSION.md)
+- [The dedicated server](DEDICATED_SERVER.md)
 - [Simulation tick loop](SIMLOOP.md)
 - [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)

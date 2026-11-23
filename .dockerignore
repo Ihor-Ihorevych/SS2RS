@@ -1,0 +1,10 @@
+# Keep the build context small and keep game content out of it, always.
+target
+.git
+fuzz
+spikes
+docs
+**/*.gro
+**/*.dll
+**/*.exe
+Serious Sam 2
