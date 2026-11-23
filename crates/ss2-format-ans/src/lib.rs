@@ -27,7 +27,7 @@
 //!
 //! `docs/re/ans.md` does **not** determine how to interpolate between keys, how an animation
 //! loops, or what the root-motion bone is. The sampling code makes the documented choices
-//! (linear translation and scalars, shortest-arc spherical rotation, see [`sampling`]) and says so
+//! (linear translation and scalars, shortest-arc spherical rotation, see `docs/ANIMATION_SAMPLING.md`) and says so
 //! in the item documentation; follow-up T01-058 settles them from the game's behaviour.
 
 mod sampling;
