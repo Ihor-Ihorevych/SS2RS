@@ -18,8 +18,8 @@ glyphon.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
 thiserror.workspace = true
+png.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 ss2-core = { path = "../ss2-core" }
-png.workspace = true

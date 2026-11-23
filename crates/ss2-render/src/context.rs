@@ -76,7 +76,7 @@ async fn request_gpu(
     format_override: Option<wgpu::TextureFormat>,
 ) -> Result<(Gpu, wgpu::Adapter), RenderError> {
     let mut last_error = String::from("no adapter returned");
-    for fallback in [false, true] {
+    for &fallback in crate::golden::adapter_modes(crate::golden::force_software_requested()) {
         let options = wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: fallback,
