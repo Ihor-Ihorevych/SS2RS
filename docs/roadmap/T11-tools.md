@@ -4,7 +4,7 @@ Tools multiply every other track: **`meta-dump` (T11-002) is the single most val
 turns opaque `CTSEMETA` files into readable text so RE and loader work can move in parallel.
 
 - [x] **T11-001** · `gro-tool`: `list`, `extract`, `cat`, `find` (glob/regex), `stats`, `diff` between archive sets; honors mount order · `M` · `P0` · 🟢 · Deps: T02-001
-- [ ] **T11-002** · `meta-dump`: print any CTSEMETA file as annotated text/JSON/RON (header, chunks, types, refs, raw spans with offsets); `--unknown` mode highlights undecoded regions · `M` · `P0` · Deps: T02-006 (a hex-only version can precede the full reader)
+- [~] **T11-002** [INPRG @Ihor-Ihorevych/agent · branch `T11-002-meta-dump` · 2026-11-23] · `meta-dump`: print any CTSEMETA file as annotated text/JSON/RON (header, chunks, types, refs, raw spans with offsets); `--unknown` mode highlights undecoded regions · `M` · `P0` · Deps: T02-006 (a hex-only version can precede the full reader)
 - [ ] **T11-003** · `meta-diff` / `meta-survey`: compare files of one type to infer layout (constant vs variable bytes), histogram of chunk tags across the install · `M` · `P0` · Deps: T11-002
 - [ ] **T11-004** · Asset viewer (desktop, `egui`): VFS tree, search, previews for textures (mips/channels), models (turntable, LOD, skeleton, material slots), animations (scrub), sounds, particles, fonts · `XL` → split by asset type · `P1`
 - [ ] **T11-005** · World viewer: free-fly through `.wld`, layer toggles (geometry, collision, lights, sectors, nav, entities), entity inspector · `L` · `P1` · Deps: T04-009
