@@ -809,9 +809,6 @@ mod tests {
         );
         assert_eq!(mtr_files, 91);
         assert_eq!(configs, shaders.values().sum::<usize>());
-        assert!(
-            presets > 7000 && configs > 7500,
-            "{presets} presets, {configs} configs"
-        );
+        assert_eq!((presets, configs), (7482, 8009), "the counts of mtr.md");
     }
 }
