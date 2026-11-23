@@ -26,6 +26,8 @@ ss2-physics = { path = "../ss2-physics" }
 
 [dev-dependencies]
 criterion.workspace = true
+tempfile.workspace = true
+zip.workspace = true
 
 [[bench]]
 name = "assets"

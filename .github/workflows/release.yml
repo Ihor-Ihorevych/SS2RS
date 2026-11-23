@@ -92,10 +92,10 @@ jobs:
           name="${{ steps.meta.outputs.name }}"
           exe=""
           if [ "${RUNNER_OS}" = "Windows" ]; then exe=".exe"; fi
-          "dist/${name}/ss2-server${exe}"
-          # The windowed app needs a display; only check that it starts and prints usage on bad flags.
-          # (It exits non-zero on a bad flag, and Actions runs bash with pipefail, so capture first.)
-          output=$("dist/${name}/ss2-app${exe}" --definitely-not-a-flag 2>&1 || true)
+          # The server's console accepts quit after startup so smoke testing can finish.
+          printf 'quit\n' | "dist/${name}/ss2-server${exe}"
+          # The help path checks the packaged app without opening a window.
+          output=$("dist/${name}/ss2-app${exe}" --help)
           echo "${output}"
           echo "${output}" | grep -qi usage
 
