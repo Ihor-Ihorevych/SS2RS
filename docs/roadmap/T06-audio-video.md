@@ -31,7 +31,7 @@ PC first; mobile audio/memory work is Phase 2.
 ## Video / cutscenes
 - [ ] **T06-010** · `.ogv` Theora decode (pure-Rust or vetted binding) with frame queue → GPU texture upload (YUV→RGB in shader), A/V sync to audio clock · `L` · `P1`
 - [ ] **T06-011** · Cutscene player: fullscreen/letterboxed playback, skip/pause rules, subtitle track, resume on Android lifecycle · `M` · `P2`
-- [ ] **T06-012** · Subtitles/captions overlay timing (source per T01-041) · `M` · `P2`
+- [~] **T06-012** [INPRG @Ihor-Ihorevych/agent · branch `T06-012-subtitle-timing` · 2026-11-23] · Subtitles/captions overlay timing (source per T01-041) · `M` · `P2`
 - [ ] **T06-020** · Large-video storage on Android (stream from SAF/content URI without copying) · `M` · `PHASE 2`
 - [ ] **T06-021** · `.xmv` (Xbox) explicitly ignored; document + test that it's skipped · `S` · `P3` · 🟢
 - [ ] **T06-014** · Voice chat for co-op (Opus, push-to-talk, VAD), optional · `L` · `P3`
