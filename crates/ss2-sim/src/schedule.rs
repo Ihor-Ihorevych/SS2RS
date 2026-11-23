@@ -4,7 +4,7 @@
 //! (input, AI, movement, physics, damage, cleanup, replication), and inside a phase by their
 //! `order` number and then by the order they were added. The order depends only on those three
 //! things, so the same registrations give the same order on every machine and every run.
-//! [`Simulation`] puts a [`Schedule`] together with a [`TickLoop`](crate::tick::TickLoop) and a
+//! [`Simulation`] puts a [`Schedule`] together with a [`TickLoop`] and a
 //! world.
 
 use std::fmt;
