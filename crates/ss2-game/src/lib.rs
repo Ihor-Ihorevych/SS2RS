@@ -2,6 +2,7 @@
 
 pub mod ai_budget;
 pub mod cheats;
+pub mod difficulty;
 pub mod freefly;
 pub mod level_progress;
 pub mod physics_debug;
