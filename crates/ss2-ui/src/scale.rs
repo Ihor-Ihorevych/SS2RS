@@ -447,7 +447,6 @@ mod tests {
             &ScaleSettings {
                 aspect: AspectMode::Letterbox,
                 user_scale: 0.5,
-                ..ScaleSettings::default()
             },
         )
         .unwrap();
