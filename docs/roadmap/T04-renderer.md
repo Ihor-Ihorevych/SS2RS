@@ -8,7 +8,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 
 ## Foundation (Wave 0)
 - [ ] **T04-001** · wgpu instance/adapter/device/surface init; backend selection, limits/features report, surface-lost/device-lost recovery (also what the later Android port needs) · `M` · `P0`
-- [ ] **T04-002** · Frame graph / pass scheduler skeleton (depth pre-pass, opaque, transparent, post, UI), resource aliasing hooks · `L` · `P0`
+- [~] **T04-002** [INPRG @Ihor-Ihorevych/agent · branch `T04-002-frame-graph-pass-scheduler` · 2026-11-23] · Frame graph / pass scheduler skeleton (depth pre-pass, opaque, transparent, post, UI), resource aliasing hooks · `L` · `P0`
 - [ ] **T04-003** · GPU resource manager: buffers/textures, staging ring, upload budget per frame, streaming API for assets · `L` · `P0`
 - [x] **T04-004** · Camera, projection (reverse-Z, infinite far; from the contract T00-015), frustum, culling primitives, jitter slot for AA: `ss2_render_api::culling` (`docs/CULLING.md`) · `M` · `P0`
 - [ ] **T04-017** · 2D/UI renderer: batched quads, text glyph quads, scissor, 9-slice, render-to-texture (shared with T10) · `M` · `P0` · 🟢
