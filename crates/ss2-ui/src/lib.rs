@@ -14,5 +14,6 @@ mod about_tests;
 mod draw_tests;
 pub mod layout;
 mod pointer;
+pub mod scale;
 mod skin;
 pub mod theme;
