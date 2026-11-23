@@ -33,6 +33,7 @@
 - [Developer console and overlays](DEV_CONSOLE_UI.md)
 - [UI scale and resolution policy](UI_SCALING.md)
 - [UI frame budget](UI_BUDGET.md)
+- [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
 - [Visibility: sight and sound](VISIBILITY.md)

@@ -13,3 +13,6 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+
+[dev-dependencies]
+proptest.workspace = true
