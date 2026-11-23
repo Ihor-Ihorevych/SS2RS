@@ -563,7 +563,7 @@ impl TriMesh {
     /// Build a mesh from vertices and triangle indices. Triangles with no area are left out and
     /// counted ([`TriMesh::dropped_degenerate`]); every triangle starts on all layers.
     pub fn new(vertices: &[Vec3], indices: &[u32]) -> Result<Self, MeshError> {
-        if indices.len() % 3 != 0 {
+        if !indices.len().is_multiple_of(3) {
             return Err(MeshError::IndexCountNotMultipleOfThree(indices.len()));
         }
         if let Some(i) = vertices.iter().position(|v| !v.is_finite()) {
@@ -581,7 +581,7 @@ impl TriMesh {
         }
         let mut triangles = Vec::new();
         let mut dropped_degenerate = 0;
-        for tri in indices.chunks_exact(3) {
+        for tri in indices.as_chunks::<3>().0 {
             let t = Triangle::new(
                 vertices[tri[0] as usize],
                 vertices[tri[1] as usize],
