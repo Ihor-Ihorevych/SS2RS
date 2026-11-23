@@ -27,6 +27,7 @@
 - [Session discovery](DISCOVERY.md)
 - [net-tool: replays and netsim CLI](NET_TOOL.md)
 - [meta-dump: print any CTSEMETA file](META_DUMP.md)
+- [asset-export: textures to PNG, models to glTF](ASSET_EXPORT.md)
 - [Soak test with headless bots](SOAK.md)
 - [Sessions (joining, keepalive, leaving)](SESSION.md)
 - [The dedicated server](DEDICATED_SERVER.md)
