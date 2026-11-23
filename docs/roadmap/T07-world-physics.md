@@ -38,6 +38,6 @@ the server can reconcile (T08-009).
 
 ## Tooling & quality
 - [x] **T07-016** · Physics/collision debug draw (contacts, normals, sweeps, BVH) via T04-018: `ss2_game::physics_debug` (`docs/PHYSICS_DEBUG.md`): colliders, capsules, oriented boxes, BVH nodes, ray and shape casts, meshes; contacts of the controller and rigid bodies wait for them · `S` · `P1` · 🟢
-- [ ] **T07-017** · Performance benchmarks: 300 AI + 500 debris + projectiles on a reference mid-range PC CPU (re-run on mobile CPUs in Phase 2); per-system budgets · `M` · `P1`
+- [~] **T07-017** [INPRG @Ihor-Ihorevych/agent · branch `T07-017-physics-bench` · 2026-11-23] · Performance benchmarks: 300 AI + 500 debris + projectiles on a reference mid-range PC CPU (re-run on mobile CPUs in Phase 2); per-system budgets · `M` · `P1`
 - [ ] **T07-025** · Property tests (proptest): no tunneling at max speed, no stuck in corners, determinism across runs/threads · `M` · `P1` · 🟢
 - [ ] **T07-026** · Cross-arch float consistency test (x86_64 vs aarch64) of the controller; document tolerances for reconciliation · `M` · `P1`
