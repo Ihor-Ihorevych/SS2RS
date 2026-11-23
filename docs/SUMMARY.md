@@ -42,6 +42,7 @@
 - [GPU resource bookkeeping](GPU_RESOURCES.md)
 - [Screen effects](SCREEN_EFFECTS.md)
 - [Instancing and batching](BATCHING.md)
+- [Texture sampling rules](TEXTURE_SAMPLING.md)
 - [Navigation model](NAVIGATION.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)

@@ -50,6 +50,7 @@ mod renderer;
 mod resources;
 mod scene;
 pub mod screen_effects;
+pub mod texture_sampling;
 pub mod transparency;
 
 pub use camera::{Camera, Projection};
