@@ -48,6 +48,6 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 ## Quality
 - [ ] **T02-030** · `cargo-fuzz` targets for every parser, corpus from synthetic fixtures, nightly CI run · `M` · `P1` · 🟢
 - [ ] **T02-031** · "Load everything" smoke tool & test: open every file in an install with its loader, print coverage table, fail on unknown/errored · `M` · `P0`
-- [ ] **T02-032** · Loader benchmarks (MB/s) and memory profile on PC (Android device in Phase 2) · `S` · `P2`
+- [~] **T02-032** [INPRG @lxstyo/agent · branch `T02-032-loader-benchmarks-mb-s` · 2026-11-23] · Loader benchmarks (MB/s) and memory profile on PC (Android device in Phase 2) · `S` · `P2`
 - [ ] **T02-033** · Public docs & examples for every `ss2-format-*` crate; publishable standalone (valuable to modders) · `M` · `P2`
 - [ ] **T02-034** · Version-tolerance: handle files from older/newer `$Version` strings and patch deltas, explicit error when unsupported · `M` · `P1`
