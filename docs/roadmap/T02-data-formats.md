@@ -31,16 +31,16 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-014** · `.bmf` mesh loader (vertex streams, LODs, bounds) · `M` · `P0` · Deps: T01-007 — new crate `ss2-format-bmf` (`Mesh`, `BmfLoader`): all 76 meshes of the retail install load and match the spec's counts (125 LODs, 353 surfaces, 213,294 triangles, 216,784 vertices)
 - [x] **T02-015** · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
   `ss2-format-skl` registers a typed loader with the asset manager. Verified 31 skeletons, 42 LODs, and 564 bones in the local retail install.
-- [ ] **T02-016** · `.ans` animation loader + sampling API (pose evaluation, events) · `L` · `P0` · Deps: T01-010
+- [~] **T02-016** [INPRG @lxstyo · branch `T02-016-ans-animation-loader-sampling` · 2026-11-23] · `.ans` animation loader + sampling API (pose evaluation, events) · `L` · `P0` · Deps: T01-010
 - [ ] **T02-017** · `.mdl` model loader (links mesh/skeleton/materials/LOD/collision) · `L` · `P0` · Deps: T01-008, T02-014/015
 - [x] **T02-018** · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011 — new crate `ss2-format-mtr` (`MaterialFile`, `Material`, `ShaderConfig`, `Param`, `MtrLoader`; `Material::from_preset` also converts the presets embedded in `.bmf`/`.mdl`): all 7,482 presets and 8,009 configs of the retail install load
 - [x] **T02-019** · `.mat` physical material loader, `.scs` sound collection loader · `S` · `P1` · Deps: T01-013 — new crate `ss2-format-mat` (`PhysicalMaterial`, `SoundScheme`, `ParticleScheme`, `MatLoader`/`ScsLoader`/`ScpLoader`): all 35 `.mat`, 37 `.scs` and 7 `.scp` files of the retail install load; `.sca`/`.mas` are not specified yet
 - [ ] **T02-020** · `.wld` world loader — split: **a** geometry, **b** lighting/lightmaps, **c** visibility/sectors, **d** entity records, **e** navigation data · `XL` · `P0` · Deps: T01-012a-f (f = the world root, the others hang off it)
 - [ ] **T02-021** · World streaming/lazy resource resolution (avoid loading 100+ MB at once; matters most on low-RAM PCs and later mobile) · `M` · `P1`
 - [x] **T02-022** · `.ep` entity params → typed `EntityParams` (inheritance merge) · `M` · `P0` · Deps: T01-014 — new crate `ss2-format-ep` (`EntityParams`, `ParamObject`, `ParamValue`, `EpLoader`): all 322 files load with the 43 root classes and the 596 file references of `ep.md`; the class chain is the inheritance (nothing is inherited between files)
-- [ ] **T02-023** · `.rsc` databases and `.ctl` loaders · `S` · `P1`
-- [ ] **T02-024** · `.pfx` particle loader; `.lfx`, `.tfx`, `.vfx` loaders · `M` · `P1`
-- [ ] **T02-025** · `.fnt` font loader (+ glyph atlas data) · `S` · `P1`
+- [~] **T02-023** [INPRG @lxstyo · branch `T02-023-rsc-databases-and-ctl` · 2026-11-23] · `.rsc` databases and `.ctl` loaders · `S` · `P1`
+- [~] **T02-024** [INPRG @lxstyo · branch `T02-024-pfx-particle-loader-lfx` · 2026-11-23] · `.pfx` particle loader; `.lfx`, `.tfx`, `.vfx` loaders · `M` · `P1`
+- [~] **T02-025** [INPRG @lxstyo · branch `T02-025-fnt-font-loader-glyph` · 2026-11-23] · `.fnt` font loader (+ glyph atlas data) · `S` · `P1`
 - [ ] **T02-026** · Sound loaders: `.wav` (PCM/ADPCM?), `.ogg` (Vorbis, streaming) · `M` · `P1` · 🟢
 - [ ] **T02-027** · Text/localization loaders (`.srt`?, `.dsc`, `.nfo`, string tables) · `S` · `P2`
 - [ ] **T02-028** · `.preload` lists → prefetch plan · `S` · `P2` · 🟢
