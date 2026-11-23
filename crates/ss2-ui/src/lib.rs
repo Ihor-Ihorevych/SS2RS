@@ -4,6 +4,9 @@ pub mod accessibility;
 pub mod coop_overlays;
 #[cfg(test)]
 mod coop_overlays_tests;
+pub mod data_wizard;
+#[cfg(test)]
+mod data_wizard_tests;
 pub mod devconsole;
 pub mod draw;
 pub mod focus;
