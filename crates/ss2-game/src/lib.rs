@@ -1,5 +1,6 @@
 //! ss2-game — gameplay: player, weapons, enemies, level logic (track T09)
 
+pub mod ai_budget;
 pub mod cheats;
 pub mod freefly;
 pub mod physics_debug;
