@@ -40,6 +40,7 @@ mod camera;
 mod culling;
 mod debug_draw;
 mod ids;
+pub mod lod;
 pub mod quality;
 mod renderer;
 mod resources;
