@@ -27,6 +27,7 @@ mod directory;
 mod install;
 mod layered;
 mod memory;
+mod mods;
 mod path;
 
 use std::io::{Read, Seek};
@@ -39,6 +40,10 @@ pub use directory::DirectoryVfs;
 pub use install::{archive_load_order, mount_install};
 pub use layered::LayeredVfs;
 pub use memory::MemoryVfs;
+pub use mods::{
+    ModInfo, ModManifest, ModModule, Nfo, discover_mods, mod_archive_names, mount_mod,
+    parse_current_mod, selected_mod,
+};
 pub use path::VfsPath;
 
 /// A readable, seekable byte stream returned by [`Vfs::open`].
