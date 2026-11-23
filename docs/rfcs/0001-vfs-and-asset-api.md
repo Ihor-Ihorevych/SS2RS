@@ -54,6 +54,7 @@ pub struct AssetManager;      // new(Arc<dyn Vfs>), register_loader(L), load::<T
 ```
 
 - **Typed handles, type-erased registry.** The manager maps extension → loader; `load::<T>` checks that the loader produces `T`. A mismatch is a caller error (`Err`), caught on first use instead of a bad downcast later.
+- **Format registration.** Each format crate supplies an `AssetLoader` to `AssetManager::register_loader`. Registration lowercases extensions, strips leading dots, and installs the whole set together. An empty list, an invalid VFS suffix, or a collision with a registered loader returns `Error::Invalid` and leaves the registry unchanged.
 - **Two kinds of failure, kept apart.** *Caller mistakes* (bad path, no loader, wrong `T`) return `Err` from `load`. *Data problems* (missing file, corrupt contents) are stored in the handle (`LoadState::Failed`, `error()`), so one bad asset never aborts a level load and the failure is cached and reportable once.
 - **Handles may be `Loading`.** v0 loads synchronously, so handles are `Ready` or `Failed` on return, **but consumers must not rely on that**: T02-009 makes loading async. `LoadState` is `#[non_exhaustive]` for the same reason.
 - **Dependencies** (`ctx.load_dependency`) go through the same manager, so shared textures are loaded once. They are recorded per asset (`Handle::dependencies`), which is the hook for the `RFIL`-based dependency graph (T02-009). Cyclic dependencies are allowed and terminate.

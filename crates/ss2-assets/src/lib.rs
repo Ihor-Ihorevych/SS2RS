@@ -44,6 +44,9 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+mod registry;
+
+use registry::{LoaderRegistry, erase, normalize_extensions};
 use ss2_core::{Error, Result};
 use ss2_vfs::{Vfs, VfsPath};
 
@@ -56,8 +59,8 @@ pub trait AssetLoader: Send + Sync + 'static {
     /// The in-memory type this loader produces.
     type Asset: Send + Sync + 'static;
 
-    /// Lower-case file extensions without the dot, e.g. `&["tex"]`. Each extension maps to at
-    /// most one loader per manager.
+    /// File extensions this loader handles, for example `&["tex"]`. Registration lowercases
+    /// entries and strips leading dots. Each extension maps to one loader per manager.
     fn extensions(&self) -> &[&str];
 
     /// Parse the asset at [`LoadContext::path`].
@@ -213,32 +216,9 @@ impl<T: Send + Sync + 'static> Handle<T> {
     }
 }
 
-/// Type-erased loader so loaders for different asset types live in one registry.
-trait ErasedLoader: Send + Sync {
-    fn asset_type(&self) -> TypeId;
-    fn asset_type_name(&self) -> &'static str;
-    fn load(&self, ctx: &mut LoadContext<'_>) -> Result<Arc<dyn Any + Send + Sync>>;
-}
-
-struct Typed<L>(L);
-
-impl<L: AssetLoader> ErasedLoader for Typed<L> {
-    fn asset_type(&self) -> TypeId {
-        TypeId::of::<L::Asset>()
-    }
-
-    fn asset_type_name(&self) -> &'static str {
-        std::any::type_name::<L::Asset>()
-    }
-
-    fn load(&self, ctx: &mut LoadContext<'_>) -> Result<Arc<dyn Any + Send + Sync>> {
-        Ok(Arc::new(self.0.load(ctx)?))
-    }
-}
-
 #[derive(Default)]
 struct Inner {
-    loaders: BTreeMap<String, Arc<dyn ErasedLoader>>,
+    loaders: LoaderRegistry,
     slots: BTreeMap<(VfsPath, TypeId), Arc<Slot>>,
 }
 
@@ -271,26 +251,16 @@ impl AssetManager {
 
     /// Register `loader` for each of its [`extensions`](AssetLoader::extensions).
     ///
+    /// Each format crate can implement its own loader and pass it to this method at startup.
+    /// All extensions are registered together or the registry is left unchanged.
+    ///
     /// # Errors
-    /// [`Error::Invalid`] if an extension already has a loader (nothing is registered then).
+    /// [`Error::Invalid`] if the list is empty, an extension cannot be a VFS file suffix, or
+    /// another loader already handles an extension in the list.
     pub fn register_loader<L: AssetLoader>(&self, loader: L) -> Result<()> {
-        let extensions: Vec<String> = loader
-            .extensions()
-            .iter()
-            .map(|e| e.trim_start_matches('.').to_lowercase())
-            .collect();
-        let mut inner = self.lock();
-        if let Some(dup) = extensions.iter().find(|e| inner.loaders.contains_key(*e)) {
-            return Err(Error::invalid(
-                "asset loader",
-                format!("extension .{dup} already has a loader"),
-            ));
-        }
-        let loader: Arc<dyn ErasedLoader> = Arc::new(Typed(loader));
-        for ext in extensions {
-            inner.loaders.insert(ext, Arc::clone(&loader));
-        }
-        Ok(())
+        let extensions = normalize_extensions(loader.extensions())?;
+        let loader = erase(loader);
+        self.lock().loaders.register(extensions, &loader)
     }
 
     /// Request the asset at `path` as type `T`, loading it if it is not cached yet.
@@ -307,16 +277,15 @@ impl AssetManager {
         let path = VfsPath::new(path)?;
         let ext = path
             .extension()
-            .ok_or_else(|| Error::invalid("asset path", format!("{path} has no extension")))?
-            .to_owned();
+            .ok_or_else(|| Error::invalid("asset path", format!("{path} has no extension")))?;
         let key = (path.clone(), TypeId::of::<T>());
 
         let (loader, slot, first_request) = {
             let mut inner = self.lock();
-            let loader =
-                inner.loaders.get(&ext).cloned().ok_or_else(|| {
-                    Error::NotFound(format!("no asset loader for .{ext} ({path})"))
-                })?;
+            let loader = inner
+                .loaders
+                .get(ext)
+                .ok_or_else(|| Error::NotFound(format!("no asset loader for .{ext} ({path})")))?;
             if loader.asset_type() != TypeId::of::<T>() {
                 return Err(Error::invalid(
                     "asset type",
@@ -374,7 +343,7 @@ mod tests {
     impl AssetLoader for TextLoader {
         type Asset = String;
         fn extensions(&self) -> &[&str] {
-            &["txt", "TXT2"]
+            &["txt", ".TXT2"]
         }
         fn load(&self, ctx: &mut LoadContext<'_>) -> Result<String> {
             String::from_utf8(ctx.read()?).map_err(|e| Error::invalid("text asset", e.to_string()))
@@ -428,7 +397,7 @@ mod tests {
     fn loader_registered_for_several_extensions() {
         let m = manager(&[("x.txt2", b"two")]);
         assert_eq!(
-            m.load::<String>("x.txt2").unwrap().get().unwrap().as_str(),
+            m.load::<String>("x.TXT2").unwrap().get().unwrap().as_str(),
             "two"
         );
     }
@@ -488,6 +457,44 @@ mod tests {
             matches!(m.load::<u8>("a.new"), Err(Error::NotFound(_))),
             "`.new` must not be registered when the batch is rejected"
         );
+    }
+
+    #[test]
+    fn invalid_extension_registration_is_rejected_atomically() {
+        struct Plugin(&'static [&'static str]);
+        impl AssetLoader for Plugin {
+            type Asset = ();
+            fn extensions(&self) -> &[&str] {
+                self.0
+            }
+            fn load(&self, _: &mut LoadContext<'_>) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let m = manager(&[]);
+        for extensions in [
+            &[][..],
+            &["new", ""][..],
+            &["new", "."],
+            &["new", "multiple.parts"],
+            &["new", "nested/ext"],
+            &["new", "nested\\ext"],
+            &["new", "drive:ext"],
+            &["new", "bad\0ext"],
+        ] {
+            assert!(
+                matches!(
+                    m.register_loader(Plugin(extensions)),
+                    Err(Error::Invalid { .. })
+                ),
+                "accepted {extensions:?}"
+            );
+            assert!(matches!(m.load::<()>("a.new"), Err(Error::NotFound(_))));
+        }
+
+        m.register_loader(Plugin(&["new"])).unwrap();
+        assert_eq!(m.load::<()>("a.NEW").unwrap().state(), LoadState::Ready);
     }
 
     #[test]
