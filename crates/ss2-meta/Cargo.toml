@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name = "ss2-meta"
 description = "CTSEMETA container and reflection reader (track T02)"
 version.workspace = true
@@ -13,7 +13,9 @@ workspace = true
 
 [dependencies]
 ss2-core = { path = "../ss2-core" }
+ss2-meta-derive = { path = "../ss2-meta-derive" }
 
 [dev-dependencies]
 ss2-testkit = { path = "../ss2-testkit" }
 ss2-vfs = { path = "../ss2-vfs" }
+

@@ -15,6 +15,8 @@
 //!    table. A typed layer on top of the tree is the job of later tasks (T02-008b).
 //! 3. **The writer** ([`write()`], T02-008): the inverse of both, byte for byte: for fixtures,
 //!    tools and a cooked cache.
+//! 4. **Typed access** ([`FromValue`], `#[derive(MetaDeserialize)]`, T02-008b): typed structs
+//!    from the value tree, one named member per field ([`Decoded::typed`]).
 //!
 //! Format versions 4 to 8 are read (versions 4 to 7 only occur in 155 old `.tex` files of the
 //! patches). The specs: `docs/re/ctsemeta-container.md`, `ctsemeta-types.md`,
@@ -35,8 +37,12 @@
 //! assert_eq!(decoded.types.member(item, "CTestItem", "2"), Some(&Value::F32(30.0)));
 //! ```
 
+// The derive macro refers to this crate by its name, also from inside the crate.
+extern crate self as ss2_meta;
+
 mod container;
 mod decode;
+mod typed;
 mod value;
 mod writer;
 
@@ -45,5 +51,10 @@ pub use container::{
     Header, Info, Member, ObjectEntry, Section, ShortForm, TypeDef, TypeShape,
 };
 pub use decode::{Decoded, FlatMember, TypeSystem};
+pub use ss2_core::{Error, Result};
+pub use ss2_meta_derive::MetaDeserialize;
+#[doc(hidden)]
+pub use typed::__private;
+pub use typed::{Bytes, FromValue, ObjectRef};
 pub use value::{Object, Struct, Value};
 pub use writer::write;
