@@ -21,7 +21,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-008** · `ss2-meta`: writer + round-trip tests (needed for fixtures, cooked cache, tools) · `M` · `P1`
 - [ ] **T02-008b** · `serde`-style derive layer: typed structs from `Value` (`#[derive(MetaDeserialize)]`) · `L` · `P1`
 - [ ] **T02-009** · `ss2-assets`: `AssetManager` (handles, refcount, async load, dependency graph from `RFIL`, error reporting) · `L` · `P0` · Deps: T00-014
-- [ ] **T02-010** · Loader registry & extension → loader mapping; plugin-style registration per format crate · `S` · `P0`
+- [~] **T02-010** [INPRG @lxstyo/agent · branch `T02-010-loader-registry-extension-loader` · 2026-11-23] · Loader registry & extension → loader mapping; plugin-style registration per format crate · `S` · `P0`
 - [ ] **T02-011** · Cooked cache: processed-asset store with content hash, invalidation on archive/version change, background cooking · `L` · `P1`
 - [ ] **T02-011b** · Hot reload of loose files (dev mode) · `S` · `P2` · 🟢
 
