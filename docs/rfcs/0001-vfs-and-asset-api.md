@@ -90,3 +90,11 @@ See the doctests in `crates/ss2-assets/src/lib.rs` (a toy text loader against `M
 - **Reload / eviction semantics** for failed handles and for hot reload (T02-011b): decided by the `ss2-assets` owner in T02-009.
 - **Handles that hold other handles** (model → textures) form `Arc` cycles when assets are cyclic; T02-009 may need weak dependency links. Decided by the `ss2-assets` owner.
 - **Non-UTF-8 file names in archives** (code-page encoded names in some ZIPs): how `VfsPath` should treat them. Decided with T02-001 once real archives are surveyed.
+
+## Decisions of T02-009 (ss2-assets internals)
+
+- **Loading mode** is chosen per manager (AssetOptions::workers): `0` keeps the synchronous behaviour of v0 (`AssetManager::new`), `> 0` loads on a thread pool and `load` returns a `Loading` handle (`Handle::wait`, `wait_all`, `AssetManager::wait_idle`). No signature of v0 changed.
+- **Eviction** (`AssetOptions::evict_unreferenced`): the cache holds assets weakly, so an asset is freed when its last `Handle` is dropped and the next request loads it again; a failed entry is retried the same way. Default: never evict.
+- **Dependencies keep each other alive**: an asset holds strong references to the assets it requested (`load_dependency`, `load_any`), so a model keeps its textures. Assets that depend on each other in a cycle are never freed while the manager lives (a deliberate leak: no cycle was found in the retail data; `dependency_graph` shows the edges).
+- **Failures** are cached in the handle, logged, counted (`stats`) and listed (`failures`, last 10,000); a loader that panics is a failure, not a crashed worker.
+- **Reload for hot-reload** (T02-011b) is not part of this task: with eviction, dropping every handle and requesting again reloads.
