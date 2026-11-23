@@ -32,6 +32,7 @@
 - [UI scale and resolution policy](UI_SCALING.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
 - [Lag compensation](LAG_COMPENSATION.md)
+- [Save files](SAVES.md)
 - [Simulation tick loop](SIMLOOP.md)
 - [Gameplay event bus](EVENTBUS.md)
 - [Geometry primitives](GEOMETRY.md)
