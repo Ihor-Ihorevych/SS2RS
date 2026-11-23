@@ -54,7 +54,7 @@ Reminder: Ghidra projects and decompiler listings stay **out of git**; only pros
 - [x] **T01-030** · SPEC level logic: triggers, mechanisms (doors, elevators), scripted sequences, checkpoints, secrets, cutscene triggers · `L` · `P1`
 - [ ] **T01-031** · SPEC what state original MP replicates (to design *our* replication; not protocol parity) · `M` · `P2`
 - [ ] **T01-032** · SPEC save-game contents (our format will differ; informs what must persist) · `M` · `P2`
-- [ ] **T01-033** · SPEC console variables/commands, profile/config files, default key binds · `M` · `P2`
+- [~] **T01-033** [INPRG @lxstyo · branch `T01-033-spec-console-variables-commands` · 2026-11-23] · SPEC console variables/commands, profile/config files, default key binds · `M` · `P2`
 - [x] **T01-034** · SPEC audio semantics: 3D attenuation curves, priorities, music system, EAX/reverb zones · `M` · `P1`
 - [x] **T01-035** · SPEC cutscene/movie system: how in-engine cutscenes and `.ogv` are triggered/skipped · `M` · `P2`
 - [x] **T01-036** · SPEC GUI system (`EngineGui.dll`): widget model, layout, skin, input focus rules; menu flow from `Content/SeriousSam2/Menus` · `L` · `P1`
