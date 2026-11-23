@@ -436,6 +436,82 @@ impl QualitySettings {
     }
 }
 
+/// What applying a settings text did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ApplyReport {
+    /// The names of the settings whose value changed, in the order of [`QualitySettings::options`].
+    pub changed: Vec<&'static str>,
+    /// Lines that could not be applied, as `(line number from 1, message)`. When there are any, **nothing** was applied.
+    pub errors: Vec<(usize, String)>,
+}
+
+impl ApplyReport {
+    /// Whether the text was applied.
+    pub fn is_ok(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+impl QualitySettings {
+    /// Apply a settings file's text: one `name = value` (or `name value`) per line, `#` starts a comment, blank lines are skipped, and the special name `preset`
+    /// loads a whole [`QualityTier`] at that point so that the lines after it can adjust it. **All or nothing**: if any line is wrong, the settings are left exactly as
+    /// they were and the report lists every bad line, so a half-saved edit never leaves the renderer in a mixed state. This is what a hot reload of the settings file
+    /// calls; the report's `changed` says which settings to rebuild things for.
+    ///
+    /// ```
+    /// use ss2_render_api::quality::QualitySettings;
+    ///
+    /// let mut s = QualitySettings::default();
+    /// let report = s.apply_text("preset = low\n# a little better than low\nshadows = medium\n");
+    /// assert!(report.is_ok());
+    /// assert_eq!(s.get("shadows").as_deref(), Some("medium"));
+    /// assert_eq!(s.get("bloom").as_deref(), Some("off")); // from the preset
+    /// assert!(report.changed.contains(&"bloom")); // high had it on
+    /// assert!(!report.changed.contains(&"shadows")); // medium is what high already had
+    /// ```
+    pub fn apply_text(&mut self, text: &str) -> ApplyReport {
+        let mut next = self.clone();
+        let mut errors = Vec::new();
+        for (i, raw) in text.lines().enumerate() {
+            let line = raw.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            let (name, value) = match line.split_once('=') {
+                Some((n, v)) => (n.trim(), v.trim()),
+                None => match line.split_once(char::is_whitespace) {
+                    Some((n, v)) => (n.trim(), v.trim()),
+                    None => (line, ""),
+                },
+            };
+            if name == "preset" {
+                match QualityTier::from_name(value) {
+                    Some(tier) => next = Self::preset(tier),
+                    None => errors.push((
+                        i + 1,
+                        format!("preset takes one of low, medium, high, ultra (not {value:?})"),
+                    )),
+                }
+            } else if let Err(e) = next.set(name, value) {
+                errors.push((i + 1, e.to_string()));
+            }
+        }
+        if !errors.is_empty() {
+            return ApplyReport {
+                changed: Vec::new(),
+                errors,
+            };
+        }
+        let changed = Self::options()
+            .into_iter()
+            .map(|o| o.name)
+            .filter(|n| self.get(n) != next.get(n))
+            .collect();
+        *self = next;
+        ApplyReport { changed, errors }
+    }
+}
+
 impl Default for QualitySettings {
     /// The `High` preset.
     fn default() -> Self {
@@ -801,6 +877,98 @@ mod tests {
             assert!(s.validate().is_err());
             s = QualitySettings::default();
         }
+    }
+
+    // ---- settings text ----------------------------------------------------------------------------------
+
+    #[test]
+    fn a_settings_text_applies_a_preset_then_the_lines_after_it() {
+        let mut s = QualitySettings::preset(QualityTier::Ultra);
+        let report = s.apply_text("preset = low\nshadows = medium\nrender_scale 0.9\n");
+        assert!(report.is_ok(), "{report:?}");
+        assert_eq!(s.get("shadows").as_deref(), Some("medium"));
+        assert_eq!(s.get("render_scale").as_deref(), Some("0.9"));
+        assert_eq!(
+            s.get("bloom").as_deref(),
+            Some("off"),
+            "everything else is low"
+        );
+        assert_eq!(s.tier_matching(), None);
+        // A line before the preset is replaced by it.
+        let mut t = QualitySettings::default();
+        assert!(t.apply_text("bloom = off\npreset = ultra").is_ok());
+        assert_eq!(t, QualitySettings::preset(QualityTier::Ultra));
+    }
+
+    #[test]
+    fn comments_blank_lines_crlf_and_spacing_are_all_fine() {
+        let mut s = QualitySettings::default();
+        let text = "# graphics\r\n\r\n   shadows   =   off   # no shadows\r\nanisotropy 2\r\n\t\r\n#bloom = off\r\n";
+        let report = s.apply_text(text);
+        assert!(report.is_ok(), "{report:?}");
+        assert_eq!(
+            (s.shadows, s.anisotropy, s.bloom),
+            (ShadowQuality::Off, 2, true)
+        );
+        assert_eq!(report.changed, ["shadows", "anisotropy"]);
+    }
+
+    #[test]
+    fn the_report_lists_only_what_actually_changed_in_option_order() {
+        let mut s = QualitySettings::default(); // high
+        let report =
+            s.apply_text("max_decals = 400\nbloom = off\nshadows = medium\nanti_aliasing = msaa4");
+        // High already has 400 decals and medium shadows, so only the anti-aliasing and the bloom change.
+        assert_eq!(report.changed, ["anti_aliasing", "bloom"], "{report:?}");
+    }
+
+    #[test]
+    fn one_bad_line_applies_nothing_and_every_bad_line_is_reported_with_its_number() {
+        let mut s = QualitySettings::default();
+        let before = s.clone();
+        let report = s.apply_text("shadows = high\nbloom = maybe\n\n# fine\nnonsense = 1\npreset = extreme\nrender_scale = 0.75\n");
+        assert!(!report.is_ok());
+        assert_eq!(s, before, "nothing was applied");
+        assert!(report.changed.is_empty());
+        let lines: Vec<usize> = report.errors.iter().map(|(n, _)| *n).collect();
+        assert_eq!(lines, [2, 5, 6]);
+        assert!(
+            report.errors[0].1.starts_with("bloom"),
+            "{:?}",
+            report.errors[0]
+        );
+        assert!(report.errors[1].1.contains("nonsense"));
+        assert!(report.errors[2].1.contains("extreme"));
+    }
+
+    #[test]
+    fn empty_text_and_a_name_without_a_value_are_handled() {
+        let mut s = QualitySettings::default();
+        let before = s.clone();
+        assert!(
+            s.apply_text("").is_ok() && s.apply_text("  \n# only a comment\n").changed.is_empty()
+        );
+        assert_eq!(s, before);
+        let report = s.apply_text("shadows");
+        assert_eq!(
+            report.errors.len(),
+            1,
+            "a name with no value is an error: {report:?}"
+        );
+        assert_eq!(s, before);
+        assert!(s.apply_text("preset").errors[0].1.contains("preset"));
+        // The last of two lines for one setting wins.
+        assert!(s.apply_text("anisotropy = 2\nanisotropy = 4").is_ok());
+        assert_eq!(s.anisotropy, 4);
+    }
+
+    #[test]
+    fn applying_the_same_text_twice_changes_nothing_the_second_time() {
+        let mut s = QualitySettings::default();
+        let text = "preset = medium\nlod_bias = 1.5\n";
+        assert!(!s.apply_text(text).changed.is_empty());
+        let again = s.apply_text(text);
+        assert!(again.is_ok() && again.changed.is_empty());
     }
 
     // ---- dynamic resolution ----------------------------------------------------------------------

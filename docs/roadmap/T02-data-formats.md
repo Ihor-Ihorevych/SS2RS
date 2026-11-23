@@ -24,6 +24,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-010** · Loader registry & extension → loader mapping; plugin-style registration per format crate · `S` · `P0`
 - [ ] **T02-011** · Cooked cache: processed-asset store with content hash, invalidation on archive/version change, background cooking · `L` · `P1`
 - [ ] **T02-011b** · Hot reload of loose files (dev mode) · `S` · `P2` · 🟢
+  - Note: the change detection it needs exists as `ss2_core::hotreload::FileWatcher` (T04-033); what is left is the virtual file system part (re-resolving a loose file, invalidating caches).
 
 ## Asset format loaders (each: crate + spec ID + fuzz target + data-gated full-install test)
 - [x] **T02-012** · `.tex` → CPU image + mip chain + metadata · `M` · `P0` · Deps: T01-006 — new crate `ss2-format-tex` (`Texture`, `TexLoader`): all 2,563 version-8 textures of the retail install load (31 cube maps); the 125 old-version ones need T01-083

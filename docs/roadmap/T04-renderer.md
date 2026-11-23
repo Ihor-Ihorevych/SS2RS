@@ -60,7 +60,8 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 - [x] **T04-028** · Screenshot/capture, photo mode hooks · `S` · `P3` · 🟢
   F12 writes a PNG. Photo tooling can request capture without the UI draw list.
 - [ ] **T04-032** · GLES3 fallback validation (naga output limits, UBO sizes, no compute) and device blocklist · `M` · `PHASE 2`
-- [~] **T04-033** [INPRG @Ihor-Ihorevych/agent · branch `T04-033-settings-hot-reload` · 2026-11-23] · Render settings hot-reload, shader hot-reload · `S` · `P2`
+- [x] **T04-033** · Render settings hot-reload, shader hot-reload: `ss2_core::hotreload::FileWatcher` (settled change detection, editor-save safe) and `QualitySettings::apply_text` (all-or-nothing settings text with a report of what changed) (`docs/HOT_RELOAD.md`); **settings reload is covered as logic only; shader hot reload is NOT done (it needs the shader and pipeline code), and nothing reads real file times yet** (T04-033b) · `S` · `P2`
+- [ ] **T04-033b** · Wire the hot reload: read real modification times and poll on a timer in dev mode, a graphics settings file that the app loads and reloads, and **shader hot reload** (recompile on change, rebuild the pipelines that use it, keep the old one if the new source fails) · `S` · `P2` · Deps: T04-033, T04-007, T05-008
 - [x] **T04-034** · Multi-view split-screen (couch co-op)? decision RFC only · `S` · `P3`
   Decision recorded in [RFC 0011](../rfcs/0011-split-screen.md).
 
