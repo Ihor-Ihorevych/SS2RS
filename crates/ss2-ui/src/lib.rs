@@ -21,6 +21,9 @@ pub mod layout;
 pub mod loading;
 mod pointer;
 pub mod scale;
+pub mod session_screens;
+#[cfg(test)]
+mod session_screens_tests;
 pub mod settings_model;
 mod skin;
 pub mod subtitles;
