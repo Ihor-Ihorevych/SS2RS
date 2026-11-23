@@ -13,6 +13,8 @@
 //! 2. **The type system and value decoder** ([`TypeSystem`], [`Container::decode_objects`],
 //!    T02-007): decodes every object into a generic [`Value`] tree using only the file's own type
 //!    table. A typed layer on top of the tree is the job of later tasks (T02-008b).
+//! 3. **The writer** ([`write()`], T02-008): the inverse of both, byte for byte: for fixtures,
+//!    tools and a cooked cache.
 //!
 //! Format versions 4 to 8 are read (versions 4 to 7 only occur in 155 old `.tex` files of the
 //! patches). The specs: `docs/re/ctsemeta-container.md`, `ctsemeta-types.md`,
@@ -36,6 +38,7 @@
 mod container;
 mod decode;
 mod value;
+mod writer;
 
 pub use container::{
     ArrayDims, Build, Container, ExternalObject, ExternalType, FLAG_PARAMETER_REFERENCE, FileRef,
@@ -43,3 +46,4 @@ pub use container::{
 };
 pub use decode::{Decoded, FlatMember, TypeSystem};
 pub use value::{Object, Struct, Value};
+pub use writer::write;
