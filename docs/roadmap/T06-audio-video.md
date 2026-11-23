@@ -6,7 +6,7 @@ PC first; mobile audio/memory work is Phase 2.
 
 ## Audio engine (Wave 0)
 - [ ] **T06-001** · Output device + mixer thread (`cpal`): sample-rate conversion, buffer sizing, device change/loss recovery, headless null device for servers/tests · `L` · `P0`
-- [ ] **T06-002** · Decoders: PCM/IMA-ADPCM `.wav`, Vorbis `.ogg` (symphonia/lewton), streaming vs fully-decoded policy by size · `M` · `P0` · 🟢
+- [~] **T06-002** [INPRG @Ihor-Ihorevych/agent · branch `T06-002-audio-decoders` · 2026-11-23] · Decoders: PCM/IMA-ADPCM `.wav`, Vorbis `.ogg` (symphonia/lewton), streaming vs fully-decoded policy by size · `M` · `P0` · 🟢
 - [x] **T06-013** · Offline renderer: run the mixer to a WAV buffer deterministically; golden-audio tests with tolerance: `ss2_audio::{render_offline, wav, compare}` (`docs/MIXER.md`): deterministic rendering, WAV writing, a peak and RMS tolerance, an analytic golden test; **no stored golden files yet** (T06-013b) · `M` · `P1`
 - [ ] **T06-013b** · Stored golden-audio files for scenes without a closed form, and a cross-architecture check of the tolerance (with T07-026) · `S` · `P1` · Deps: T06-013
 - [ ] **T06-003** · 3D positional audio: distance attenuation curves (from T01-034), panning, occlusion low-pass, Doppler, listener orientation · `L` · `P0`
