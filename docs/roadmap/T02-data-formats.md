@@ -32,7 +32,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [~] **T02-015** [INPRG @lxstyo/agent · branch `T02-015-skl-skeleton-loader` · 2026-11-23] · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
 - [ ] **T02-016** · `.ans` animation loader + sampling API (pose evaluation, events) · `L` · `P0` · Deps: T01-010
 - [ ] **T02-017** · `.mdl` model loader (links mesh/skeleton/materials/LOD/collision) · `L` · `P0` · Deps: T01-008, T02-014/015
-- [ ] **T02-018** · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011
+- [~] **T02-018** [INPRG @lxstyo · branch `T02-018-mtr-material-preset-loader` · 2026-11-23] · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011
 - [ ] **T02-019** · `.mat` physical material loader, `.scs` sound collection loader · `S` · `P1` · Deps: T01-013
 - [ ] **T02-020** · `.wld` world loader — split: **a** geometry, **b** lighting/lightmaps, **c** visibility/sectors, **d** entity records, **e** navigation data · `XL` · `P0` · Deps: T01-012a-f (f = the world root, the others hang off it)
 - [ ] **T02-021** · World streaming/lazy resource resolution (avoid loading 100+ MB at once; matters most on low-RAM PCs and later mobile) · `M` · `P1`
