@@ -61,9 +61,9 @@ so I added the boundary and name tests and fixed the mutation scripts that had s
 
 ## The screen matrix (T10-015)
 
-`crates/ss2-render/tests/golden_screens.rs` photographs **six screens at five sizes**, thirty goldens (`menu_<screen>_<w>x<h>.png`, `ui_<screen>_<w>x<h>.png`, about 1.4 MB in all):
+`crates/ss2-render/tests/golden_screens.rs` photographs **ten screens at five sizes**, fifty goldens (`menu_<screen>_<w>x<h>.png`, `ui_<screen>_<w>x<h>.png`, about 2.3 MB in all):
 
-- the screens: the four menu screens (main, options, pause, about), the **developer console** with scrollback in all three line colours and typed text, and the **frame-time overlay** over the main menu;
+- the screens: the four menu screens (main, options, pause, about), the **developer console** with scrollback in all three line colours and typed text, the **frame-time overlay** over the main menu, and the **death screens** (solo, and co-op with a countdown) and the **end-of-level summary** (finished, and part-way through its count) of `docs/SESSION_SCREENS.md`;
 - the sizes: **three resolutions at 16:9** (1280x720, 1920x1080, 2560x1440), **21:9** (2560x1080, pillarboxed) and **4:3** (1024x768, letterboxed).
 
 Each image is also checked **without** a golden, so that regenerating a golden cannot hide a fault: it has the size asked for; the bars outside the canvas are exactly the background colour (and there are bars exactly when the window is not 16:9); the canvas is centred; and on a menu the focused button is orange at the place `Canvas::fit` puts it. One more test checks that the 1280x720 and 2560x1440 pictures of the main menu agree pixel for pixel on every flat region (the same layout at 1x and 2x), and one that a different screen fails against each size's golden. `every_screen_has_a_golden_at_every_size` needs **no adapter**: a golden missing from the matrix fails even where the rendering tests skip.
