@@ -1,6 +1,6 @@
 //! Writing CTSEMETA files back (roadmap T02-008).
 //!
-//! [`write`] is the inverse of [`Container::parse`] plus [`Container::decode_objects`]: writing a
+//! [`write()`] is the inverse of [`Container::parse`] plus [`Container::decode_objects`]: writing a
 //! file that was just read gives the **same bytes** (checked on every container of the retail
 //! install). It also writes edited or newly built data, for fixtures, tools and a cooked cache.
 
@@ -202,7 +202,7 @@ pub fn write(container: &Container<'_>, decoded: &Decoded) -> Result<Vec<u8>> {
 
 impl Container<'_> {
     /// Set the four counts of [`Container::info`] from the tables (the flag is kept). Call it
-    /// after adding or removing files, identifiers, types or objects and before [`write`].
+    /// after adding or removing files, identifiers, types or objects and before [`write()`].
     pub fn refresh_info(&mut self) {
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         self.info.file_count = count(self.files.len());
