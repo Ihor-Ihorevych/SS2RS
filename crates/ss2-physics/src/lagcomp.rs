@@ -159,13 +159,11 @@ impl LagCompensator {
         tick: u32,
         colliders: Vec<DynamicCollider>,
     ) -> Result<(), LagCompError> {
-        if let Some(newest) = self.newest_tick() {
-            if tick <= newest {
-                return Err(LagCompError::NotNewer {
-                    newest,
-                    given: tick,
-                });
-            }
+        if let Some(newest) = self.newest_tick().filter(|&newest| tick <= newest) {
+            return Err(LagCompError::NotNewer {
+                newest,
+                given: tick,
+            });
         }
         let mut world = QueryWorld::new();
         world.set_dynamic(colliders);
