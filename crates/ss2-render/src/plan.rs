@@ -160,12 +160,6 @@ impl<'a> Builder<'a, '_> {
         let Some(scissor) = self.scissor() else {
             return;
         };
-        // Sampling does not matter for a flat quad: all flat quads share one.
-        let filter = if image.is_none() {
-            Filter::Nearest
-        } else {
-            filter
-        };
         let first = self.plan.vertices.len() as u32;
         add(&mut self.plan.vertices, self.canvas);
         let end = self.plan.vertices.len() as u32;

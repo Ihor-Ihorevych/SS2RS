@@ -407,6 +407,32 @@ mod tests {
     }
 
     #[test]
+    fn the_height_limit_is_the_targets_height_not_its_width() {
+        let c = unit_canvas();
+        // A tall target (32 wide, 64 high): a rectangle from y = 40 keeps its top edge, and one below the target is empty.
+        assert_eq!(
+            to_pixels(rect(0.0, 40.0, 10.0, 10.0), &c, (32, 64)),
+            Some(PixelRect {
+                x: 0,
+                y: 40,
+                w: 10,
+                h: 10
+            })
+        );
+        assert_eq!(to_pixels(rect(0.0, 70.0, 10.0, 10.0), &c, (32, 64)), None);
+        // A wide one (64 wide, 32 high): a rectangle from x = 40 keeps its left edge.
+        assert_eq!(
+            to_pixels(rect(40.0, 0.0, 10.0, 10.0), &c, (64, 32)),
+            Some(PixelRect {
+                x: 40,
+                y: 0,
+                w: 10,
+                h: 10
+            })
+        );
+    }
+
+    #[test]
     fn huge_and_degenerate_rectangles_do_not_overflow() {
         let c = unit_canvas();
         assert_eq!(
