@@ -50,6 +50,10 @@ Forty-eight unit tests in the crate (twenty-two of them new with this task), **r
 - **On a real device:** `device.destroy()` on a live offscreen renderer: the next frame rebuilds it and **draws the identical picture**, twice in a row; a device destroyed in a loop ends in `DeviceLost` after exactly three rebuilds; a healthy renderer never rebuilds; `render()` notices a lost device before anything else; and the report of a real device is filled in.
 - **Sixteen deliberate breakages** of the logic and the Renderer wiring: thirteen failed a test at once (including dropping the no-wait poll, which shows that the callback needs it); **three survived my first tests** and are now covered: the tier order of the request, the word `integrated`, and the device check at the start of `render`.
 
+## A hang found afterwards, and its fix
+
+Twice, in full workspace test runs made while the machine was busy, the `ss2-render` lib test process stalled for over half an hour in its GPU tests (they create devices, and some destroy them, and the tests of one process run in parallel). It did not happen in 25 quiet runs. **Reproduced** by running six copies of the test binary at once, five rounds: **3 of 30 runs hung** (killed at 90 s). Every test that makes or destroys a device now takes one process-wide lock (`gpu::gpu_test_guard`), as the integration tests already did for the software adapter; the same load gives **0 of 30 hangs**. The cause inside wgpu or the driver was not found, so this is a fix of the symptom (devices of one process are no longer created and destroyed at the same time), and nothing says the renderer itself cannot hit it if a game ever does the same from two threads.
+
 ## Not covered (follow-up T04-001b)
 
 - **A real window.** The windowed path (a lost or outdated surface, a rebuild with a surface) is the same code as the offscreen one plus the surface calls, and the tracker that drives it is tested, but **nothing here opened a window and lost it** (a minimise, a resolution change that makes the surface outdated, Android's suspend and resume).

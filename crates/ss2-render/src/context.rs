@@ -699,6 +699,7 @@ mod tests {
 
     #[test]
     fn floating_point_target_can_be_captured_as_rgba8() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let config = GpuConfig::from_env();
         let instance = gpu::make_instance(&config, None);
         let format = wgpu::TextureFormat::Rgba16Float;
@@ -756,6 +757,7 @@ mod tests {
 
     #[test]
     fn a_device_that_is_destroyed_is_rebuilt_and_the_same_picture_comes_out() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let Some(mut renderer) = offscreen_or_skip((160, 90)) else {
             return;
         };
@@ -791,6 +793,7 @@ mod tests {
 
     #[test]
     fn a_device_that_keeps_being_lost_ends_in_an_error_not_an_endless_loop() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
             return;
         };
@@ -817,6 +820,7 @@ mod tests {
 
     #[test]
     fn render_looks_for_a_lost_device_before_anything_else() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
             return;
         };
@@ -829,6 +833,7 @@ mod tests {
 
     #[test]
     fn a_healthy_renderer_never_rebuilds() {
+        let _gpu = crate::gpu::gpu_test_guard();
         let Some(mut renderer) = offscreen_or_skip((32, 32)) else {
             return;
         };
