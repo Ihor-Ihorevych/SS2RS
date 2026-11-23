@@ -304,7 +304,7 @@ impl ConsoleView {
                     x: PADDING,
                     y: PADDING + (first_row + i) as f32 * LINE_HEIGHT,
                 },
-                text: line.text.clone(),
+                text: line.text.clone().into(),
                 size: TEXT_SIZE,
                 color,
                 align: TextAlign::Left,
@@ -319,7 +319,7 @@ impl ConsoleView {
                 x: PADDING,
                 y: PANEL_HEIGHT - PROMPT_HEIGHT,
             },
-            text: prompt,
+            text: prompt.into(),
             size: TEXT_SIZE,
             color: Color([1.0, 1.0, 1.0, 1.0]),
             align: TextAlign::Left,
@@ -460,7 +460,7 @@ pub fn draw_overlay(lines: &[String], corner: Corner) -> DrawList {
                 x: x + 8.0,
                 y: y + 6.0 + i as f32 * ROW,
             },
-            text: line.clone(),
+            text: line.clone().into(),
             size: 18.0,
             color: Color([0.9, 1.0, 0.9, 1.0]),
             align: TextAlign::Left,
@@ -511,7 +511,7 @@ mod tests {
     fn texts(list: &DrawList) -> Vec<String> {
         list.texts
             .iter()
-            .map(|t: &TextRun| t.text.clone())
+            .map(|t: &TextRun| t.text.to_string())
             .collect()
     }
 

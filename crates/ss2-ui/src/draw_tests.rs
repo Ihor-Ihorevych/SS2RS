@@ -36,7 +36,7 @@ fn draw_has_title_and_one_label_per_button() {
         .draw()
         .texts
         .into_iter()
-        .map(|t| t.text)
+        .map(|t| t.text.into_owned())
         .collect();
     for want in ["SS2RS", "New Game", "Options", "About", "Quit"] {
         assert!(

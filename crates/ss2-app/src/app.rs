@@ -26,6 +26,8 @@ const PLAYING_CLEAR: Color = Color([0.02, 0.03, 0.05, 1.0]);
 struct App {
     state: AppState,
     menu: Menu,
+    /// Reused every frame, so that drawing a screen allocates nothing (`docs/UI_BUDGET.md`).
+    draw_list: DrawList,
     settings_path: Option<PathBuf>,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
@@ -75,6 +77,7 @@ pub fn run(
     let mut app = App {
         state: AppState::new(settings.clone()),
         menu: Menu::new(settings),
+        draw_list: DrawList::default(),
         settings_path,
         window: None,
         renderer: None,
@@ -169,15 +172,21 @@ impl App {
     fn redraw(&mut self, event_loop: &ActiveEventLoop) {
         profiling::frame();
         profiling::profile_scope!("redraw");
-        let (list, clear) = match self.state.scene {
-            Scene::Menu => (self.menu.draw(), theme::BACKGROUND),
-            Scene::Playing => (DrawList::default(), PLAYING_CLEAR),
+        let clear = match self.state.scene {
+            Scene::Menu => {
+                self.menu.draw_into(&mut self.draw_list);
+                theme::BACKGROUND
+            }
+            Scene::Playing => {
+                self.draw_list.clear();
+                PLAYING_CLEAR
+            }
         };
         let rendered = {
             profiling::profile_scope!("render");
             self.renderer
                 .as_mut()
-                .map(|renderer| renderer.render(&list, clear))
+                .map(|renderer| renderer.render(&self.draw_list, clear))
         };
         if let Some(Err(e)) = rendered {
             self.failure = Some(format!("rendering failed: {e}"));

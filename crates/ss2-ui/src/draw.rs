@@ -1,5 +1,7 @@
 //! The renderer-independent output of the UI: quads and text runs in canvas units.
 
+use std::borrow::Cow;
+
 use crate::geometry::{Rect, Vec2};
 
 /// Linear RGBA color, each channel 0.0..=1.0.
@@ -29,8 +31,8 @@ pub enum TextAlign {
 pub struct TextRun {
     /// Anchor position (top edge; horizontal meaning depends on `align`).
     pub pos: Vec2,
-    /// The text.
-    pub text: String,
+    /// The text. Fixed labels are borrowed (`Cow::Borrowed`) so that drawing them allocates nothing; text built at run time is owned.
+    pub text: Cow<'static, str>,
     /// Font size in canvas units.
     pub size: f32,
     /// Text color.
@@ -48,9 +50,44 @@ pub struct DrawList {
     pub texts: Vec<TextRun>,
 }
 
+impl DrawList {
+    /// Empty the list **keeping its capacity**, so that filling it again each frame does not allocate (`docs/UI_BUDGET.md`).
+    pub fn clear(&mut self) {
+        self.quads.clear();
+        self.texts.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clear_empties_the_list_and_keeps_its_capacity() {
+        let mut l = DrawList::default();
+        for i in 0..10 {
+            l.quads.push(Quad {
+                rect: Rect {
+                    x: i as f32,
+                    y: 0.0,
+                    w: 1.0,
+                    h: 1.0,
+                },
+                color: Color([1.0; 4]),
+            });
+            l.texts.push(TextRun {
+                pos: Vec2 { x: 0.0, y: 0.0 },
+                text: "x".into(),
+                size: 10.0,
+                color: Color([1.0; 4]),
+                align: TextAlign::Left,
+            });
+        }
+        let (qc, tc) = (l.quads.capacity(), l.texts.capacity());
+        l.clear();
+        assert!(l.quads.is_empty() && l.texts.is_empty());
+        assert_eq!((l.quads.capacity(), l.texts.capacity()), (qc, tc));
+    }
 
     #[test]
     fn draw_list_default_is_empty() {
