@@ -41,6 +41,7 @@ mod culling;
 mod debug_draw;
 pub mod frame_graph;
 pub mod frame_timing;
+pub mod gpu_resources;
 mod ids;
 pub mod lod;
 pub mod quality;
