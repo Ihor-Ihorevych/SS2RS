@@ -17,6 +17,8 @@ struct Layer {
 /// Several [`Vfs`] layers presented as one. **The most recently mounted layer wins**.
 ///
 /// - A file present in several layers comes from the topmost one.
+/// - Lookup falls back to a lower layer when the path is absent. Other errors from the active
+///   layers are returned to the caller.
 /// - A directory is the union of that directory in every layer where it is a directory, so
 ///   listings merge; a name present in several layers appears once.
 /// - If the topmost layer that knows a path has a **file** there, that file shadows a directory
@@ -48,16 +50,24 @@ impl LayeredVfs {
     }
 
     /// Name of the topmost layer that provides `path` (a file or a directory), if any.
+    /// Returns `None` if lookup fails. Use [`Vfs::stat`] to inspect the error.
     pub fn source_of(&self, path: &VfsPath) -> Option<&str> {
-        self.find(path).map(|(layer, _)| layer.name.as_str())
+        self.find(path)
+            .ok()
+            .flatten()
+            .map(|(layer, _)| layer.name.as_str())
     }
 
     /// The topmost layer that has anything at `path`, with what it has there.
-    fn find(&self, path: &VfsPath) -> Option<(&Layer, Stat)> {
-        self.layers
-            .iter()
-            .rev()
-            .find_map(|layer| layer.vfs.stat(path).ok().map(|stat| (layer, stat)))
+    fn find(&self, path: &VfsPath) -> Result<Option<(&Layer, Stat)>> {
+        for layer in self.layers.iter().rev() {
+            match layer.vfs.stat(path) {
+                Ok(stat) => return Ok(Some((layer, stat))),
+                Err(Error::NotFound(_)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -69,13 +79,13 @@ impl Vfs for LayeredVfs {
                 size: 0,
             });
         }
-        self.find(path)
+        self.find(path)?
             .map(|(_, stat)| stat)
             .ok_or_else(|| Error::NotFound(path.to_string()))
     }
 
     fn open(&self, path: &VfsPath) -> Result<Box<dyn ReadSeek>> {
-        match self.find(path) {
+        match self.find(path)? {
             Some((
                 layer,
                 Stat {
@@ -88,7 +98,7 @@ impl Vfs for LayeredVfs {
     }
 
     fn read(&self, path: &VfsPath) -> Result<Vec<u8>> {
-        match self.find(path) {
+        match self.find(path)? {
             Some((
                 layer,
                 Stat {
@@ -103,7 +113,7 @@ impl Vfs for LayeredVfs {
     fn list(&self, dir: &VfsPath) -> Result<Vec<DirEntry>> {
         if !dir.is_root()
             && !matches!(
-                self.find(dir),
+                self.find(dir)?,
                 Some((
                     _,
                     Stat {

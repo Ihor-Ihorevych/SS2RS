@@ -38,6 +38,7 @@ pub struct MemoryVfs;                           // mock / test double
 - **`open` returns `Box<dyn ReadSeek>`** (`Read + Seek + Send`). This is the seam T02-005 needs: memory-mapped, buffered, or (Phase 2) Android content-URI backends all fit behind it without touching loaders. `read` is a convenience; backends may override it.
 - **`list` is sorted and merged across layers** so overrides (`Patch_*` over `All_PC_*`, mods) and directory merges (T02-002) are invisible to callers and deterministic.
 - Mount/layer management is **not** part of the trait. Constructing and layering a concrete VFS is the app's job (T02-002/003); consumers only see `Arc<dyn Vfs>`.
+- **Loose directories.** Mount a local folder with `DirectoryVfs::new(path)` and pass it to `LayeredVfs::mount` to give it priority over archives mounted earlier. Lookups use normalized names and read the current filesystem, including any files added after mounting. Files stream through `File`, and directory listings omit symbolic links and special files. Case-colliding entries in the same host directory are reported as invalid.
 
 ### `ss2-assets`
 
