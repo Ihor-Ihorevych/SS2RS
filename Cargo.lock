@@ -2728,6 +2728,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-fnt"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-tex",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-mat"
 version = "0.0.0"
 dependencies = [
