@@ -93,7 +93,17 @@ that `ss2-ui` can name without depending on `wgpu` (`ImageHandle` is a plain num
 
 ## How it was tested
 
-*(The numbers are filled in at the end of this section.)*
+**Pure code, no GPU** (`nine_slice.rs`, `scissor.rs`, `plan.rs`, `ui_frame.rs`, `images.rs`, `batch.rs`): 113 unit tests of `ss2-render`'s lib that need no adapter (the lib has 141 tests with the 28 GPU ones): every rule above, including NaN and infinite inputs, sizes down to 1e-6, the cap on tiling, the pixel rule of the scissor at scale 2/3, the batch counts of the sample scenes, the loop check and the replay order.
+
+**GPU, pixel assertions on pictures made in code** (`ui_gpu_tests.rs`, 28 tests): a checkerboard drawn 1:1 is pixel exact and nothing lies outside it; 5x enlargement replicates texels; linear blends where nearest does not; tint and alpha; a 9-slice at five sizes (24x24 to 300x200) keeps **every corner pixel**, stretches the edges and centre (centre pixel count exact) and covers exactly `w * h` pixels; a scissored quad covers exactly the rectangle, **including the pixel just outside on all eight sides**; a fractional clip is compared with a per-pixel centre test; nested clips; empty clips; clipped images and 9-slices; text clipped (no text pixel outside the clip, and the same pixels inside as unclipped); text ordering against quads; a target drawn back equals drawing in place; semi-transparent targets; nested targets; the loop errors; bad requests; recovery after `device.destroy()` twice (image, 9-slice, scissored text, target, target from target: **identical frames**), replay order against handle order, a destroyed source image; BGRA and `Rgba16Float` targets.
+
+**Golden screens:** fifteen new goldens (`docs/GOLDEN_IMAGES.md`), looked at with my own eyes (two flaws in the first drafts, a label overlapping a panel and a clip window off its picture, were fixed before committing).
+
+**Adapters** (this Windows machine; the lib tests and `golden_screens` + `golden_menu`): software (WARP), Vulkan (NVIDIA), DX12 and GL all pass: lib 141 tests (53 s, 15 s, 52 s, 7 s), `golden_screens` 23 tests (214 s, 136 s, 111 s, 70 s) and `golden_menu` 7. The goldens were made on the software adapter and needed no tolerance change.
+
+**Mutation check of the pure code:** 71 single breakages (boundaries, swapped operators, removed guards, wrong uv, wrong limits, merge conditions, loop checks, order) of the six files above, each run against the pure tests: **62 killed**, 9 not. Of those nine: **one compiled badly** (`high_len >= 0.0` on a float-typed comparison I wrote wrongly; I re-ran it in a corrected form and it was **killed**); **one was a real gap** (the `y` limit taken from the target's width: I added a test and the re-run was **killed**, as were the `x` and `x1` variants); **one was dead code** (the flat-quad sampling normalisation in the planner changed nothing, so I **removed** it); and **six are equivalent** breakages that change no result: `low + high >= size` and `centre_len < 0.0` (equal values give the same cells either way), `high_len *= f` (equals `len - low_len` by construction), a zero-width or zero-height destination with `>=` (it yields no cells anyway), and `e.min(limit)` without the lower clamp (a negative float cast to `u32` saturates to 0). A mutant of the loop search that removes the `seen` check ended by timeout (it hangs), which I count as killed. I did **not** rerun all 71 after the fixes, only the four named above.
+
+**Gate** (on the merged tree, see the PR): fmt, clippy `-D warnings` on the workspace, `cargo test --workspace --locked` (2469 passed, 0 failed), `cargo deny`, `cargo xtask guard`, `check-claims`, `cargo doc -D warnings`, mdbook and the link check, DCO.
 
 ## Not covered (follow-up T04-017b and later)
 
