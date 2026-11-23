@@ -31,7 +31,7 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [ ] **T10-007b** · Wire the developer console and overlays into the app: map key and text events to `ConsoleKey` and `handle_text`, the console toggle key, draw order, feed `FrameStats`, cvars `r_show_fps` and `net_graph`, a golden screenshot of the console, the network and GPU timing overlays (T08-018b, T04-019) · `S` · `P1` · Deps: T10-007, T03-033
 - [ ] **T10-008** · Netricsa UI (T09-011 data) · `M` · `P2`
 - [ ] **T10-013** · Text effects (`.tfx`): in-game conversation/subtitle styles, typewriter effects · `M` · `P2`
-- [ ] **T10-014** · Co-op overlays: scoreboard, chat, player names/health over heads, ping markers, voice indicators · `M` · `P1`
+- [~] **T10-014** [INPRG @Ihor-Ihorevych/agent · branch `T10-014-coop-overlays` · 2026-11-23] · Co-op overlays: scoreboard, chat, player names/health over heads, ping markers, voice indicators · `M` · `P1`
 - [ ] **T10-021** · Cutscene overlays: letterbox, skip prompt, subtitles (T06-012) · `S` · `P2`
 
 ## Localization & accessibility

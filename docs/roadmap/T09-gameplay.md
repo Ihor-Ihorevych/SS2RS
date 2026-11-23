@@ -38,7 +38,7 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 ## Level logic
 - [ ] **T09-021** · Trigger/event I/O system: outputs → inputs, delays, once/multi, activators, conditions · `L` · `P0` · Deps: T01-030
 - [ ] **T09-022** · Mechanism gameplay (doors, lifts, switches, locks/keys) on top of T07-012 · `M` · `P1`
-- [ ] **T09-023** · Checkpoints, secrets, level stats, kill/secret counters, end-of-level summary · `M` · `P1`
+- [~] **T09-023** [INPRG @Ihor-Ihorevych/agent · branch `T09-023-level-progress` · 2026-11-23] · Checkpoints, secrets, level stats, kill/secret counters, end-of-level summary · `M` · `P1`
 - [ ] **T09-024** · Scripted sequences & in-engine cutscenes: camera paths, actor scripting, letterbox, skip, co-op sync · `L` · `P2` · Deps: T01-035
 - [ ] **T09-025** · Level transitions & campaign progression: level list, carry-over inventory, difficulty carry, unlocks · `M` · `P1`
 - [ ] **T09-026** · Environmental hazards & destructibles gameplay · `M` · `P2`
