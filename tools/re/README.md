@@ -291,3 +291,9 @@ Menu evidence (docs/re/gui.md, menus-tables.md):
 ```
 python -I tools/re/menus_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/menus-tables.md]    # the 99 menu screen layouts: gadgets, link graph, platform masks, button bars (about 1 minute)
 ```
+
+Main loop and time evidence (docs/re/main-loop.md):
+
+```
+python -I tools/re/mainloop_verify.py "C:\path\to\Serious Sam 2"    # the configuration scripts of the install and every line that sets a timing variable (a few seconds); the loop itself is specified from the binaries and has no script
+```
