@@ -327,3 +327,9 @@ Brain classes (docs/re/brain-classes.md):
 ```
 python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
 ```
+
+Projectile classes (docs/re/projectile-classes.md):
+
+```
+python -I tools/re/projectile_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 32 exported projectile classes are in the data, the member order of 13 data classes against the names the binary declares, the value tables of the 94 projectile files, SPuppetProjectileParams, CLaunchVelocities and the global bullet and flame parameters, and the stored shooters, launchers and crumbs (about 6 minutes)
+```
