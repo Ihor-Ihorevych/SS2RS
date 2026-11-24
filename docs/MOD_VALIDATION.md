@@ -2,6 +2,7 @@
 
 - **Roadmap task:** T13-009 (follow-up T13-009b)
 - **Where:** `crates/ss2-vfs/src/modcheck.rs` (the checks), `crates/ss2-vfs/src/bin/ss2-doctor.rs` (the command)
+- **For mod authors:** [modder docs](modding/start-here.md): a tutorial with a checked example mod, and the cause and fix of every code ([troubleshooting](modding/troubleshooting.md))
 
 `ss2-doctor` checks an install ([user guide](user/install.md)). With `--mod` it also checks the mods of that
 install, or a mod folder you are working on, and tells you what is wrong **before** a player finds out: a
