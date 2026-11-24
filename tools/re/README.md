@@ -309,3 +309,9 @@ Replication evidence (docs/re/replication.md):
 ```
 python -I tools/re/replication_verify.py "C:\path\to\Serious Sam 2"    # decodes the 3 shipped demos to the last byte (message counts, the opening snapshot, per-step traffic, the share of empty updates) and counts configuration lines that set net_, ser_ or cli_ variables (a few seconds); the replication rules themselves are specified from the binaries and have no script
 ```
+
+Player, session and inventory classes (docs/re/players-session-classes.md):
+
+```
+python -I tools/re/players_session_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 52 exported classes of the family are in the data and under which name, that the other 42 are in no type table, the files that carry the resource classes, and the member order of SPlayerPuppetParams against the 24 names the binary declares (about 2 minutes; the class names it checks were read from the binary's export table, the script reads data only)
+```
