@@ -11,6 +11,14 @@
 - [FAQ](user/faq.md)
 - [Troubleshooting](user/troubleshooting.md)
 
+# Modding
+
+- [Start here: what a mod is, layout, load order](modding/start-here.md)
+- [File formats](modding/formats.md)
+- [Mod API reference](modding/api.md)
+- [Tutorial: the example mod](modding/tutorial.md)
+- [Troubleshooting: every ss2-doctor message](modding/troubleshooting.md)
+
 # Contributing
 
 - [Coding standards](CODING_STANDARDS.md)

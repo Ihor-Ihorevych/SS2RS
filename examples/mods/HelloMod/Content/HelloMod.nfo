@@ -1,0 +1,4 @@
+NAME = "Hello Mod" ;
+AUTHOR = "SS2RS example mod" ;
+THUMBNAIL = "Content/HelloMod/Textures/Checker.tex" ;
+LICENSE = "CC0-1.0" ;

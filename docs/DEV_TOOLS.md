@@ -47,7 +47,7 @@ track's work · **Optional** = nice to have.
 | **T06 audio/video** | **FFmpeg** | inspect/convert `.ogv`/audio when writing and verifying decoders | Role |
 | **T07/T08 physics/net** | `puffin_viewer` (T11-011; how to install and use it: `docs/PROFILING.md`) | frame/tick profiling | Optional |
 | T08 | A network conditioner (the repo's own netsim, T08-017) | no external tool needed | — |
-| **T13 mods** | `ss2-doctor --mod` (built from this repo: `cargo run -p ss2-vfs --bin ss2-doctor -- <install> --mod <Name>`; [Mod validation](MOD_VALIDATION.md)) | lints a mod for missing assets, bad references, version mismatch and conflicts | Optional |
+| **T13 mods** | `ss2-doctor --mod` (built from this repo: `cargo run -p ss2-vfs --bin ss2-doctor -- <install> --mod <Name>`; [Mod validation](MOD_VALIDATION.md)) | lints a mod for missing assets, bad references, version mismatch and conflicts; how to use it: [modder docs](modding/start-here.md) | Optional |
 | **T00/T12 infra & docs** | **`mdbook`** (`cargo install --locked mdbook`) | docs site (T00-020) | Role |
 | T12 | `cargo-miri` (nightly) | UB checks on any `unsafe` | Optional |
 

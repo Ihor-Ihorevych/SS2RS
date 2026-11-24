@@ -10,12 +10,13 @@ use anyhow::{Context, bail};
 
 /// Largest file allowed anywhere in the repository.
 pub const MAX_BYTES: u64 = 5 * 1024 * 1024;
-/// Largest file allowed under `testdata/` (hand-made fixtures only).
+/// Largest file allowed under `testdata/` and `examples/mods/` (hand-made fixtures only).
 pub const TESTDATA_MAX_BYTES: u64 = 256 * 1024;
 
 /// Extensions that are never allowed, not even as fixtures.
 const ALWAYS_FORBIDDEN: &[&str] = &["gro", "dll", "exe", "chm"];
-/// Game-data extensions: forbidden everywhere except tiny hand-made fixtures under `testdata/`.
+/// Game-data extensions: forbidden everywhere except tiny hand-made fixtures under `testdata/` and the
+/// invented example mods under `examples/mods/` (T13-010).
 const FIXTURE_ONLY: &[&str] = &["wld", "tex", "mdl", "bmf", "ogv", "xmv"];
 
 /// Why a path was rejected.
@@ -68,7 +69,7 @@ pub fn check_path(path: &str, size_bytes: u64) -> Option<Violation> {
     let normalized = path.replace('\\', "/");
     let normalized = normalized.trim_start_matches("./").to_string();
     let lower = normalized.to_ascii_lowercase();
-    let in_testdata = lower.starts_with("testdata/");
+    let in_testdata = lower.starts_with("testdata/") || lower.starts_with("examples/mods/");
     let violation = |reason| {
         Some(Violation {
             path: normalized.clone(),
@@ -255,6 +256,34 @@ mod tests {
         ));
         assert!(matches!(
             reason("testdata/a.dll", 100),
+            Some(Reason::ForbiddenExtension(_))
+        ));
+    }
+
+    #[test]
+    fn example_mods_may_hold_tiny_fixtures_but_never_archives_or_big_files() {
+        assert_eq!(
+            reason(
+                "examples/mods/HelloMod/Content/HelloMod/Textures/Checker.tex",
+                1000
+            ),
+            None
+        );
+        assert!(matches!(
+            reason("examples/mods/HelloMod/HelloMod.gro", 100),
+            Some(Reason::ForbiddenExtension(_))
+        ));
+        assert!(matches!(
+            reason("examples/mods/HelloMod/Bin/Game.dll", 100),
+            Some(Reason::ForbiddenExtension(_))
+        ));
+        assert!(matches!(
+            reason("examples/mods/HelloMod/big.tex", TESTDATA_MAX_BYTES + 1),
+            Some(Reason::TooLarge { limit, .. }) if limit == TESTDATA_MAX_BYTES
+        ));
+        // Only the folder `examples/mods/` is exempt, not any `examples/` folder.
+        assert!(matches!(
+            reason("examples/other/a.tex", 100),
             Some(Reason::ForbiddenExtension(_))
         ));
     }

@@ -83,7 +83,7 @@ the mods shipped in the `Content` folder. Those are not part of this repository.
   and documents. It does not license game content, and it does not decide the license of a mod.
 - **A mod that uses only the engine's public mod interface** is a separate work from the engine, and
   its license is the author's choice. The repository's docs do not yet define a public mod API
-  (T13-005, T13-010), and whether a given mod is a derivative work is a legal question. Mod authors
+  (T13-005; what exists today is in the [modder docs](modding/api.md)), and whether a given mod is a derivative work is a legal question. Mod authors
   who need certainty should ask their own advisor.
 - **Original content still has to stay original**: the license of a mod does not make game content
   redistributable.
