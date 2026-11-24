@@ -328,6 +328,12 @@ Brain classes (docs/re/brain-classes.md):
 python -I tools/re/brain_classes_verify.py "C:\path	o\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
 ```
 
+AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):
+
+```
+python -I tools/re/behavior_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 95 exported AI behaviour and action classes are in the data (45 by own name or S twin), their base, members and files, the member order of 14 classes against the binary's declared names, the objects of every class in the 82 .cb, 322 .ep and 59 .wld files with the stored value of every member, the term class on each action class and the movers of the bands (about 10 minutes; the class names it checks come from the binary's export table)
+```
+
 Puppet classes (docs/re/puppet-classes.md and its four companion pages):
 
 ```
