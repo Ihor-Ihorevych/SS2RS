@@ -23,7 +23,7 @@ const SELECTED: Color = Color([0.30, 0.33, 0.42, 1.0]);
 const DISABLED: Color = Color([0.11, 0.115, 0.13, 1.0]);
 /// A player row of the host's kick that waits for the second press.
 const ARMED: Color = Color([0.62, 0.20, 0.20, 1.0]);
-const DISABLED_TEXT: Color = Color([0.45, 0.46, 0.50, 1.0]);
+const DISABLED_TEXT: Color = Color([0.55, 0.56, 0.60, 1.0]);
 
 const LABEL: f32 = 36.0;
 const SMALL: f32 = 28.0;
@@ -319,7 +319,7 @@ impl Lobby {
             (470.0, "Level"),
             (800.0, "Players"),
             (940.0, "Ping"),
-            (1070.0, "Lock"),
+            (1110.0, "Lock"),
         ] {
             text(list, JOIN_X + x, 332.0, 24.0, DIM, TextAlign::Left, title);
         }
@@ -405,7 +405,13 @@ impl Lobby {
             r.x + 470.0,
             y + 2.0,
             SMALL,
-            if enabled { DIM } else { DISABLED_TEXT },
+            if focused {
+                theme::TEXT
+            } else if enabled {
+                DIM
+            } else {
+                DISABLED_TEXT
+            },
             TextAlign::Left,
             shorten_middle(&s.map, 14),
         );
@@ -430,10 +436,16 @@ impl Lobby {
         if s.locked {
             text(
                 list,
-                r.x + 1070.0,
+                r.x + 1110.0,
                 y,
                 32.0,
-                if enabled { WARN } else { DISABLED_TEXT },
+                if focused {
+                    theme::TEXT
+                } else if enabled {
+                    WARN
+                } else {
+                    DISABLED_TEXT
+                },
                 TextAlign::Left,
                 "Locked",
             );
@@ -444,7 +456,7 @@ impl Lobby {
             ServerStatus::Incompatible(why) => Some(shorten_middle(why, 16).into()),
         };
         if let Some(note) = note {
-            text(list, r.x + 1220.0, y, SMALL, BAD, TextAlign::Left, note);
+            text(list, r.x + 1270.0, y, SMALL, BAD, TextAlign::Left, note);
         }
     }
 
@@ -704,7 +716,7 @@ impl Lobby {
         self.button(
             list,
             ItemId::LobbyReady,
-            if ready { "Not ready" } else { "I am ready" },
+            if ready { "Cancel ready" } else { "I am ready" },
         );
         self.button(list, ItemId::LobbyStart, "Start game");
         self.button(list, ItemId::LobbyLeave, "Leave");

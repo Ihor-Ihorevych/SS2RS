@@ -1318,7 +1318,8 @@ impl Lobby {
             },
             LobbyView::Connecting => ItemId::ConnectCancel,
             LobbyView::Lobby => ItemId::LobbyReady,
-            LobbyView::Error => ItemId::ErrorBack,
+            // The usual way on is to try again; without that button the focus falls to Back.
+            LobbyView::Error => ItemId::ErrorRetry,
         };
         self.focus_pos = 0;
         self.settle();

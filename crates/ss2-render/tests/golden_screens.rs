@@ -28,6 +28,10 @@ use ss2_ui::coop_overlays::{
 };
 use ss2_ui::data_wizard::{DataWizard, WizardCandidate, WizardCommand, WizardInput, WizardReport};
 use ss2_ui::devconsole::{ConsoleView, Corner, FrameStats, LineKind, draw_overlay, stats_lines};
+use ss2_ui::lobby::{
+    CharacterChoice, CharacterId, ConnectionState, ItemId, JoinRoute, LevelChoice, Lobby,
+    LobbyCommand, LobbyConfig, LobbyInput, PlayerId, PlayerRow, ServerRow, ServerStatus,
+};
 use ss2_ui::session_screens::{DeathMode, DeathScreen, LevelStats, SummaryScreen};
 use ss2_ui::{Canvas, Color, DrawList, Menu, Rect, ScreenId, TextAlign, UiInput, Vec2, theme};
 
@@ -61,9 +65,16 @@ enum Shot {
     WizardResultOk,
     WizardResultWarn,
     WizardResultBad,
+    LobbyStart,
+    LobbyHost,
+    LobbyBrowser,
+    LobbyDirectError,
+    LobbyConnecting,
+    LobbyRoom,
+    LobbyError,
 }
 
-const SHOTS: [Shot; 21] = [
+const SHOTS: [Shot; 28] = [
     Shot::Menu(ScreenId::Main),
     Shot::Menu(ScreenId::Options),
     Shot::Menu(ScreenId::Pause),
@@ -85,6 +96,13 @@ const SHOTS: [Shot; 21] = [
     Shot::WizardResultOk,
     Shot::WizardResultWarn,
     Shot::WizardResultBad,
+    Shot::LobbyStart,
+    Shot::LobbyHost,
+    Shot::LobbyBrowser,
+    Shot::LobbyDirectError,
+    Shot::LobbyConnecting,
+    Shot::LobbyRoom,
+    Shot::LobbyError,
 ];
 
 /// The software adapter crashed a test process once when several tests made devices at the same time (see
@@ -137,6 +155,13 @@ fn word(shot: Shot) -> &'static str {
         Shot::WizardResultOk => "wizard_result_ok",
         Shot::WizardResultWarn => "wizard_result_warn",
         Shot::WizardResultBad => "wizard_result_bad",
+        Shot::LobbyStart => "lobby_start",
+        Shot::LobbyHost => "lobby_host",
+        Shot::LobbyBrowser => "lobby_browser",
+        Shot::LobbyDirectError => "lobby_direct_error",
+        Shot::LobbyConnecting => "lobby_connecting",
+        Shot::LobbyRoom => "lobby_room",
+        Shot::LobbyError => "lobby_error",
     }
 }
 
@@ -477,8 +502,228 @@ fn wizard_draw(shot: Shot) -> DrawList {
     wizard.draw()
 }
 
+fn lobby_nav(lobby: &mut Lobby, key: NavInput) -> Option<LobbyCommand> {
+    lobby.handle(LobbyInput::Ui(UiInput::Nav(key)))
+}
+
+/// Move the lobby focus to `id` the way a player does: with the down key.
+fn lobby_go_to(lobby: &mut Lobby, id: ItemId) {
+    for _ in 0..200 {
+        if lobby.focus() == id {
+            return;
+        }
+        lobby_nav(lobby, NavInput::Down);
+    }
+    panic!("the focus never reached {id:?}");
+}
+
+fn lobby_server(
+    id: &str,
+    name: &str,
+    map: &str,
+    players: (u8, u8),
+    ping: Option<u32>,
+    locked: bool,
+    status: ServerStatus,
+) -> ServerRow {
+    ServerRow {
+        id: id.into(),
+        name: name.into(),
+        map: map.into(),
+        players: players.0,
+        max_players: players.1,
+        ping_ms: ping,
+        locked,
+        status,
+    }
+}
+
+fn lobby_player(
+    id: u64,
+    name: &str,
+    character: Option<u32>,
+    ready: bool,
+    ping: Option<u32>,
+    (host, local): (bool, bool),
+) -> PlayerRow {
+    PlayerRow {
+        id: PlayerId(id),
+        name: name.into(),
+        character: character.map(CharacterId),
+        ready,
+        ping_ms: ping,
+        host,
+        local,
+    }
+}
+
+/// The lobby screens as the app drives them, up to the screen under test. Only ASCII text, so that a golden does not depend on the fonts of the machine.
+fn lobby_draw(shot: Shot) -> DrawList {
+    let mut lobby = Lobby::new(LobbyConfig {
+        default_server_name: "Ihor's co-op".into(),
+        ..LobbyConfig::default()
+    });
+    lobby.set_levels(vec![
+        LevelChoice {
+            id: "maps/hatshepsut".into(),
+            name: "Valley of the Kings".into(),
+        },
+        LevelChoice {
+            id: "maps/jungle".into(),
+            name: "The Jungle".into(),
+        },
+    ]);
+    lobby.set_characters(
+        ["Sam", "Mia", "Zed", "Ann"]
+            .iter()
+            .enumerate()
+            .map(|(i, n)| CharacterChoice {
+                id: CharacterId(i as u32),
+                name: (*n).into(),
+            })
+            .collect(),
+    );
+    let typed = |lobby: &mut Lobby, text: &str| {
+        assert_eq!(lobby.handle(LobbyInput::Text(text.into())), None);
+    };
+    match shot {
+        Shot::LobbyStart => {}
+        Shot::LobbyHost => {
+            lobby_go_to(&mut lobby, ItemId::StartHost);
+            lobby_nav(&mut lobby, NavInput::Activate);
+            lobby_go_to(&mut lobby, ItemId::HostPasswordOn);
+            lobby_nav(&mut lobby, NavInput::Activate);
+            lobby_nav(&mut lobby, NavInput::Down);
+            typed(&mut lobby, "secret");
+            lobby_go_to(&mut lobby, ItemId::HostLevel);
+            lobby_nav(&mut lobby, NavInput::Right);
+        }
+        Shot::LobbyBrowser => {
+            let open = ServerStatus::Open;
+            lobby.set_servers(vec![
+                lobby_server(
+                    "192.168.1.20:27015",
+                    "Tom's game",
+                    "Valley of the Kings",
+                    (2, 4),
+                    Some(3),
+                    false,
+                    open.clone(),
+                ),
+                lobby_server(
+                    "192.168.1.31:27015",
+                    "Friday night co-op",
+                    "The Jungle",
+                    (3, 4),
+                    Some(18),
+                    true,
+                    open.clone(),
+                ),
+                lobby_server(
+                    "192.168.1.44:27015",
+                    "Full house",
+                    "Karnak",
+                    (4, 4),
+                    Some(7),
+                    false,
+                    ServerStatus::Full,
+                ),
+                lobby_server(
+                    "192.168.1.52:27015",
+                    "Old build",
+                    "Karnak",
+                    (1, 4),
+                    Some(24),
+                    false,
+                    ServerStatus::Incompatible("older version".into()),
+                ),
+                lobby_server(
+                    "192.168.1.60:27015",
+                    "Ann",
+                    "Sand Canyon",
+                    (1, 8),
+                    None,
+                    false,
+                    open.clone(),
+                ),
+                lobby_server(
+                    "10.0.0.7:27015",
+                    "a very long server name that is cut off",
+                    "Pyramid",
+                    (5, 8),
+                    Some(1450),
+                    true,
+                    open.clone(),
+                ),
+                lobby_server(
+                    "10.0.0.9:27015",
+                    "Zed's place",
+                    "Tomb",
+                    (0, 2),
+                    Some(41),
+                    false,
+                    open,
+                ),
+            ]);
+            lobby_go_to(&mut lobby, ItemId::StartJoin);
+            lobby_nav(&mut lobby, NavInput::Activate);
+            lobby_nav(&mut lobby, NavInput::Down);
+        }
+        Shot::LobbyDirectError => {
+            lobby_go_to(&mut lobby, ItemId::StartJoin);
+            lobby_nav(&mut lobby, NavInput::Activate);
+            lobby_go_to(&mut lobby, ItemId::JoinTab(JoinRoute::Direct));
+            lobby_nav(&mut lobby, NavInput::Activate);
+            typed(&mut lobby, "192.168.1.300:27015");
+        }
+        Shot::LobbyConnecting | Shot::LobbyRoom | Shot::LobbyError => {
+            lobby_go_to(&mut lobby, ItemId::StartJoin);
+            lobby_nav(&mut lobby, NavInput::Activate);
+            lobby_go_to(&mut lobby, ItemId::JoinTab(JoinRoute::Direct));
+            lobby_nav(&mut lobby, NavInput::Activate);
+            typed(&mut lobby, "192.168.1.20");
+            assert!(matches!(
+                lobby_nav(&mut lobby, NavInput::Activate),
+                Some(LobbyCommand::Join(_))
+            ));
+            match shot {
+                Shot::LobbyConnecting => {
+                    lobby.update(2400);
+                    lobby.set_connection_state(ConnectionState::Loading {
+                        what: "Loading the level".into(),
+                        percent: Some(45),
+                    });
+                    lobby.update(3600);
+                }
+                Shot::LobbyError => {
+                    assert_eq!(lobby.update(10_000), Some(LobbyCommand::Cancel));
+                }
+                _ => {
+                    lobby.set_connection_state(ConnectionState::Connected);
+                    lobby.set_players(vec![
+                        lobby_player(1, "Tom", Some(0), true, Some(3), (true, false)),
+                        lobby_player(2, "Ann", Some(1), false, Some(41), (false, false)),
+                        lobby_player(3, "Ihor", Some(2), true, Some(12), (false, true)),
+                        lobby_player(4, "Cy", None, false, None, (false, false)),
+                    ]);
+                    lobby_go_to(&mut lobby, ItemId::LobbyReady);
+                }
+            }
+        }
+        _ => unreachable!("not a lobby shot"),
+    }
+    lobby.draw()
+}
+
 fn draw(shot: Shot) -> DrawList {
     match shot {
+        Shot::LobbyStart
+        | Shot::LobbyHost
+        | Shot::LobbyBrowser
+        | Shot::LobbyDirectError
+        | Shot::LobbyConnecting
+        | Shot::LobbyRoom
+        | Shot::LobbyError => lobby_draw(shot),
         Shot::WizardCandidates
         | Shot::WizardEmpty
         | Shot::WizardManual
@@ -644,6 +889,13 @@ fn check_geometry(shot: Shot, size: (u32, u32), list: &DrawList, img: &ImageRgba
             | Shot::WizardResultOk
             | Shot::WizardResultWarn
             | Shot::WizardResultBad
+            | Shot::LobbyStart
+            | Shot::LobbyHost
+            | Shot::LobbyBrowser
+            | Shot::LobbyDirectError
+            | Shot::LobbyConnecting
+            | Shot::LobbyRoom
+            | Shot::LobbyError
     ) {
         let focused = list
             .quads
@@ -788,6 +1040,41 @@ fn wizard_result_with_warnings_matches_its_goldens_at_every_size() {
 #[test]
 fn wizard_refusal_matches_its_goldens_at_every_size() {
     one_shot(Shot::WizardResultBad);
+}
+
+#[test]
+fn lobby_start_screen_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyStart);
+}
+
+#[test]
+fn lobby_host_setup_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyHost);
+}
+
+#[test]
+fn lobby_server_browser_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyBrowser);
+}
+
+#[test]
+fn lobby_direct_address_error_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyDirectError);
+}
+
+#[test]
+fn lobby_connecting_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyConnecting);
+}
+
+#[test]
+fn lobby_room_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyRoom);
+}
+
+#[test]
+fn lobby_error_matches_its_goldens_at_every_size() {
+    one_shot(Shot::LobbyError);
 }
 
 #[test]
@@ -1390,7 +1677,7 @@ fn every_screen_has_a_golden_at_every_size() {
     );
     assert_eq!(
         SHOTS.len() * SIZES.len(),
-        105,
-        "the matrix is twenty-one screens by five sizes"
+        140,
+        "the matrix is twenty-eight screens by five sizes"
     );
 }
