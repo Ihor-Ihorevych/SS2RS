@@ -315,3 +315,9 @@ Player, session and inventory classes (docs/re/players-session-classes.md):
 ```
 python -I tools/re/players_session_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 52 exported classes of the family are in the data and under which name, that the other 42 are in no type table, the files that carry the resource classes, and the member order of SPlayerPuppetParams against the 24 names the binary declares (about 2 minutes; the class names it checks were read from the binary's export table, the script reads data only)
 ```
+
+Weapon classes (docs/re/weapon-classes.md):
+
+```
+python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 83 exported weapon classes are in the data and under which name, the member order of 14 data classes against the names the binary declares (the rule that names the numbered weapon members), the weapon files per class and their base members by name (about 4 minutes; the class and member names it checks were read from the binary, the script reads data only)
+```
