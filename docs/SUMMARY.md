@@ -160,3 +160,8 @@
 - [Player, session and inventory classes](re/players-session-classes.md)
 - [Weapon classes](re/weapon-classes.md)
 - [Brain classes](re/brain-classes.md)
+- [Puppet classes](re/puppet-classes.md)
+  - [The puppet base class](re/puppet-entity-classes.md)
+  - [The puppet base class: methods](re/puppet-entity-methods.md)
+  - [Legged puppets](re/puppet-legged-classes.md)
+  - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
