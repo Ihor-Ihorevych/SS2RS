@@ -165,3 +165,4 @@
   - [The puppet base class: methods](re/puppet-entity-methods.md)
   - [Legged puppets](re/puppet-legged-classes.md)
   - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
+- [Projectile classes](re/projectile-classes.md)

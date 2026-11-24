@@ -332,4 +332,8 @@ Puppet classes (docs/re/puppet-classes.md and its four companion pages):
 
 ```
 python -I tools/re/puppet_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 101 exported puppet classes are in the data (50), the member-order rule against the declared member tables (16 classes), the root classes of the 124 puppet parameter files, and what the install does not contain (about 5 minutes)
+Projectile classes (docs/re/projectile-classes.md):
+
+```
+python -I tools/re/projectile_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 32 exported projectile classes are in the data, the member order of 13 data classes against the names the binary declares, the value tables of the 94 projectile files, SPuppetProjectileParams, CLaunchVelocities and the global bullet and flame parameters, and the stored shooters, launchers and crumbs (about 6 minutes)
 ```
