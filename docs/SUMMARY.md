@@ -67,6 +67,7 @@
 - [Video formats (`.ogv` plays, `.xmv` ignored)](VIDEO_FORMATS.md)
 - [Death and end-of-level screens](SESSION_SCREENS.md)
 - [Co-op overlays](COOP_OVERLAYS.md)
+- [Co-op lobby: host, join, players, ready](LOBBY_UI.md)
 - [Navigation model](NAVIGATION.md)
 - [First run: finding the install](FIRST_RUN.md)
 - [Golden-image harness](GOLDEN_IMAGES.md)
