@@ -145,3 +145,4 @@
 - [Install inventory](re/inventory.md)
 - [CTSEMETA container](re/ctsemeta-container.md)
 - [CTSEMETA type tables](re/ctsemeta-types.md)
+- [Main loop and time](re/main-loop.md)
