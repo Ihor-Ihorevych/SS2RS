@@ -1585,6 +1585,28 @@ fn the_connecting_screen_gives_up_after_the_timeout_and_offers_to_try_again() {
 }
 
 #[test]
+fn the_error_buttons_are_stacked_with_retry_above_back() {
+    let mut l = lobby();
+    to_direct(&mut l);
+    typ(&mut l, "10.0.0.9");
+    nav(&mut l, NavInput::Activate);
+    l.set_connection_state(ConnectionState::Failed(Failure::TimedOut));
+    let retry = rect_of(&l, ItemId::ErrorRetry);
+    let back = rect_of(&l, ItemId::ErrorBack);
+    assert_eq!(back.y, retry.y + BTN_STEP, "back is one step below retry");
+    assert!(back.y > retry.y + retry.h, "with a gap between");
+    assert_eq!(l.focus(), ItemId::ErrorRetry, "the way on has the focus");
+    // Alone, back takes the first place.
+    let mut m = lobby();
+    to_direct(&mut m);
+    typ(&mut m, "10.0.0.9");
+    nav(&mut m, NavInput::Activate);
+    m.set_connection_state(ConnectionState::Failed(Failure::BadPassword));
+    assert_eq!(rect_of(&m, ItemId::ErrorBack).y, retry.y);
+    assert_eq!(m.focus(), ItemId::ErrorBack);
+}
+
+#[test]
 fn the_timeout_is_the_configured_one() {
     let mut l = Lobby::new(LobbyConfig {
         connect_timeout_ms: 2_500,
@@ -2217,6 +2239,39 @@ fn a_host_with_many_players_scrolls_the_player_list_with_the_focus() {
             .is_some()
     );
     assert!(has_text(&l, "Players: 15 (showing 8-15)"));
+    // Exactly eight rows have a place at any scroll, the first window included.
+    let placed = |l: &Lobby| {
+        l.items()
+            .iter()
+            .filter(|i| matches!(i.id, ItemId::LobbyPlayer(_)) && i.rect.is_some())
+            .count()
+    };
+    assert_eq!(placed(&l), VISIBLE_PLAYERS);
+    go_to(&mut l, ItemId::LobbyPlayer(PlayerId(10)));
+    assert_eq!(l.player_scroll(), 1, "the window starts at the focused row");
+    assert_eq!(placed(&l), VISIBLE_PLAYERS);
+}
+
+#[test]
+fn a_second_host_row_in_bad_data_is_still_not_kickable() {
+    let mut l = lobby();
+    enter_lobby(
+        &mut l,
+        vec![
+            pl(1, "Ihor", Some(0), true, true, true),
+            pl(2, "Other host", Some(1), true, true, false),
+            pl(3, "Ann", None, false, false, false),
+        ],
+    );
+    assert!(
+        !is_enabled(&l, ItemId::LobbyPlayer(PlayerId(1))),
+        "the host is the local player"
+    );
+    assert!(
+        !is_enabled(&l, ItemId::LobbyPlayer(PlayerId(2))),
+        "a host row is never removed"
+    );
+    assert!(is_enabled(&l, ItemId::LobbyPlayer(PlayerId(3))));
 }
 
 #[test]
@@ -2235,6 +2290,13 @@ fn a_long_character_list_scrolls_too() {
     };
     assert!(rect_of_hero(&l, 9).is_some());
     assert!(rect_of_hero(&l, 0).is_none());
+    go_to(&mut l, ItemId::LobbyCharacter(CharacterId(0)));
+    let placed = l
+        .items()
+        .iter()
+        .filter(|i| matches!(i.id, ItemId::LobbyCharacter(_)) && i.rect.is_some())
+        .count();
+    assert_eq!(placed, VISIBLE_CHARACTERS);
 }
 
 #[test]

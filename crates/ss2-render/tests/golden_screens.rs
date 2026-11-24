@@ -1,7 +1,8 @@
 //! Golden-image tests for every UI screen at three resolutions and two other aspect ratios (T10-015).
 //!
 //! The matrix is `SHOTS` x `SIZES`: the four menu screens (main, options, pause, about), the developer console
-//! with some scrollback and typed text, and the frame-time overlay over the main menu, at 1280x720, 1920x1080
+//! with some scrollback and typed text, the frame-time overlay over the main menu, the death, summary, co-op overlay,
+//! first-run wizard and co-op lobby (T10-018) screens, at 1280x720, 1920x1080
 //! and 2560x1440 (16:9), and at 2560x1080 (21:9, pillarboxed) and 1024x768 (4:3, letterboxed).
 //! Besides the golden comparison, each image is checked **without** a golden (so a regenerated golden cannot
 //! hide the fault): it has the size asked for, the bars outside the canvas are exactly the background, the

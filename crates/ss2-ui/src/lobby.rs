@@ -1293,7 +1293,6 @@ impl Lobby {
             let at = (here as isize + step * k).rem_euclid(n) as usize;
             if items[at].enabled {
                 self.focus = items[at].id;
-                self.focus_pos = at;
                 break;
             }
         }
@@ -1407,10 +1406,9 @@ impl Lobby {
     }
 
     fn focus_on(&mut self, id: ItemId) {
-        let items = self.items();
-        if let Some(at) = items.iter().position(|i| i.id == id) {
+        // `settle` finds where the item is, and keeps the focus on it when it is usable.
+        if self.items().iter().any(|i| i.id == id) {
             self.focus = id;
-            self.focus_pos = at;
             self.settle();
         }
     }
