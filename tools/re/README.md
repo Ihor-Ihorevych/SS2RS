@@ -303,3 +303,9 @@ Save-game evidence (docs/re/save-game.md):
 ```
 python -I tools/re/savegame_verify.py "C:\path\to\Serious Sam 2" [--skip-worlds]    # the save-data pointer and save counter of every world version (about 6 minutes), the classes no data file defines, the 46 .preload files, the 3 shipped demos and their .nfo; a save game itself cannot be reproduced from the install (there is none)
 ```
+
+Replication evidence (docs/re/replication.md):
+
+```
+python -I tools/re/replication_verify.py "C:\path\to\Serious Sam 2"    # decodes the 3 shipped demos to the last byte (message counts, the opening snapshot, per-step traffic, the share of empty updates) and counts configuration lines that set net_, ser_ or cli_ variables (a few seconds); the replication rules themselves are specified from the binaries and have no script
+```
