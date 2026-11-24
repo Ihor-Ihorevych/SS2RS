@@ -11,6 +11,7 @@ pub mod devconsole;
 pub mod draw;
 pub mod focus;
 pub mod geometry;
+pub mod lobby;
 
 pub use draw::*;
 pub use geometry::*;
