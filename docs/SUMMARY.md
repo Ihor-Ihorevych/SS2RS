@@ -166,3 +166,6 @@
   - [Legged puppets](re/puppet-legged-classes.md)
   - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
 - [Projectile classes](re/projectile-classes.md)
+- [Item and pickup classes](re/item-classes.md)
+  - [Health, armor, treasure, life, repair and power-ups](re/item-classes-vitals.md)
+  - [Ammunition, ammunition packs and weapon pickups](re/item-classes-ammo-weapons.md)
