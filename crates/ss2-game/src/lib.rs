@@ -1,6 +1,7 @@
 //! ss2-game — gameplay: player, weapons, enemies, level logic (track T09)
 
 pub mod ai_budget;
+pub mod campaign;
 pub mod cheats;
 pub mod difficulty;
 pub mod freefly;
