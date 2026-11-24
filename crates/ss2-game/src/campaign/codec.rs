@@ -155,3 +155,7 @@ impl<'a> Reader<'a> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "codec_tests.rs"]
+mod tests;

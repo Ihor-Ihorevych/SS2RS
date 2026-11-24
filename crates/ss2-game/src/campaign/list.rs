@@ -382,7 +382,7 @@ impl LevelList {
             bytes.push(0);
             bytes.push(u8::try_from(out.len()).unwrap_or(u8::MAX));
             for to in out {
-                let v = to.map_or(u16::MAX, |t| u16::try_from(t).unwrap_or(u16::MAX - 1));
+                let v = to.map_or(u16::MAX, |t| u16::try_from(t).unwrap_or(0));
                 bytes.extend_from_slice(&v.to_le_bytes());
             }
         }

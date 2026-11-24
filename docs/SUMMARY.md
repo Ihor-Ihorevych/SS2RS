@@ -62,6 +62,7 @@
 - [AI performance budget](AI_BUDGET.md)
 - [Level progress and the end-of-level summary](LEVEL_PROGRESS.md)
 - [Difficulty levels and modifiers](DIFFICULTY.md)
+- [Campaign flow: levels, transitions, carry-over, unlocks](CAMPAIGN.md)
 - [Starting the GPU, and getting it back](GPU_INIT.md)
 - [Sound decoders](AUDIO_DECODERS.md)
 - [Video formats (`.ogv` plays, `.xmv` ignored)](VIDEO_FORMATS.md)
