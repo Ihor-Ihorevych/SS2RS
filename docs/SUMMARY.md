@@ -109,6 +109,7 @@
 - [Localization QA pass](LOCALIZATION_QA.md)
 - [Modding policy](MODDING_POLICY.md)
 - [Mod validation (`ss2-doctor --mod`)](MOD_VALIDATION.md)
+- [Mod loading: scan, load order, overlays, conflicts](MOD_LOADING.md)
 - [Dependencies and advisories](DEPENDENCIES.md)
 - [Compliance procedure](COMPLIANCE.md)
 - [Clean-room audit log](compliance/clean-room-log.md)

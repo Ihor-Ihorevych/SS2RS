@@ -298,3 +298,118 @@ fn the_real_mods_pass_through_the_command() {
     assert!(stdout.contains("SS2RS mod check"), "{stdout}");
     assert!(stdout.is_ascii());
 }
+
+/// An install with two mods: `Base2` (data only) and `Addon` (needs `Base2`, has a native module).
+fn install_with_two_mods(dir: &Path) {
+    install(dir);
+    let content = dir.join("Content");
+    for (name, module, extra) in [
+        ("Base2", "Sam2Game", ""),
+        ("Addon", "AddonGame", "REQUIRES_MOD = \"base2.mod\" ;\n"),
+    ] {
+        std::fs::create_dir_all(content.join(name)).unwrap();
+        std::fs::write(
+            content.join(format!("{name}.mod")),
+            format!("MODULES = {module} ;"),
+        )
+        .unwrap();
+        std::fs::write(
+            content.join(format!("{name}.nfo")),
+            format!("NAME = \"{name} mod\" ;\n{extra}"),
+        )
+        .unwrap();
+        write_gro_with(
+            &content.join(name),
+            &format!("{name}.gro"),
+            &[
+                ("Content/shared.txt", name),
+                (&format!("Content/{name}.txt"), "own"),
+            ],
+        );
+    }
+}
+
+#[test]
+fn list_mods_prints_the_mods_with_what_they_need() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_two_mods(dir.path());
+    let out = run(&[dir.path().to_str().unwrap(), "--list-mods"], None);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stdout));
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.contains("Mods in the install: 2; the game starts: (not selected)"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "addon: \"Addon mod\"; 1 archive; native module AddonGame (content only); needs: base2"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("base2: \"Base2 mod\"; 1 archive; data only; needs: -"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn load_order_adds_dependencies_and_names_the_winner() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_two_mods(dir.path());
+    let out = run(
+        &[
+            dir.path().to_str().unwrap(),
+            "--load-order",
+            "--mod",
+            "addon",
+        ],
+        None,
+    );
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.contains("  1. base2 (needed by addon)\n  2. addon (requested)\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("addon wins over base2: 1 file (identical: 0, different: 1, not compared: 0): content/shared.txt"), "{stdout}");
+    assert!(
+        stdout.contains("Note: addon names the native module AddonGame"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn load_order_without_mods_says_only_the_base_and_a_bad_request_exits_one() {
+    let dir = tempfile::tempdir().unwrap();
+    install_with_two_mods(dir.path());
+    let out = run(&[dir.path().to_str().unwrap(), "--load-order"], None);
+    assert!(
+        text(&out.stdout).contains("Load order: only the base game."),
+        "{}",
+        text(&out.stdout)
+    );
+    assert_eq!(out.status.code(), Some(0));
+    let out = run(
+        &[
+            dir.path().to_str().unwrap(),
+            "--load-order",
+            "--mod",
+            "ghost",
+        ],
+        None,
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        text(&out.stdout)
+            .contains("The load order cannot be made: the mod `ghost` is not installed"),
+        "{}",
+        text(&out.stdout)
+    );
+}
+
+#[test]
+fn help_lists_the_mod_loading_options() {
+    let help = text(&run(&["--help"], None).stdout);
+    for word in ["--list-mods", "--load-order", "MOD_LOADING"] {
+        assert!(help.contains(word), "{word}: {help}");
+    }
+}
