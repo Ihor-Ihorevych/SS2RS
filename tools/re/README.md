@@ -326,6 +326,7 @@ Brain classes (docs/re/brain-classes.md):
 
 ```
 python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
+python -I tools/re/brain_assignment_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # docs/re/brain-assignment.md: the puppet entity classes the worlds place, which carry a character behavior (.cb), the behavior against the parameter file, the default state against the behavior, the spawner links and the seats (about 20 minutes; LIMIT reads only the smallest worlds)
 ```
 
 AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):
