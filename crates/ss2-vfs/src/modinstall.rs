@@ -790,6 +790,22 @@ mod tests {
     }
 
     #[test]
+    fn a_descriptor_of_exactly_one_mebibyte_is_still_read() {
+        let dir = install();
+        let mut text = String::from("MODULES = Sam2Game ;");
+        text.push_str(&" ".repeat((1 << 20) - text.len()));
+        assert_eq!(text.len(), 1 << 20);
+        std::fs::write(dir.path().join("Content/Edge.mod"), text).unwrap();
+        let found = scan_installed_mods(dir.path()).unwrap();
+        assert!(
+            found.problems.iter().all(|p| p.id != "edge"),
+            "{:?}",
+            found.problems
+        );
+        assert!(found.get("edge").is_some());
+    }
+
+    #[test]
     fn an_oversized_descriptor_is_a_problem_not_a_read() {
         let dir = install();
         let big = vec![b' '; (1 << 20) + 1];
