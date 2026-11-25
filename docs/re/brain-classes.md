@@ -192,7 +192,7 @@ Grouped by role. "(name)" = only the name was used. Parameter lists are not reco
 
 | Method | What it does |
 |---|---|
-| `GetAvailableSeat` | Chooses a free seat among the ride's seats (name; it walks the ride's seat array). |
+| `GetAvailableSeat` | Chooses the first free seat of the ride: skips way-point seats, puppets-can't-seat seats, seats with a rider and seats reserved by instance mounts (`brain-rides.md` 1; no caller in the DLL). |
 | `CantPosessRide` | Raises the moment `CantPossesRide` and a macro event. |
 | `PossesRide`, `PossesCharacter` | Take control of a ride (a seat and the way to it are stored in the members of section 5) / of a character puppet. |
 | `ShouldTeleportToEnterRide` | Whether to teleport instead of walking to the seat (name; the player brain overrides it). |
@@ -307,7 +307,7 @@ After construction (**medium**): state `BS_DEFAULT`, `.cb` state `Default`, acti
 1. **Which brain class each shipped puppet kind really gets, and when `CreateBrain` runs**: **answered by T01-125** in [`brain-assignment.md`](brain-assignment.md) (second reading of the rule, the one caller and its conditions, no brain on a client, the behaviorless brain, how a puppet gets its `.cb`, why the four kinds are dead, the two shells; **medium**, nothing run). Only the run-time confirmation stays open (T01-130, T01-240, T01-241).
 2. **The decision loop in full** (T01-126): the think period and its graph, the order inside `ThinkPoint`, the exact use of `GetMovePeriod`, the sight setting behind `GetSeeDistance`, the moments `Idle`, `Born` and the empty one, the meaning and names of the execution ability flags, the think routine of each state. Ties to T01-076 (enemy run time) and T01-038.
 3. **Mover choice, patrol and tactics**: **answered by T01-127** in [`brain-movement.md`](brain-movement.md) (band lookup, mover choice and keep rule, results and periods, tactic taking, patrol start, resume and stop, goal points, the macro events; **medium**, nothing run). Corrections there: the movement record holds the foe's last seen position, not a distance; ability bit 2 is the "may move" ability. Still open: T01-242, T01-243, T01-126.
-4. **Rides** (T01-128): seat choice, the way to a seat, teleport to enter, possession and exit; ties to `vehicles.md` and to the player's own ride rules (T01-114).
+4. **Rides**: **answered by T01-128** in [`brain-rides.md`](brain-rides.md) (seat choice, `PossesRide` and its refusals, the possession and exit behaviours, teleport, abilities while entering, unregistering; **medium**, nothing run). Still open: T01-245 to T01-247.
 5. **Foe and sense rules**: **answered by T01-129** in [`brain-senses.md`](brain-senses.md) (registration, the split of work, the eight threat sensitivities, see distance, field of view, the foe search, the sound rules and thresholds, the alignment rule; **medium**, nothing run). Still open: T01-244, T01-156, T01-130.
 6. **Run-time checks on the original** (T01-130): which brain classes exist in a running level, the state sequence of one enemy (`Kleer`, `Albino`), the moment order, the see distance and field-of-view numbers, whether the obsolete-class error ever appears; numbers only (T01-038, T01-039).
 

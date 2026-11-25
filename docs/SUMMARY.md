@@ -168,6 +168,7 @@
   - [Which brain each puppet gets](re/brain-assignment.md)
   - [Mover choice, patrol and tactics](re/brain-movement.md)
   - [Foe and sense rules](re/brain-senses.md)
+  - [Boarding and leaving rides](re/brain-rides.md)
 - [AI behaviour and action classes](re/behavior-classes.md)
   - [Actions and validity terms](re/behavior-action-classes.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
