@@ -322,6 +322,12 @@ Weapon classes (docs/re/weapon-classes.md):
 python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 83 exported weapon classes are in the data and under which name, the member order of 14 data classes against the names the binary declares (the rule that names the numbered weapon members), the weapon files per class and their base members by name (about 4 minutes; the class and member names it checks were read from the binary, the script reads data only)
 ```
 
+Hitscan shot (docs/re/hitscan-shot.md):
+
+```
+python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
