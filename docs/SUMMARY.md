@@ -179,3 +179,8 @@
   - [Spawners, multi-spawners, delayers and markers](re/mechanism-classes-spawners.md)
   - [Spawner tweak classes and tables](re/mechanism-classes-spawner-tweaks.md)
   - [World info and chapter info](re/mechanism-classes-world-info.md)
+- [World content entity classes](re/worldcontent-classes.md)
+  - [Static models and props](re/worldcontent-models-props.md)
+  - [Effects: particle, simple, sound, shaker, spawn, text](re/worldcontent-effects.md)
+  - [Static sounds, vibration, environment sound, movies, flares](re/worldcontent-sound-media.md)
+  - [Markers and debug helpers](re/worldcontent-markers-debug.md)
