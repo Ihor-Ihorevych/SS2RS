@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use ss2_fuzzkit::mutate::{Rng, mutate, random_bytes};
-use ss2_fuzzkit::{MAX_INPUT, Target, TARGETS};
+use ss2_fuzzkit::{MAX_INPUT, TARGETS, Target};
 
 /// An input must be handled within this time (debug build, shared machine).
 const SLOW: Duration = Duration::from_secs(10);
@@ -62,7 +62,11 @@ fn input(rng: &mut Rng, seeds: &[Vec<u8>], i: usize) -> Vec<u8> {
         // Damage: one edit most of the time, up to 12 now and then.
         _ => {
             let mut s = pick(rng);
-            let edits = if i % 5 == 0 { 1 + rng.below(12) } else { 1 + rng.below(2) };
+            let edits = if i.is_multiple_of(5) {
+                1 + rng.below(12)
+            } else {
+                1 + rng.below(2)
+            };
             mutate(rng, &mut s, edits, MAX_INPUT);
             s
         }
@@ -70,7 +74,8 @@ fn input(rng: &mut Rng, seeds: &[Vec<u8>], i: usize) -> Vec<u8> {
 }
 
 fn report(target: &Target, i: usize, data: &[u8]) -> String {
-    let path: PathBuf = std::env::temp_dir().join(format!("ss2-fuzzkit-failure-{}-{i}.bin", target.name));
+    let path: PathBuf =
+        std::env::temp_dir().join(format!("ss2-fuzzkit-failure-{}-{i}.bin", target.name));
     let saved = std::fs::write(&path, data).is_ok();
     let head: String = data.iter().take(48).map(|b| format!("{b:02x}")).collect();
     format!(
@@ -78,7 +83,11 @@ fn report(target: &Target, i: usize, data: &[u8]) -> String {
         target.name,
         data.len(),
         if data.len() > 48 { "..." } else { "" },
-        if saved { format!(", saved to {}", path.display()) } else { String::new() }
+        if saved {
+            format!(", saved to {}", path.display())
+        } else {
+            String::new()
+        }
     )
 }
 
@@ -124,7 +133,10 @@ fn every_target_survives_its_seeds_and_a_few_thousand_damaged_inputs() {
         let panics = PANICS.load(Ordering::SeqCst) - before;
         // A panic that the code catches itself (the Vorbis decoder is run under `catch_unwind`) is still a bug of the decoder
         // that libFuzzer would report: count it too.
-        let reported = failures.iter().filter(|f| f.contains(&format!("`{}`", target.name))).count();
+        let reported = failures
+            .iter()
+            .filter(|f| f.contains(&format!("`{}`", target.name)))
+            .count();
         if panics > reported {
             failures.push(format!(
                 "target `{}`: {} panic(s) were caught inside the code under test",
@@ -143,12 +155,25 @@ fn seeds_are_small_unique_and_not_empty() {
     for target in TARGETS {
         let seeds = (target.seeds)();
         let names: BTreeSet<&str> = seeds.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names.len(), seeds.len(), "`{}` has two seeds of one name", target.name);
+        assert_eq!(
+            names.len(),
+            seeds.len(),
+            "`{}` has two seeds of one name",
+            target.name
+        );
         for s in &seeds {
             assert!(!s.bytes.is_empty(), "{}/{} is empty", target.name, s.name);
-            assert!(s.bytes.len() <= 8192, "{}/{} is {} bytes: seeds must stay tiny", target.name, s.name, s.bytes.len());
             assert!(
-                s.name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+                s.bytes.len() <= 8192,
+                "{}/{} is {} bytes: seeds must stay tiny",
+                target.name,
+                s.name,
+                s.bytes.len()
+            );
+            assert!(
+                s.name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_'),
                 "{}/{}: seed names are lower-case words",
                 target.name,
                 s.name
@@ -177,45 +202,111 @@ fn seed(target: &str, name: &str) -> Vec<u8> {
 #[test]
 fn the_format_seeds_are_valid_files() {
     use ss2_format_fx::{lfx, pfx, tfx, vfx};
-    let ok = |what: &str, r: Result<(), ss2_core::Error>| r.unwrap_or_else(|e| panic!("{what}: {e}"));
-    ok("meta sample", ss2_meta::Container::parse(&seed("meta_container", "sample")).and_then(|c| c.decode_objects()).map(drop));
+    let ok =
+        |what: &str, r: Result<(), ss2_core::Error>| r.unwrap_or_else(|e| panic!("{what}: {e}"));
+    ok(
+        "meta sample",
+        ss2_meta::Container::parse(&seed("meta_container", "sample"))
+            .and_then(|c| c.decode_objects())
+            .map(drop),
+    );
     for name in ["bgr_8x4", "bgra_4x4", "dxt1_4x4", "cube_4x4"] {
-        ok(name, ss2_format_tex::Texture::from_bytes(&seed("format_tex", name)).map(drop));
+        ok(
+            name,
+            ss2_format_tex::Texture::from_bytes(&seed("format_tex", name)).map(drop),
+        );
     }
     for name in ["quad", "rich"] {
-        ok(name, ss2_format_bmf::Mesh::from_bytes(&seed("format_bmf", name)).map(drop));
+        ok(
+            name,
+            ss2_format_bmf::Mesh::from_bytes(&seed("format_bmf", name)).map(drop),
+        );
     }
-    ok("ans", ss2_format_ans::AnimSet::from_bytes(&seed("format_ans", "walk")).map(drop));
-    ok("ep", ss2_format_ep::EntityParams::from_bytes(&seed("format_ep", "projectile")).map(drop));
+    ok(
+        "ans",
+        ss2_format_ans::AnimSet::from_bytes(&seed("format_ans", "walk")).map(drop),
+    );
+    ok(
+        "ep",
+        ss2_format_ep::EntityParams::from_bytes(&seed("format_ep", "projectile")).map(drop),
+    );
     for name in ["sample", "one_glyph"] {
-        ok(name, ss2_format_fnt::Font::from_bytes(&seed("format_fnt", name)).map(drop));
+        ok(
+            name,
+            ss2_format_fnt::Font::from_bytes(&seed("format_fnt", name)).map(drop),
+        );
     }
-    ok("lfx", lfx::FlareConfiguration::from_bytes(&seed("format_fx", "flare")).map(drop));
-    ok("lfx2", lfx::FlareConfiguration::from_bytes(&seed("format_fx", "flare2")).map(drop));
-    ok("tfx", tfx::TextEffectConfiguration::from_bytes(&seed("format_fx", "text")).map(drop));
-    ok("vfx", vfx::VibrationEffect::from_bytes(&seed("format_fx", "vibro")).map(drop));
-    ok("pfx", pfx::Effect::from_bytes(&seed("format_fx", "particles")).map(drop));
-    ok("pfx box", pfx::Effect::from_bytes(&seed("format_fx", "particles_box")).map(drop));
-    ok("scs", ss2_format_mat::SoundScheme::from_bytes(&seed("format_mat", "sound_scheme")).map(drop));
-    ok("mat", ss2_format_mat::PhysicalMaterial::from_bytes(&seed("format_mat", "material")).map(drop));
-    ok("mtr", ss2_format_mtr::MaterialFile::from_bytes(&seed("format_mtr", "preset")).map(drop));
-    ok("rsc", ss2_format_rsc::ResourceDatabase::from_bytes(&seed("format_rsc", "menu")).map(drop));
-    ok("ctl", ss2_format_rsc::CharacterTool::from_bytes(&seed("format_rsc", "tool")).map(drop));
+    ok(
+        "lfx",
+        lfx::FlareConfiguration::from_bytes(&seed("format_fx", "flare")).map(drop),
+    );
+    ok(
+        "lfx2",
+        lfx::FlareConfiguration::from_bytes(&seed("format_fx", "flare2")).map(drop),
+    );
+    ok(
+        "tfx",
+        tfx::TextEffectConfiguration::from_bytes(&seed("format_fx", "text")).map(drop),
+    );
+    ok(
+        "vfx",
+        vfx::VibrationEffect::from_bytes(&seed("format_fx", "vibro")).map(drop),
+    );
+    ok(
+        "pfx",
+        pfx::Effect::from_bytes(&seed("format_fx", "particles")).map(drop),
+    );
+    ok(
+        "pfx box",
+        pfx::Effect::from_bytes(&seed("format_fx", "particles_box")).map(drop),
+    );
+    ok(
+        "scs",
+        ss2_format_mat::SoundScheme::from_bytes(&seed("format_mat", "sound_scheme")).map(drop),
+    );
+    ok(
+        "mat",
+        ss2_format_mat::PhysicalMaterial::from_bytes(&seed("format_mat", "material")).map(drop),
+    );
+    ok(
+        "mtr",
+        ss2_format_mtr::MaterialFile::from_bytes(&seed("format_mtr", "preset")).map(drop),
+    );
+    ok(
+        "rsc",
+        ss2_format_rsc::ResourceDatabase::from_bytes(&seed("format_rsc", "menu")).map(drop),
+    );
+    ok(
+        "ctl",
+        ss2_format_rsc::CharacterTool::from_bytes(&seed("format_rsc", "tool")).map(drop),
+    );
 }
 
 #[test]
 fn the_audio_and_state_seeds_are_valid() {
     use ss2_audio::decode;
-    for name in ["ima_mono", "ima_stereo", "vorbis_mono", "vorbis_stereo", "pcm16_mono", "float_stereo"] {
+    for name in [
+        "ima_mono",
+        "ima_stereo",
+        "vorbis_mono",
+        "vorbis_stereo",
+        "pcm16_mono",
+        "float_stereo",
+    ] {
         decode::decode(&seed("audio_decode", name)).unwrap_or_else(|e| panic!("{name}: {e}"));
     }
     for name in ["one_shot", "loop_start", "loop_stop"] {
-        ss2_audio_api::replication::AudioEvent::decode(&seed("audio_event", name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+        ss2_audio_api::replication::AudioEvent::decode(&seed("audio_event", name))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
     }
-    ss2_game::campaign::CarryOver::from_bytes(&seed("game_state_bytes", "carry_empty")).expect("carry");
-    ss2_game::campaign::UnlockSet::from_bytes(&seed("game_state_bytes", "unlocks_empty")).expect("unlocks");
-    ss2_game::level_progress::LevelProgress::from_bytes(&seed("game_state_bytes", "progress")).expect("progress");
-    ss2_game::difficulty::CampaignDifficulty::from_bytes(&seed("game_state_bytes", "difficulty")).expect("difficulty");
+    ss2_game::campaign::CarryOver::from_bytes(&seed("game_state_bytes", "carry_empty"))
+        .expect("carry");
+    ss2_game::campaign::UnlockSet::from_bytes(&seed("game_state_bytes", "unlocks_empty"))
+        .expect("unlocks");
+    ss2_game::level_progress::LevelProgress::from_bytes(&seed("game_state_bytes", "progress"))
+        .expect("progress");
+    ss2_game::difficulty::CampaignDifficulty::from_bytes(&seed("game_state_bytes", "difficulty"))
+        .expect("difficulty");
     ss2_game::campaign::CampaignNote::from_bytes(&seed("game_state_bytes", "note")).expect("note");
 }
 
@@ -228,8 +319,14 @@ fn the_text_seeds_are_valid() {
     ss2_vfs::parse_current_mod(&text("mods_text", "current")).expect("current");
     let reg = text("locate_text", "reg_query");
     let (value, rest) = reg.split_once('\n').expect("a value name line");
-    assert!(ss2_vfs::parse_reg_query(rest, value).is_some(), "reg query seed");
-    assert_eq!(ss2_vfs::parse_library_folders(&text("locate_text", "library_folders")).len(), 2);
+    assert!(
+        ss2_vfs::parse_reg_query(rest, value).is_some(),
+        "reg query seed"
+    );
+    assert_eq!(
+        ss2_vfs::parse_library_folders(&text("locate_text", "library_folders")).len(),
+        2
+    );
     assert!(ss2_ui::lobby::parse_address(&text("lobby_text", "v4_port")).is_ok());
     assert!(ss2_ui::lobby::parse_address(&text("lobby_text", "v6_port")).is_ok());
     assert!(ss2_ui::lobby::parse_address(&text("lobby_text", "name")).is_ok());
@@ -268,7 +365,9 @@ fn the_committed_seeds_are_what_the_builders_write() {
     }
     if let Ok(targets) = std::fs::read_dir(&dir) {
         for t in targets.flatten() {
-            let Ok(files) = std::fs::read_dir(t.path()) else { continue };
+            let Ok(files) = std::fs::read_dir(t.path()) else {
+                continue;
+            };
             for f in files.flatten() {
                 let path = f.path();
                 if !expected.contains(&path) {
@@ -295,7 +394,8 @@ fn every_target_has_its_file_in_the_fuzz_crate() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fuzz/fuzz_targets");
     for target in TARGETS {
         let path = root.join(format!("{}.rs", target.name));
-        let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let source =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert!(
             source.contains(&format!("ss2_fuzzkit::{}(", target.name)),
             "{} does not call ss2_fuzzkit::{}",

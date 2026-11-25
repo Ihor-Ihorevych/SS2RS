@@ -50,15 +50,18 @@ pub fn meta_container() -> Vec<Seed> {
         "sample",
         MetaBuilder::sample().build().expect("the sample builds"),
     )];
-    for (name, bytes) in [
-        ("tex_bgra", TEX_BGRA),
-        ("bmf_quad", BMF_QUAD),
-    ] {
+    for (name, bytes) in [("tex_bgra", TEX_BGRA), ("bmf_quad", BMF_QUAD)] {
         out.push(seed(name, bytes.to_vec()));
     }
-    out.push(seed("ans", builders::ans::file(builders::ans::Flaws::default())));
+    out.push(seed(
+        "ans",
+        builders::ans::file(builders::ans::Flaws::default()),
+    ));
     out.push(seed("ep", builders::ep::params_file(true)));
-    out.push(seed("rsc", builders::rsc::menu_screen_file("CMenuScreenLayout")));
+    out.push(seed(
+        "rsc",
+        builders::rsc::menu_screen_file("CMenuScreenLayout"),
+    ));
     out
 }
 
@@ -114,8 +117,14 @@ pub fn format_fx() -> Vec<Seed> {
         seed("flare2", builders::fx_lfx::flare_file(2)),
         seed("text", builders::fx_tfx::text_file(false)),
         seed("vibro", builders::fx_vfx::vibro_file(true, true)),
-        seed("particles", builders::fx_pfx::pfx_file("CSphereEmitterShape")),
-        seed("particles_box", builders::fx_pfx::pfx_file("CBoxEmitterShape")),
+        seed(
+            "particles",
+            builders::fx_pfx::pfx_file("CSphereEmitterShape"),
+        ),
+        seed(
+            "particles_box",
+            builders::fx_pfx::pfx_file("CBoxEmitterShape"),
+        ),
     ]
 }
 
@@ -132,7 +141,10 @@ pub fn format_mtr() -> Vec<Seed> {
     vec![
         seed("preset", builders::mtr::material_file(true, 1010)),
         seed("preset_1050", builders::mtr::material_file(true, 1050)),
-        seed("embedded_texture", builders::mtr::material_file(false, 1010)),
+        seed(
+            "embedded_texture",
+            builders::mtr::material_file(false, 1010),
+        ),
     ]
 }
 
@@ -140,7 +152,10 @@ pub fn format_mtr() -> Vec<Seed> {
 pub fn format_rsc() -> Vec<Seed> {
     vec![
         seed("menu", builders::rsc::menu_screen_file("CMenuScreenLayout")),
-        seed("tool", builders::rsc::tool_file("CCharacterTool", true, None)),
+        seed(
+            "tool",
+            builders::rsc::tool_file("CCharacterTool", true, None),
+        ),
         seed(
             "tool_creator",
             builders::rsc::tool_file("CCharacterTool", true, Some("CDebrisToolEntityCreator")),
@@ -211,7 +226,9 @@ pub fn audio_event() -> Vec<Seed> {
 
 /// The seeds of `game_state_bytes`: the empty carry-over and unlocks, a difficulty, a level progress, a campaign note.
 pub fn game_state_bytes() -> Vec<Seed> {
-    use ss2_game::campaign::{Campaign, CarryOver, LevelEntry, LevelList, Next, Progress, UnlockSet};
+    use ss2_game::campaign::{
+        Campaign, CarryOver, LevelEntry, LevelList, Next, Progress, UnlockSet,
+    };
     use ss2_game::difficulty::CampaignDifficulty;
     use ss2_game::level_progress::{LevelProgress, LevelSetup};
     let mut out = vec![
@@ -252,8 +269,14 @@ pub fn mods_text() -> Vec<Seed> {
             "nfo_level",
             "LEVEL\r\nNAME = \"Test Level\";\r\nEPISODE = \"One\"\r\nMOVIE = \"Content/Test/Intro.xmv\";\r\n",
         ),
-        text("nfo_mod", "NAME=\"A mod\"\nVERSION = 1.2 ;\nAUTHOR = \"Nobody\"\n"),
-        text("current", "# the mod that is loaded\nCURRENTMOD = SeriousSam2.mod ;\n"),
+        text(
+            "nfo_mod",
+            "NAME=\"A mod\"\nVERSION = 1.2 ;\nAUTHOR = \"Nobody\"\n",
+        ),
+        text(
+            "current",
+            "# the mod that is loaded\nCURRENTMOD = SeriousSam2.mod ;\n",
+        ),
     ]
 }
 

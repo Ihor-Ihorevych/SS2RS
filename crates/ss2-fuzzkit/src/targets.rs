@@ -445,9 +445,9 @@ pub fn net_chunks(data: &[u8]) {
             }
             for c in chunks {
                 // A dropped chunk is sent again by the next round; a repeated one is counted.
-                if u.arbitrary::<u8>().unwrap_or(0) % 4 != 0 {
+                if !u.arbitrary::<u8>().unwrap_or(0).is_multiple_of(4) {
                     let _ = rx.receive(&c);
-                    if u.arbitrary::<u8>().unwrap_or(0) % 4 == 0 {
+                    if u.arbitrary::<u8>().unwrap_or(0).is_multiple_of(4) {
                         let _ = rx.receive(&c);
                     }
                 }

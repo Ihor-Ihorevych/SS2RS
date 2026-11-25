@@ -1,8 +1,5 @@
 use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
 
-
-
-
 /// Ways to break the synthetic file.
 #[derive(Clone, Copy, Default)]
 pub struct Flaws {
@@ -367,4 +364,3 @@ pub fn file(flaws: Flaws) -> Vec<u8> {
     b.object(9, 23, ObjectBytes::new().f32(9.0).u32(0).u32(0).finish());
     b.build().unwrap()
 }
-

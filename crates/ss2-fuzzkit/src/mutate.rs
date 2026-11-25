@@ -11,7 +11,11 @@ pub struct Rng(u64);
 impl Rng {
     /// A generator for `seed` (any value; zero is replaced).
     pub fn new(seed: u64) -> Self {
-        Self(if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed })
+        Self(if seed == 0 {
+            0x9E37_79B9_7F4A_7C15
+        } else {
+            seed
+        })
     }
 
     /// The next 64 random bits.
@@ -129,7 +133,16 @@ mod tests {
         assert_ne!(xs, (0..8).map(|_| c.next_u64()).collect::<Vec<_>>());
         assert!(xs.windows(2).all(|w| w[0] != w[1]));
         assert_eq!(Rng::new(1).next_u64(), 0x47e4ce4b896cdd1d);
-        assert_ne!(Rng::new(0).next_u64(), 0, "seed 0 is replaced, not stuck at 0");
+        let mut pinned = Rng::new(0x0123_4567_89AB_CDEF);
+        assert_eq!(
+            (pinned.next_u64(), pinned.next_u64()),
+            (0x7c9482472cb6708c, 0xd5705692bf1f28de)
+        );
+        assert_ne!(
+            Rng::new(0).next_u64(),
+            0,
+            "seed 0 is replaced, not stuck at 0"
+        );
     }
 
     #[test]
@@ -151,7 +164,10 @@ mod tests {
         let mut rng = Rng::new(5);
         let all = random_bytes(&mut rng, 4000);
         assert_eq!(all.len(), 4000);
-        assert!((0..8).all(|bit| all.iter().any(|b| b >> bit & 1 == 1) && all.iter().any(|b| b >> bit & 1 == 0)));
+        assert!(
+            (0..8).all(|bit| all.iter().any(|b| b >> bit & 1 == 1)
+                && all.iter().any(|b| b >> bit & 1 == 0))
+        );
         assert!(random_bytes(&mut rng, 0).is_empty());
     }
 
@@ -168,8 +184,14 @@ mod tests {
             longer += usize::from(d.len() > seed.len());
             shorter += usize::from(d.len() < seed.len());
         }
-        assert!(changed > 1500, "most mutations change the input ({changed})");
-        assert!(longer > 100 && shorter > 100, "both growth and shrinking happen ({longer}, {shorter})");
+        assert!(
+            changed > 1500,
+            "most mutations change the input ({changed})"
+        );
+        assert!(
+            longer > 100 && shorter > 100,
+            "both growth and shrinking happen ({longer}, {shorter})"
+        );
         // The cap is applied even when the input is already over it.
         let mut big = vec![1u8; 500];
         mutate(&mut rng, &mut big, 0, 100);
@@ -197,7 +219,11 @@ mod tests {
                 if diff.len() == 1 && (d[diff[0]] ^ seed[diff[0]]).count_ones() == 1 {
                     one_bit += 1;
                 }
-                if d.windows(4).any(|w| w == 0xFFFF_FFFFu32.to_le_bytes() || w == 0x8000_0000u32.to_le_bytes() || w == [0, 0, 0, 0]) {
+                if d.windows(4).any(|w| {
+                    w == 0xFFFF_FFFFu32.to_le_bytes()
+                        || w == 0x8000_0000u32.to_le_bytes()
+                        || w == [0, 0, 0, 0]
+                }) {
                     edge32 += 1;
                 }
                 if d.windows(2).any(|w| w == [0xFF, 0xFF] || w == [0xFF, 0x7F]) {
@@ -259,7 +285,10 @@ mod tests {
                     }
                 }
             });
-            assert!(positions.iter().all(|&c| c > 30), "fill {fill:#x}: bit positions {positions:?}");
+            assert!(
+                positions.iter().all(|&c| c > 30),
+                "fill {fill:#x}: bit positions {positions:?}"
+            );
             assert!(plain > 600, "fill {fill:#x}: {plain}");
         }
     }
@@ -281,10 +310,16 @@ mod tests {
     #[test]
     fn cuts_repeats_and_inserts_have_the_documented_sizes() {
         let seed: Vec<u8> = (0..100).collect();
-        let (mut cut, mut grow) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+        let (mut cut, mut grow) = (
+            std::collections::BTreeSet::new(),
+            std::collections::BTreeSet::new(),
+        );
         let (mut appended, mut prepended, mut cut_tail) = (false, false, false);
         each(&seed, 30000, 400, 47, |d| {
-            if d.len() < seed.len() && seed.starts_with(&d[..d.len().min(1)]) && d.iter().eq(seed.iter().take(d.len())) == false {
+            if d.len() < seed.len()
+                && seed.starts_with(&d[..d.len().min(1)])
+                && !d.iter().eq(seed.iter().take(d.len()))
+            {
                 cut.insert(seed.len() - d.len());
             }
             if d.len() > seed.len() {
@@ -295,7 +330,10 @@ mod tests {
             cut_tail |= d.len() < seed.len() && d.iter().eq(seed.iter().take(d.len()));
         });
         assert!((1..=16).all(|n| cut.contains(&n)), "cut sizes {cut:?}");
-        assert!(grow.contains(&1) && grow.contains(&32) && grow.iter().all(|&n| n <= 32), "growth {grow:?}");
+        assert!(
+            grow.contains(&1) && grow.contains(&32) && grow.iter().all(|&n| n <= 32),
+            "growth {grow:?}"
+        );
         assert!(appended && prepended && cut_tail);
     }
 

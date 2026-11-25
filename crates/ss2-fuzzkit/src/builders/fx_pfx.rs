@@ -1,5 +1,5 @@
-use std::collections::BTreeMap as HashMap;
 use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
+use std::collections::BTreeMap as HashMap;
 
 /// A class declaration: name, base, members `(name, type name)`.
 type Decl = (
