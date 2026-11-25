@@ -526,6 +526,8 @@ dependencies = [
  "serde_json",
  "ss2-core",
  "tempfile",
+ "toml",
+ "windows-sys",
  "zip",
 ]
 

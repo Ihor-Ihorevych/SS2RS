@@ -26,7 +26,11 @@ mod check;
 mod directory;
 mod install;
 mod layered;
+mod locate;
+#[cfg(test)]
+mod locate_tests;
 mod memory;
+mod modcheck;
 mod mods;
 mod path;
 
@@ -39,7 +43,18 @@ pub use check::{ArchiveInfo, Finding, InstallReport, PatchLevel, Severity, check
 pub use directory::DirectoryVfs;
 pub use install::{archive_load_order, mount_install};
 pub use layered::LayeredVfs;
+pub use locate::{
+    ANCHOR_ARCHIVE, CHOICE_FILE_NAME, Candidate, CandidateSource, DATA_DIR_ENV, Discovery,
+    Environment, FakeEnvironment, LoadedChoice, NEWEST_KNOWN_PATCH, Os, Rejected, RememberedChoice,
+    Startup, StartupSource, SystemEnvironment, ValidationSummary, WizardReason, choice_file,
+    dedupe_key, discover, forget_choice, load_choice, parse_library_folders, parse_reg_query,
+    resolve_startup, save_choice, summarize,
+};
 pub use memory::MemoryVfs;
+pub use modcheck::{
+    Lint, ModCheckEnv, ModFinding, ModLayer, ModReport, ModSpec, ModSummary, ModUnderTest,
+    check_install_mods, check_mods, installed_mod_names,
+};
 pub use mods::{
     ModInfo, ModManifest, ModModule, Nfo, discover_mods, mod_archive_names, mount_mod,
     parse_current_mod, selected_mod,

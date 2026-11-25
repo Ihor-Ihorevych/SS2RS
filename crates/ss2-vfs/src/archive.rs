@@ -75,6 +75,7 @@ pub struct ArchiveVfs {
     /// Directory path -> (child name -> kind). Contains the root and every ancestor directory.
     children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>>,
     skipped: Vec<String>,
+    duplicates: Vec<String>,
     file: Arc<Mutex<File>>,
 }
 
@@ -136,6 +137,7 @@ impl ArchiveVfs {
         let mut children: BTreeMap<VfsPath, BTreeMap<String, EntryKind>> = BTreeMap::new();
         children.insert(VfsPath::root(), BTreeMap::new());
         let mut skipped = Vec::new();
+        let mut duplicates = Vec::new();
 
         for Record {
             name: entry_name,
@@ -169,7 +171,9 @@ impl ArchiveVfs {
                         .insert(file_name.to_owned(), EntryKind::File);
                 }
             }
-            files.insert(vpath, entry);
+            if files.insert(vpath, entry).is_some() {
+                duplicates.push(entry_name);
+            }
         }
 
         Ok(Self {
@@ -178,6 +182,7 @@ impl ArchiveVfs {
             files,
             children,
             skipped,
+            duplicates,
             file: Arc::new(Mutex::new(file)),
         })
     }
@@ -195,6 +200,13 @@ impl ArchiveVfs {
     /// Raw names of entries that were not exposed because they are not valid VFS paths.
     pub fn skipped_entries(&self) -> &[String] {
         &self.skipped
+    }
+
+    /// Raw names of entries that replaced an earlier entry of the same archive with the same
+    /// normalized path (the same name twice, or names that differ only by case or by `/` against
+    /// `\`). The last one wins; the earlier ones are unreachable. Used by the mod checker.
+    pub fn duplicate_entries(&self) -> &[String] {
+        &self.duplicates
     }
 
     fn entry(&self, path: &VfsPath) -> Result<&Entry> {
@@ -497,6 +509,7 @@ mod tests {
         assert_eq!(archive.file_count(), 2);
         assert!(archive.list(&p("empty")).unwrap().is_empty());
         assert_eq!(archive.skipped_entries(), ["../bad.txt"]);
+        assert_eq!(archive.duplicate_entries(), ["a.txt"]);
         assert_eq!(archive.read(&p("a.txt")).unwrap(), b"stored");
         assert_eq!(archive.read(&p("deep/zip.txt")).unwrap(), b"deflated");
         let mut stream = archive.open(&p("a.txt")).unwrap();
@@ -510,14 +523,14 @@ mod tests {
     fn stale_cache_is_rebuilt_even_for_same_size_and_timestamp() {
         let dir = tempfile::tempdir().unwrap();
         let cache = dir.path().join("cache");
-        // A long first payload and long comment put the changed file and directory metadata
-        // beyond samples taken only at the archive's beginning and end.
+        // Padding before and after the changed entry keeps it outside all three samples.
         let first = [0; 8192];
+        let padding_name = "p".repeat(8192);
         let comment = "x".repeat(8192);
         let path = mixed_with_comment(
             &dir,
             "a.gro",
-            &[("padding", &first, false), ("old.txt", b"one", false)],
+            &[(&padding_name, &first, false), ("old.txt", b"one", false)],
             &comment,
         );
         ArchiveVfs::from_cached_file(&path, Some(&cache)).unwrap();
@@ -525,7 +538,7 @@ mod tests {
         mixed_with_comment(
             &dir,
             "a.gro",
-            &[("padding", &first, false), ("new.txt", b"two", false)],
+            &[(&padding_name, &first, false), ("new.txt", b"two", false)],
             &comment,
         );
         File::options()

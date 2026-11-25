@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::{Record, RecordKind};
 
 // Bump the version when the index format or interpretation of ZIP entries changes.
-const MAGIC: &[u8] = b"SS2ZIP\0\x02";
+const MAGIC: &[u8] = b"SS2ZIP\0\x03";
 const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_PATH_TREE_BYTES: usize = 32 * 1024 * 1024;
 const SAMPLE_BYTES: usize = 4096;
@@ -23,7 +23,38 @@ struct Stamp {
     created: Option<SystemTime>,
     #[cfg(unix)]
     identity: (u64, u64, i64, i64),
+    #[cfg(windows)]
+    change_time: i64,
     samples: u32,
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn change_time(file: &File) -> io::Result<i64> {
+    use std::os::windows::io::AsRawHandle;
+
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_BASIC_INFO, FileBasicInfo, GetFileInformationByHandleEx,
+    };
+
+    let mut info = FILE_BASIC_INFO::default();
+    // SAFETY: `file` owns the live handle, and FileBasicInfo writes a FILE_BASIC_INFO into
+    // the aligned, initialized buffer of that exact size.
+    let success = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            (&raw mut info).cast(),
+            size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    if success == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if info.ChangeTime == 0 {
+        return Err(io::Error::other("archive change time is unavailable"));
+    }
+    Ok(info.ChangeTime)
 }
 
 impl Stamp {
@@ -31,6 +62,9 @@ impl Stamp {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
 
+        // Read the change time independently of the restorable last-write time.
+        #[cfg(windows)]
+        let before_change = change_time(file)?;
         let metadata = file.metadata()?;
         let len = metadata.len();
         let modified = metadata.modified()?;
@@ -64,12 +98,18 @@ impl Stamp {
         if identity != (after.dev(), after.ino(), after.ctime(), after.ctime_nsec()) {
             return Err(io::Error::other("archive changed while reading its stamp"));
         }
+        #[cfg(windows)]
+        if change_time(file)? != before_change {
+            return Err(io::Error::other("archive changed while reading its stamp"));
+        }
         Ok(Self {
             len,
             modified,
             created,
             #[cfg(unix)]
             identity,
+            #[cfg(windows)]
+            change_time: before_change,
             samples: hash.finalize(),
         })
     }

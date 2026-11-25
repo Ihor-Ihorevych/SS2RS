@@ -185,6 +185,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "asset-export"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flate2",
+ "gltf",
+ "png",
+ "serde_json",
+ "ss2-core",
+ "ss2-format-bmf",
+ "ss2-format-mtr",
+ "ss2-format-tex",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1016,6 +1037,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "gltf"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3ce1918195723ce6ac74e80542c5a96a40c2b26162c1957a5cd70799b8cacf7"
+dependencies = [
+ "byteorder",
+ "gltf-json",
+ "lazy_static",
+ "serde_json",
+]
+
+[[package]]
+name = "gltf-derive"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14070e711538afba5d6c807edb74bcb84e5dbb9211a3bf5dea0dfab5b24f4c51"
+dependencies = [
+ "inflections",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "gltf-json"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6176f9d60a7eab0a877e8e96548605dedbde9190a7ae1e80bbcc1c9af03ab14"
+dependencies = [
+ "gltf-derive",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "glutin_wgl_sys"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1130,6 +1187,12 @@ dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
 ]
+
+[[package]]
+name = "inflections"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 
 [[package]]
 name = "inotify"
@@ -1411,6 +1474,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b0ca1155a9ecc25aa12e8313a119f32edf0255fea2f44839c4ac0a12b2ac157"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "meta-dump"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde_json",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+ "tempfile",
 ]
 
 [[package]]
@@ -2617,7 +2694,9 @@ dependencies = [
  "ss2-platform",
  "ss2-platform-api",
  "ss2-render",
+ "ss2-testkit",
  "ss2-ui",
+ "ss2-vfs",
  "tempfile",
  "tracing",
  "winit",
@@ -2681,6 +2760,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-ans"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-bmf"
 version = "0.0.0"
 dependencies = [
@@ -2693,6 +2783,30 @@ dependencies = [
 
 [[package]]
 name = "ss2-format-ep"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-format-fnt"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-tex",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-format-fx"
 version = "0.0.0"
 dependencies = [
  "ss2-assets",
@@ -2725,6 +2839,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-rsc"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-ep",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-tex"
 version = "0.0.0"
 dependencies = [
@@ -2742,10 +2868,13 @@ version = "0.0.0"
 dependencies = [
  "ss2-audio-api",
  "ss2-core",
+ "ss2-format-rsc",
  "ss2-physics",
  "ss2-platform-api",
  "ss2-render-api",
+ "ss2-testkit",
  "ss2-ui",
+ "ss2-vfs",
 ]
 
 [[package]]
@@ -2875,12 +3004,20 @@ dependencies = [
  "ss2-core",
  "ss2-testkit",
  "tempfile",
+ "toml",
+ "windows-sys 0.61.2",
  "zip",
 ]
 
 [[package]]
 name = "ss2-video"
 version = "0.0.0"
+dependencies = [
+ "ss2-testkit",
+ "ss2-vfs",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "ss2-world"

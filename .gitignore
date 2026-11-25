@@ -10,6 +10,11 @@
 *.ogv
 *.xmv
 *.chm
+# ... except tiny hand-made fixtures under testdata/ (cargo xtask guard still checks them)
+!testdata/**/*.tex
+!testdata/**/*.bmf
+# ... and the invented example mods (examples/mods/README.md; cargo xtask guard checks them too)
+!examples/mods/**/*.tex
 
 # Reverse-engineering workspaces (notes go in docs/re/, never decompiler output)
 *.gpr
