@@ -350,6 +350,12 @@ Item and pickup classes (docs/re/item-classes.md and its two companion pages):
 python -I tools/re/item_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 113 exported item classes are in the data (97) and under which name, the member order of 16 data classes against the names the binary declares, the 51 CBaseItemParams respawn numbers and the 8 tool files with an item record, and the census of the 2,730 placed items (class members, models, flags, spawner and parameter links, 4,222 records) and of the 665 ammunition containers (about 12 minutes; the class and member names it checks were read from the binary, the script reads data only)
 ```
 
+Level mechanism, spawner and info entity classes (docs/re/mechanism-classes.md and its five companion pages):
+
+```
+python -I tools/re/mechanism_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 82 exported classes are in the data (70) and under which name, the member order of 23 data classes against the binary's declared names, the census of the 59 worlds (7,651 placed entities and their records: member value tables, the spawner limit type against the spawnee class, the chapter links), the two spawner tweak files and ChapterMaxes.txt (about 12 minutes; --no-worlds skips the census, --short prints fewer values)
+```
+
 World content entity classes (docs/re/worldcontent-classes.md and its four companion pages):
 
 ```
