@@ -322,10 +322,17 @@ Weapon classes (docs/re/weapon-classes.md):
 python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 83 exported weapon classes are in the data and under which name, the member order of 14 data classes against the names the binary declares (the rule that names the numbered weapon members), the weapon files per class and their base members by name (about 4 minutes; the class and member names it checks were read from the binary, the script reads data only)
 ```
 
+Hitscan shot (docs/re/hitscan-shot.md):
+
+```
+python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
 python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
+python -I tools/re/brain_assignment_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # docs/re/brain-assignment.md: the puppet entity classes the worlds place, which carry a character behavior (.cb), the behavior against the parameter file, the default state against the behavior, the spawner links and the seats (about 20 minutes; LIMIT reads only the smallest worlds)
 ```
 
 AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):

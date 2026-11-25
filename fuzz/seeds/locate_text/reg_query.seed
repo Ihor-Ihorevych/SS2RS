@@ -1,0 +1,5 @@
+InstallPath
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Example
+    InstallPath    REG_SZ    C:\Games\Example
+

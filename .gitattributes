@@ -1,2 +1,5 @@
 # Shell scripts must keep LF line endings even on Windows checkouts with core.autocrlf (CRLF breaks bash).
 *.sh text eol=lf
+
+# Fuzz seeds are exact bytes (some are text with CR LF or LF on purpose): never convert line endings.
+/fuzz/seeds/** -text
