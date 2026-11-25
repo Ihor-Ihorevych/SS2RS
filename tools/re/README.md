@@ -361,3 +361,9 @@ World content entity classes (docs/re/worldcontent-classes.md and its four compa
 ```
 python -I tools/re/worldcontent_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 55 exported world-content classes are in the data (25: 11 under the C name, 12 as the S twin, 2 under the registered name CEffectEntity/CEffectProperties), the member order of 28 data classes against the names the binary declares, and the census of the placed entities and records of the family (static models, props, particle effects, sounds, flares, markers, vis boxes, nav-mesh markers, shakers, text effects): member values, entity-versus-record copy checks, flag cross tables, construction defaults, link relations and the hard-coded path marker (about 15 minutes; the class and member names it checks were read from the binary, the script reads data only)
 ```
+
+HUD classes (docs/re/hud-classes.md and its three companion pages):
+
+```
+python -I tools/re/hud_classes_verify.py "C:\path\to\Serious Sam 2" [--all]    # which of the 95 exported HUD classes (plus the 4 of the player part) are in the data (47 saved, each in 1 file; 2 renamed), the member order of 31 data classes against the binary's names (141 members), the 44 entries of Databases/HudParams.rsc (positions, stacks, configuration records, textures), SimpleHudBarParams.rsc and the ammunition and weapon icon files against the enumeration captions; --all scans all 8,063 format-8 files (about 4 minutes)
+```
