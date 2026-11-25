@@ -328,6 +328,12 @@ Hitscan shot (docs/re/hitscan-shot.md):
 python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
 ```
 
+Projectile launch (docs/re/projectile-launch.md):
+
+```
+python -I tools/re/projectile_launch_verify.py "C:\path\to\Serious Sam 2"    # the charging, recoil and launch-velocity members of the seven projectile weapons, the projectile files they name with the pairs at fire power 0 and 1, the launch speed per charge, the zap gun's bullet count, the player's hand grenade and which of the 94 projectile files a player weapon names (about 1 minute; the formulas come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
