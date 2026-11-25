@@ -146,7 +146,7 @@ Grouped by role. "(name)" = only the name was used. Parameter lists are not reco
 | `CelebrateIKillSomeFoe`, `CelebrateIKillMyFoe`, `CelebrateFoeDied`, `CelebrateAllFoesDied` | Raise the moments `IKilledSomeFoe`, `IKilledMyFoe`, `MyFoeDied`, `AllFoesDied`. |
 | `GetSeeDistance` | The sight distance in world units: the global standard see distance (**100**, `rsc-ctl.md`); a puppet that carries a special sight setting can replace it by its own value or by the global short-sighted distance (**40**) and in one setting uses a fixed larger constant (which setting and which constant: T01-126). |
 | `GetFoeSeekingFOVDeg` | The field of view in degrees for seeking a foe: the puppet's own value when it is at least a small threshold, otherwise the global character field of view (**360**); a fixed value while examining a sound. |
-| `ExamineSoundSource` | A sound was heard at a position: unless a puppet setting (not resolved) says to ignore it, tells the puppet to look toward the position and enters `BS_EXAMINE_THREAT_SOUND`. |
+| `ExamineSoundSource` | A sound was heard at a position: unless the puppet's `en_fAllowedMovingRange` is 0 or more, orders the puppet to **walk to the position** (a go-to-point behaviour) and enters `BS_EXAMINE_THREAT_SOUND` (corrected by T01-129, `brain-senses.md` 5.3). |
 | `OnToolPicked` | Raises the moment `ToolPicked`. |
 | `OnStartRiding`, `OnStopRiding`, `OnTurnedOn`, `OnTurnedOff` | Raise the moments `StartRiding`, `StopRiding`, `TurnedOn`, `TurnedOff` (queued when moments cannot be handled right now). |
 
@@ -308,7 +308,7 @@ After construction (**medium**): state `BS_DEFAULT`, `.cb` state `Default`, acti
 2. **The decision loop in full** (T01-126): the think period and its graph, the order inside `ThinkPoint`, the exact use of `GetMovePeriod`, the sight setting behind `GetSeeDistance`, the moments `Idle`, `Born` and the empty one, the meaning and names of the execution ability flags, the think routine of each state. Ties to T01-076 (enemy run time) and T01-038.
 3. **Mover choice, patrol and tactics**: **answered by T01-127** in [`brain-movement.md`](brain-movement.md) (band lookup, mover choice and keep rule, results and periods, tactic taking, patrol start, resume and stop, goal points, the macro events; **medium**, nothing run). Corrections there: the movement record holds the foe's last seen position, not a distance; ability bit 2 is the "may move" ability. Still open: T01-242, T01-243, T01-126.
 4. **Rides** (T01-128): seat choice, the way to a seat, teleport to enter, possession and exit; ties to `vehicles.md` and to the player's own ride rules (T01-114).
-5. **Foe and sense rules** (T01-129): what `OnCreatedByPuppet` registers in the world info's list of brains, how the foe manager and the brain split the work (the foe manager is T01-105), the sound examination, the hearing thresholds.
+5. **Foe and sense rules**: **answered by T01-129** in [`brain-senses.md`](brain-senses.md) (registration, the split of work, the eight threat sensitivities, see distance, field of view, the foe search, the sound rules and thresholds, the alignment rule; **medium**, nothing run). Still open: T01-244, T01-156, T01-130.
 6. **Run-time checks on the original** (T01-130): which brain classes exist in a running level, the state sequence of one enemy (`Kleer`, `Albino`), the moment order, the see distance and field-of-view numbers, whether the obsolete-class error ever appears; numbers only (T01-038, T01-039).
 
 ## Test vectors
