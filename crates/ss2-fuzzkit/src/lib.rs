@@ -4,7 +4,7 @@
 //! itself (what is called, what must hold afterwards) lives here, in a normal workspace crate, for two reasons:
 //!
 //! - **It also runs on stable.** `cargo-fuzz` needs nightly Rust and libFuzzer, so it cannot be a pull-request check.
-//!   `tests/smoke.rs` feeds every target its [`seeds`] and a few thousand deterministic damaged and random inputs
+//!   `tests/smoke.rs` feeds every target its seeds and a few thousand deterministic damaged and random inputs
 //!   ([`mutate`]) in the ordinary test suite, so a parser that panics, hangs or breaks a property on a bad file is
 //!   caught before the nightly run.
 //! - **The seeds need the builders.** The corpus is built from the synthetic fixture writers of the repository (the
