@@ -83,7 +83,7 @@ the mods shipped in the `Content` folder. Those are not part of this repository.
   and documents. It does not license game content, and it does not decide the license of a mod.
 - **A mod that uses only the engine's public mod interface** is a separate work from the engine, and
   its license is the author's choice. The repository's docs do not yet define a public mod API
-  (T13-005, T13-010), and whether a given mod is a derivative work is a legal question. Mod authors
+  (T13-005; what exists today is in the [modder docs](modding/api.md)), and whether a given mod is a derivative work is a legal question. Mod authors
   who need certainty should ask their own advisor.
 - **Original content still has to stay original**: the license of a mod does not make game content
   redistributable.
@@ -121,6 +121,9 @@ the mods shipped in the `Content` folder. Those are not part of this repository.
 - [ ] A changed original asset is shipped as a separate file the engine loads over the player's data, or
       as a patch or instructions that need the player's own copy, as in section 4.
 - [ ] The `.mod` and `.nfo` descriptors are present and correct, and the mod has a README.
+- [ ] `ss2-doctor <install folder> --mod <Name>` reports no error for the mod; the warnings are read and
+      understood ([Mod validation](MOD_VALIDATION.md)). It also warns about native code and `.gro`
+      files inside a mod (MOD046), which section 3 forbids.
 - [ ] The README states the license and links to its text.
 - [ ] I have checked that nothing in the mod folder is a game file (compare the file list with the names
       in the install, and check the hashes of anything you are unsure about).

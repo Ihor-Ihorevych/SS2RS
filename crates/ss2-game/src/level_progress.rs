@@ -821,7 +821,7 @@ impl<'a> Reader<'a> {
 }
 
 /// CRC-32 (the zlib/PNG polynomial, reflected), bit by bit: the data is small.
-fn crc32(data: &[u8]) -> u32 {
+pub(crate) fn crc32(data: &[u8]) -> u32 {
     let mut crc = u32::MAX;
     for &b in data {
         crc ^= u32::from(b);

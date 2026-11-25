@@ -185,11 +185,11 @@ impl TypeSystem {
             ts.codecs.entry(t.id).or_insert(codec);
         }
         let mut sizes = HashMap::new();
-        let mut stack = Vec::new();
-        for &id in ts.codecs.keys() {
-            ts.compute_min_size(id, &mut stack, &mut sizes);
-        }
-        ts.min_sizes = sizes;
+        ts.min_sizes = ts
+            .codecs
+            .keys()
+            .map(|&id| (id, ts.compute_min_size(id, 0, &mut sizes)))
+            .collect();
         ts
     }
 
@@ -325,34 +325,35 @@ impl TypeSystem {
     fn compute_min_size(
         &self,
         id: u32,
-        stack: &mut Vec<u32>,
-        sizes: &mut HashMap<u32, usize>,
+        depth: usize,
+        sizes: &mut HashMap<(u32, usize), usize>,
     ) -> usize {
-        if let Some(&s) = sizes.get(&id) {
-            return s;
-        }
-        if stack.contains(&id) || stack.len() > MAX_DEPTH {
+        if depth > MAX_DEPTH {
             return 0;
         }
-        stack.push(id);
+        // Deeper traversals can stop earlier, so their sizes cannot stand in for shallow ones.
+        // The depth limit also terminates by-value cycles.
+        if let Some(&s) = sizes.get(&(id, depth)) {
+            return s;
+        }
         let size = match self.codecs.get(&id) {
             Some(Codec::Prim(p)) => p.size(),
             Some(Codec::Enum { size }) => *size,
             Some(Codec::Ref | Codec::String) => 4,
             Some(Codec::List { .. } | Codec::Objects) => 8,
+            Some(Codec::Fixed { n: 0, .. }) => 0,
             Some(Codec::Fixed { n, elem }) => {
-                n.saturating_mul(self.compute_min_size(*elem, stack, sizes))
+                n.saturating_mul(self.compute_min_size(*elem, depth + 1, sizes))
             }
             Some(Codec::Struct { marker }) => self.layouts.get(&id).into_iter().flatten().fold(
                 marker.map_or(0, |m| m.len()),
                 |size, member| {
-                    size.saturating_add(self.compute_min_size(member.type_id, stack, sizes))
+                    size.saturating_add(self.compute_min_size(member.type_id, depth + 1, sizes))
                 },
             ),
             Some(Codec::Unsupported(_)) | None => 0,
         };
-        stack.pop();
-        sizes.insert(id, size);
+        sizes.insert((id, depth), size);
         size
     }
 
@@ -424,6 +425,9 @@ impl TypeSystem {
     }
 
     /// Decode one value of type `type_id` from `data` at `*pos`, advancing `*pos` past it.
+    ///
+    /// The value count is bounded by the remaining input size. A sufficiently large or deeply
+    /// wrapped value tree can exceed the limit even when its encodings fit in `data`.
     ///
     /// # Errors
     /// [`Error::Invalid`] on truncated data, an unknown type shape, a container marker that does
@@ -732,7 +736,7 @@ impl Container<'_> {
     ///
     /// Checks the rules of the spec: each record header equals its `OBTY` (or `EDTY`) entry, the
     /// main records end exactly at the `EDOB` tag, and the extra records end exactly at the
-    /// footer.
+    /// footer. All records share a decoded value budget based on the object data size.
     ///
     /// # Errors
     /// [`Error::Invalid`] naming the byte offset of the first problem.
@@ -873,9 +877,24 @@ mod tests {
                 .collect(),
         );
         assert_eq!(
-            types.compute_min_size(3, &mut Vec::new(), &mut HashMap::new()),
+            types.compute_min_size(3, 0, &mut HashMap::new()),
             usize::MAX
         );
+    }
+
+    #[test]
+    fn depth_limited_size_does_not_replace_the_full_size() {
+        let mut types = TypeSystem::default();
+        types.codecs.insert(1, Codec::Prim(Prim::U32));
+        types.codecs.insert(2, Codec::Fixed { n: 1, elem: 1 });
+        let root = MAX_DEPTH as u32 + 2;
+        for id in 3..=root {
+            types.codecs.insert(id, Codec::Fixed { n: 1, elem: id - 1 });
+        }
+
+        let mut sizes = HashMap::new();
+        assert_eq!(types.compute_min_size(root, 0, &mut sizes), 0);
+        assert_eq!(types.compute_min_size(2, 0, &mut sizes), 4);
     }
 
     #[test]

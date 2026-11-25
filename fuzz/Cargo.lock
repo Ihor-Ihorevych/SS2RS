@@ -501,7 +501,9 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "serde",
  "ss2-core",
+ "toml",
  "zip",
 ]
 

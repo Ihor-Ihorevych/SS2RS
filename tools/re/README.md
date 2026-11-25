@@ -291,3 +291,87 @@ Menu evidence (docs/re/gui.md, menus-tables.md):
 ```
 python -I tools/re/menus_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/menus-tables.md]    # the 99 menu screen layouts: gadgets, link graph, platform masks, button bars (about 1 minute)
 ```
+
+Main loop and time evidence (docs/re/main-loop.md):
+
+```
+python -I tools/re/mainloop_verify.py "C:\path\to\Serious Sam 2"    # the configuration scripts of the install and every line that sets a timing variable (a few seconds); the loop itself is specified from the binaries and has no script
+```
+
+Save-game evidence (docs/re/save-game.md):
+
+```
+python -I tools/re/savegame_verify.py "C:\path\to\Serious Sam 2" [--skip-worlds]    # the save-data pointer and save counter of every world version (about 6 minutes), the classes no data file defines, the 46 .preload files, the 3 shipped demos and their .nfo; a save game itself cannot be reproduced from the install (there is none)
+```
+
+Replication evidence (docs/re/replication.md):
+
+```
+python -I tools/re/replication_verify.py "C:\path\to\Serious Sam 2"    # decodes the 3 shipped demos to the last byte (message counts, the opening snapshot, per-step traffic, the share of empty updates) and counts configuration lines that set net_, ser_ or cli_ variables (a few seconds); the replication rules themselves are specified from the binaries and have no script
+```
+
+Player, session and inventory classes (docs/re/players-session-classes.md):
+
+```
+python -I tools/re/players_session_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 52 exported classes of the family are in the data and under which name, that the other 42 are in no type table, the files that carry the resource classes, and the member order of SPlayerPuppetParams against the 24 names the binary declares (about 2 minutes; the class names it checks were read from the binary's export table, the script reads data only)
+```
+
+Weapon classes (docs/re/weapon-classes.md):
+
+```
+python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 83 exported weapon classes are in the data and under which name, the member order of 14 data classes against the names the binary declares (the rule that names the numbered weapon members), the weapon files per class and their base members by name (about 4 minutes; the class and member names it checks were read from the binary, the script reads data only)
+```
+
+Brain classes (docs/re/brain-classes.md):
+
+```
+python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
+```
+
+AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):
+
+```
+python -I tools/re/behavior_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 95 exported AI behaviour and action classes are in the data (45 by own name or S twin), their base, members and files, the member order of 14 classes against the binary's declared names, the objects of every class in the 82 .cb, 322 .ep and 59 .wld files with the stored value of every member, the term class on each action class and the movers of the bands (about 10 minutes; the class names it checks come from the binary's export table)
+```
+
+Puppet classes (docs/re/puppet-classes.md and its four companion pages):
+
+```
+python -I tools/re/puppet_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 101 exported puppet classes are in the data (50), the member-order rule against the declared member tables (16 classes), the root classes of the 124 puppet parameter files, and what the install does not contain (about 5 minutes)
+Projectile classes (docs/re/projectile-classes.md):
+
+```
+python -I tools/re/projectile_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 32 exported projectile classes are in the data, the member order of 13 data classes against the names the binary declares, the value tables of the 94 projectile files, SPuppetProjectileParams, CLaunchVelocities and the global bullet and flame parameters, and the stored shooters, launchers and crumbs (about 6 minutes)
+```
+
+Item and pickup classes (docs/re/item-classes.md and its two companion pages):
+
+```
+python -I tools/re/item_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 113 exported item classes are in the data (97) and under which name, the member order of 16 data classes against the names the binary declares, the 51 CBaseItemParams respawn numbers and the 8 tool files with an item record, and the census of the 2,730 placed items (class members, models, flags, spawner and parameter links, 4,222 records) and of the 665 ammunition containers (about 12 minutes; the class and member names it checks were read from the binary, the script reads data only)
+```
+
+Level mechanism, spawner and info entity classes (docs/re/mechanism-classes.md and its five companion pages):
+
+```
+python -I tools/re/mechanism_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 82 exported classes are in the data (70) and under which name, the member order of 23 data classes against the binary's declared names, the census of the 59 worlds (7,651 placed entities and their records: member value tables, the spawner limit type against the spawnee class, the chapter links), the two spawner tweak files and ChapterMaxes.txt (about 12 minutes; --no-worlds skips the census, --short prints fewer values)
+```
+
+World content entity classes (docs/re/worldcontent-classes.md and its four companion pages):
+
+```
+python -I tools/re/worldcontent_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 55 exported world-content classes are in the data (25: 11 under the C name, 12 as the S twin, 2 under the registered name CEffectEntity/CEffectProperties), the member order of 28 data classes against the names the binary declares, and the census of the placed entities and records of the family (static models, props, particle effects, sounds, flares, markers, vis boxes, nav-mesh markers, shakers, text effects): member values, entity-versus-record copy checks, flag cross tables, construction defaults, link relations and the hard-coded path marker (about 15 minutes; the class and member names it checks were read from the binary, the script reads data only)
+```
+
+HUD classes (docs/re/hud-classes.md and its three companion pages):
+
+```
+python -I tools/re/hud_classes_verify.py "C:\path\to\Serious Sam 2" [--all]    # which of the 95 exported HUD classes (plus the 4 of the player part) are in the data (47 saved, each in 1 file; 2 renamed), the member order of 31 data classes against the binary's names (141 members), the 44 entries of Databases/HudParams.rsc (positions, stacks, configuration records, textures), SimpleHudBarParams.rsc and the ammunition and weapon icon files against the enumeration captions; --all scans all 8,063 format-8 files (about 4 minutes)
+```
+
+Menu screen classes (docs/re/menu-classes.md and its six companion pages):
+
+```
+python -I tools/re/menu_classes_verify.py "C:\path\to\Serious Sam 2"    # the 104 exported menu classes (1,412 functions, 684 named) against the 99 menu layouts: which layout belongs to which class, handler names against gadget names (263 of 372 name a gadget of their own layout), the binary's declared member names of 25 gadget classes against the data's type tables (22 match in full), option lists against the code's tables (enemy percentages, difficulties, quality levels, connection presets), the popup layouts, the mod trees' own Menus folders, the menu parameters (a fraction of a minute)
+python -I tools/re/helper_classes_verify.py "C:\path\to\Serious Sam 2" [--sections=1234]    # the 59 exported helper classes (471 functions, 80 named methods) against the data: 30 in the type tables, 2 more under other names; the 1,313 animation events by class with flags and own members; the constructors' defaults against the global parameter files (CSamNetworkParams 8 of 8, CBulletParameters 13 of 14), CThrowingParams (252 values) and SPuppetEnvironmentParams (258 values, third member never above the fourth); about 3 minutes
+python -I tools/re/class_inventory_check.py [REPO_DIR]    # reads only docs/re: the 932-row class inventory (docs/re/class-inventory-1.md and -2.md) against the pages of the twelve parts: one row per class, per-part class and function counts, the data column's totals, every covering page names the class or its family rule, every page is in SUMMARY.md; a few seconds
+```

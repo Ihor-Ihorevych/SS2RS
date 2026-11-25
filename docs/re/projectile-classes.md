@@ -1,0 +1,392 @@
+# Projectile classes of `Sam2Game.dll` (T01-107, part of T01-026)
+
+- **Roadmap task:** T01-107 (part 6 of the class inventory T01-026; the other parts are T01-102 to T01-113)
+- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
+- **Confidence:** **high** for what `tools/re/projectile_classes_verify.py` reproduces from the data: which of the 32 classes are saved (14 under the exported name or its `S` twin, plus the shooter under another registered name), their base class, member counts and file counts, the **member-order rule** of section 3 (all 13 data classes that the binary also declares agree on member count, on the position of every member the data names and on the data types), the value tables of the 94 projectile parameter files, of `SPuppetProjectileParams`, of `CLaunchVelocities` and of the global bullet and flame parameters; **high** for the net behaviour, the relevance distance, the priority and the replicated member lists of the projectile and the debris (two independent readings: this page and `replication.md`); **medium** for everything else read from the binary (member names and flags, the enumerations, the overridden hooks, the rules of sections 5 to 11), because each rests on one reading and **nothing was run**; **low** for what a method does when it is described only from its name (marked "(name)") and for the items in "Open questions".
+
+Prerequisites: `classes.md` and `classes-catalog.md` (the classes of the data), `ep.md` and `ep-schema.md` (the `.ep` files), `weapon-classes.md` (the weapons that launch projectiles and that own a shooter; its section 4 introduced the member-order rule used here), `players-session-classes.md`, `replication.md` (net behaviour and replicated members), `weapons.md` and `weapons-tables.md` (the parameter values of the weapons and of the projectile files they name), `destruction.md` (model destruction effects), `ai.md`.
+
+## Summary
+
+`Sam2Game.dll` exports **32 classes** (332 exported functions, 120 named methods besides the standard set) that make up **everything a shot leaves behind**: the flying projectile and its parameter file, the hitscan **shooter** and the **bullet** and **bullet trail** it creates, the **burning** of puppets by the flamer, **debris**, **crumbs** (a scatter renderer), the **launchers** that throw spawned things, the **launch velocities** of dropped tools, and the bullets ammunition pickup. Of the 32, **14 are saved in the data** under the exported name or its `S` twin, **one more is saved under a different registered name** (the shooter, saved as `SBulletShooterEntity`) and **17 exist only in the binary** (all entity and properties classes of the projectiles, bullets, trails, debris and flames, the two `Renderable`/`HitData` helpers, and `CShooterProperties`).
+
+| Group | Classes (exported names) | Functions (named) |
+|---|---|---|
+| **Projectile** (10) | `CBaseProjectileEntity`, `CBaseProjectileProperties`, `CBaseProjectileParams`; `CGenericProjectileEntity`, `CGenericProjectileProperties`, `CGenericProjectileParams`; `CFlamerProjectileEntity`, `CFlamerProjectileProperties`, `CFlamerProjectileParams`; `CPuppetProjectileParams` | 116 (47) |
+| **Shooter, bullet, trail** (9) | `CShooterEntity`, `CShooterProperties`; `CBulletEntity`, `CBulletProperties`; `CBulletTrailEntity`, `CBulletTrailProperties`, `CBulletTrailRenderable`; `CStaticBulletTrail`, `CMovingBulletTrail` | 93 (36) |
+| **Debris and crumbs** (4) | `CDebrisEntity`, `CDebrisProperties`; `CCrumbsEntity`, `CCrumbsProperties` | 48 (20) |
+| **Flames** (4) | `CFlameEntity`, `CFlameProperties`, `CFlameHitData`; `CFlamerFlameParams` | 35 (9) |
+| **Launchers** (3) | `CLaunchVelocities`, `CMarkersLauncher`, `CRelativeRandomConeLauncher` | 24 (6) |
+| **Ammunition pickup** (2) | `CBulletsItemEntity`, `CBulletsItemProperties` | 16 (2) |
+
+What a reader needs to know first:
+
+1. **A projectile is one entity class driven by one parameter file.** The 94 projectile files (`Databases/GenericProjectiles`: `Common` 70, `Boss` 17, `Spawning` 7; 93 `SGenericProjectileParams` and the flamer's `CFlamerProjectileParams`) carry the **48 members of `SBaseProjectileParams` plus 2 of `SGenericProjectileParams`**. 27 of the 48 are stored with a bare number; the binary declares the same members **with names, in the same order**, so every number gets its name (section 3; the order rule is **checked on 13 classes**). This answers the "unnamed" list of `ep-schema.md` for the projectile: for example data member `1` is the **flying speed**, `5` the **life time in seconds**, `2` and `11` the **direct damage at fire power 0 and 1**, `3` and `12` the **area damage** pair, `7`/`13` and `8`/`14` the **hot spot and fall-off of the area damage**, `17` "explodes on the first touch" and `18` "explodes on puppets", `21` to `27` and `23` the **homing (seek)** numbers.
+2. **Pairs are "value at fire power 0" and "value at fire power 1".** Direct damage, area damage, hot spot, fall-off, stretch and the piercing power come as a (value, max) pair and the projectile **interpolates linearly with the fire power** it was launched with (`en_fFireingPower`, 0 to 1). The data supports this for the cannon ball (600 to 700; the deathmatch ball 0 to 750), but 36 of 94 files have a max of **0** next to a positive value, which the formula would turn into a drop to 0 at full power; **what fire power each launcher passes is open** (section 5.3, T01-119, T01-132).
+3. **Projectiles exist on the server only, and are replicated.** The shooter's projectile launch returns at once on a client; the entity is `NEB_DYNAMIC`, always relevant within the model's cull distance, with priority 6 and 8 replicated members (position, velocity, owner, fire power, parameter file, stretch, damage multiplier). Debris is `NEB_DYNAMIC` only when it collides at all. Bullets, bullet trails, flames and the shooter are not replicated (section 9).
+4. **The hitscan shot has a scatter model.** The shooter turns a shot into `en_ctBulletsToFire` pellets; each is deflected by a random offset **uniform over a ring** whose radii are the scatter radii divided by the scatter distance (section 6.3). Defaults for velocity, reach, impulse and ray width come from `CBulletParameters` of the global parameter file (80, 160, 250, 1.0; section 6.6).
+5. **The flamer sets puppets on fire through a flame entity per puppet** that holds up to 5 flame effects, hurts the puppet **5 points every 1.0 s** while one of them is alive, each flame lasts 4.0 s, the entity at most 7.5 s (global parameters, section 5.4).
+6. **Launchers are for spawned things, not for weapons.** `CMarkersLauncher` computes a free-fall launch to a marker, `CRelativeRandomConeLauncher` a random direction in a cone; both are the `Handle<CLauncher>` member of spawners (29 and 24 worlds). `CLaunchVelocities` is the struct that sets how a dropped tool (an ammunition pack) is thrown (68 `.ctl` files) (section 8).
+
+## Evidence
+
+- **Export table.** The 11,610 exports of `Sam2Game.dll` were listed and the 932 exported classes grouped by name (the split of T01-026). The 32 classes of this family are the projectile, bullet, debris, flame, crumbs, shooter, launcher and launch-velocity classes by the roadmap line; their exported functions total **332**, as the survey of T01-026. Names are quoted as exported.
+- **Class registrations and member tables.** The DLL carries a registration record (parent name, data name) and a static member table (name, type reference, flags) for most classes; 229 tables were scanned (as for `weapon-classes.md`), **22 of this family were read**. The shooter is registered as `SBulletShooterEntity` and the base parameter class as `SBaseProjectileParams`. Byte offsets and sizes were read but are **not recorded** (`conventions.md`). Tables of the plain struct classes (the trails, `CLaunchVelocities`, `SPuppetProjectileParams`, `CFlamerFlameParams`, `CBulletParameters`) were found by their member-name strings.
+- **Virtual function tables** of the 11 entity classes were compared slot by slot with their parents (`CBaseEntity` has 102 slots, `CBaseProjectileEntity` 118, the generic and flamer projectile the same 118). Identical small functions are shared by the linker, so a slot may show another class's name; those names are not used.
+- **Methods.** The 120 named methods were decompiled; about 60 were read closely (the projectile's `OnCreate`, `OnStep`, `CollisionCheck`, `OnExplode`, `Explode`, `SpawnExplosion`, `AcquireSeekTarget`, `SetupFlyingSound`, the whole shooter, the bullet, the trail, the debris, the flame entity, the launchers and the launch velocities). Each rule is **medium** (one reading); where the data or another spec gives a second reading this is said. **The large functions were read for their structure and the members they use, not line by line**; where a rule is only that, it is marked.
+- **Enumerations** were read as (value, name, caption) triples in the DLL's data (as `weapon-classes.md`) and checked against the values that occur in the data (flags 0 to 2, natures 0 and 1, damage types 8, 14, 18, bullet types 1 and 2).
+- **Data.** `tools/re/projectile_classes_verify.py` (about 4 minutes) reads the type tables of all 8,063 format-8 files, the 94 projectile files, the 126 `SPuppetProjectileParams` objects, the 68 `CLaunchVelocities` objects and the global parameter file and prints every count and table of sections 2 to 9. `weapon_classes_verify.py` reproduces the weapon side.
+- **Binary build.** The `Sam2Game.dll` of the install used for the other specs; no other build was compared. **Not checked:** nothing was run; no timing, no random sequence, no frame-by-frame behaviour; the rendering of trails, crumbs and flames was not read; the world values of the shooters, launchers and crumbs were read from the files only as far as stated.
+
+## Layout / rules
+
+### 1. Names, layers and the data names
+
+| Rule | Statement | Evidence | Confidence |
+|---|---|---|---|
+| **C name exported, S name saved** | The binary exports `CBaseProjectileParams` and registers its data name as `SBaseProjectileParams`; of the 14 saved classes **9 appear as the `S` twin** (`SBaseProjectileParams`, `SGenericProjectileParams`, `SPuppetProjectileParams`, `SCrumbsEntity`, `SCrumbsProperties`, `SMarkersLauncher`, `SRelativeRandomConeLauncher`, `SBulletsItemEntity`, `SBulletsItemProperties`) and **5 under the exported `C` name** (`CFlamerFlameParams`, `CFlamerProjectileParams`, `CLaunchVelocities`, `CStaticBulletTrail`, `CMovingBulletTrail`). The shooter is saved as **`SBulletShooterEntity`** (not `SShooterEntity`) | script, section 1 | high for the counts |
+| **Entity, properties, parameters** | `Entity` = the live object, `Properties` = what a world or the code builds to spawn it (the binary registers one for every entity), `Params` = a shared `.ep` resource. The 10 projectile, bullet, trail, debris and flame entity and properties classes are **registered with a member table but saved by no file** (35, 11, 12, 9, 3, 2, 27, 11, 1 and 1 members, script) | tables, script | high that none is in the data, medium for the rest |
+| **Hierarchy** | `CBaseProjectileEntity` ← `CBaseEntity`; `CGenericProjectileEntity` ← `CBaseProjectileEntity`; `CFlamerProjectileEntity` ← `CGenericProjectileEntity`. Parameters: `CBaseProjectileParams` ← `CEntityParams`; `CGenericProjectileParams` ← `CBaseProjectileParams`; `CFlamerProjectileParams` ← `CGenericProjectileParams` (the data says `SGenericProjectileParams`). Properties: `CBaseProjectileProperties` ← `CBaseProperties`, then the same chain; the generic one carries the parameter file link `ep_pgppProjectileParams`. `CBulletEntity`, `CBulletTrailEntity`, `CDebrisEntity`, `CFlameEntity`, `CCrumbsEntity`, `CShooterEntity` ← `CBaseEntity` (each has its own properties class ← `CBaseProperties`). `CMarkersLauncher` and `CRelativeRandomConeLauncher` ← `CLauncher` (not a class of this family; the data's `SLauncher` has no member, 35 worlds). `CBulletsItemEntity` ← `CAmmoItemEntity` ← `CBaseItemEntity`. The trail renderable ← the engine's renderable. The records `CStaticBulletTrail`, `CMovingBulletTrail`, `CLaunchVelocities`, `CPuppetProjectileParams` have no base | registrations, copy constructors, vtables, script for the data's `base` column | high for the data classes, medium for the binary-only ones |
+| **Standard symbols** | default and copy constructor, destructor, assignment, stream-read operator and `mdGetDataType` (7 functions; the three plain records export 4 to 6) | export table | medium |
+| **Defining module** | all 32 in `Sam2Game.dll`. Other modules were not searched for the names | export table | medium |
+
+### 2. The 32 classes
+
+"Saved as" is the data's type name (script section 1). "Members / files" is the data's own member count and the number of files whose type table has the class. "Fn" is the number of exported functions, "named" the methods besides the standard set.
+
+| Class | Parent | Saved as | Members / files | Fn (named) |
+|---|---|---|---|---|
+| `CBaseProjectileEntity` | `CBaseEntity` | not saved (35 members) | | 45 (38) |
+| `CBaseProjectileProperties` | `CBaseProperties` | not saved (11) | | 7 (0) |
+| `CBaseProjectileParams` | `CEntityParams` | `SBaseProjectileParams` | 48 / 96 (94 `.ep`, 2 `.wld`) | 7 (0) |
+| `CGenericProjectileEntity` | `CBaseProjectileEntity` | not saved (1) | | 12 (5) |
+| `CGenericProjectileProperties` | `CBaseProjectileProperties` | not saved (1) | | 7 (0) |
+| `CGenericProjectileParams` | `CBaseProjectileParams` | `SGenericProjectileParams` | 2 / 96 | 7 (0) |
+| `CFlamerProjectileEntity` | `CGenericProjectileEntity` | not saved | | 9 (2) |
+| `CFlamerProjectileProperties` | `CGenericProjectileProperties` | not saved | | 7 (0) |
+| `CFlamerProjectileParams` | `CGenericProjectileParams` | `CFlamerProjectileParams` | 0 / 1 `.ep` | 9 (2) |
+| `CPuppetProjectileParams` | none (struct) | `SPuppetProjectileParams` | 9 / 126 `.ep` | 6 (0) |
+| `CShooterEntity` | `CBaseEntity` | **`SBulletShooterEntity`** | 17 / 26 `.wld` (2 definitions) | 25 (18) |
+| `CShooterProperties` | `CBaseProperties` | not saved (registered as `SBulletShooterProperties`, no member) | | 7 (0) |
+| `CBulletEntity` | `CBaseEntity` | not saved (12) | | 16 (9) |
+| `CBulletProperties` | `CBaseProperties` | not saved (9) | | 7 (0) |
+| `CBulletTrailEntity` | `CBaseEntity` | not saved (3) | | 10 (3) |
+| `CBulletTrailProperties` | `CBaseProperties` | not saved (2) | | 7 (0) |
+| `CBulletTrailRenderable` | the engine's renderable | not saved | | 13 (6) |
+| `CStaticBulletTrail` | none (struct) | `CStaticBulletTrail` | 6 / 1 `.rsc` | 4 (0) |
+| `CMovingBulletTrail` | none (struct) | `CMovingBulletTrail` | 3 / 1 `.rsc` | 4 (0) |
+| `CDebrisEntity` | `CBaseEntity` | not saved (27) | | 22 (15) |
+| `CDebrisProperties` | `CBaseProperties` | not saved (11) | | 8 (1) |
+| `CCrumbsEntity` | `CBaseEntity` | `SCrumbsEntity` | 2 / 33 `.wld` | 10 (3) |
+| `CCrumbsProperties` | `CBaseProperties` | `SCrumbsProperties` | 8 / 33 `.wld` (the binary has a 9th, editor-only) | 8 (1) |
+| `CFlameEntity` | `CBaseEntity` | not saved | | 12 (5) |
+| `CFlameProperties` | `CBaseProperties` | not saved | | 7 (0) |
+| `CFlameHitData` | none (record) | not saved | | 8 (3) |
+| `CFlamerFlameParams` | `CResource` | `CFlamerFlameParams` | 11 / 1 `.rsc` | 8 (1) |
+| `CLaunchVelocities` | none (struct) | `CLaunchVelocities` | 13 / 68 `.ctl` | 5 (1) |
+| `CMarkersLauncher` | `CLauncher` | `SMarkersLauncher` | 5 / 29 `.wld` | 11 (4) |
+| `CRelativeRandomConeLauncher` | `CLauncher` | `SRelativeRandomConeLauncher` | 5 / 24 `.wld` | 8 (1) |
+| `CBulletsItemEntity` | `CAmmoItemEntity` | `SBulletsItemEntity` | 0 / 38 `.wld` | 9 (2) |
+| `CBulletsItemProperties` | `CAmmoItemProperties` | `SBulletsItemProperties` | 0 / 38 `.wld` | 7 (0) |
+
+Counts: 14 saved under the exported name or twin (script), 1 more (`SBulletShooterEntity`) under another name, 17 binary only: **32 = 14 + 1 + 17**. The `CBulletFireing` struct of the blasts (`bf_ctBullets`, `bf_dtDamageType`, `bf_btBulletType`, `bf_slBulletDamage`, `bf_fBulletVelocity`, `bf_fBulletReach`; 90 `.ep` files, `ep-schema.md`) and `CBulletParameters` (global parameter file) belong to other families but are described where they meet the shooter (6.1 and 6.6).
+
+### 3. Enumerations declared by the binary
+
+Value, name, caption as the DLL gives them. Binary identifiers, quoted as they are. **Medium** (one table each, checked against the values in the data).
+
+| Enumeration | Values |
+|---|---|
+| `ProjectileFlags` (member `bp_ulFlags`) | 0 `PF_NONE`, 1 `PF_FALLING` ("Falling"), 2 `PF_SEEK_TARGET` ("Seek target"). The data has 0 (38 files), 1 (32) and 2 (24); no file has 3. **Bit 2 turns on the per-step homing**; what 1 does is not resolved (it is not tested in the functions read) |
+| `ProjectileNature` (member `gpp_pnProjectileNature`) | 0 `PN_PHYSICAL`, 1 `PN_MAGIC`. 50 files physical, 44 magic. The nature selects the collision category (6.4) and whether the projectile has health that damage can wear down (5.2) |
+| `EBulletTrailType` (member `ep_bttBulletTrailType`) | 0 `BTT_STATIC` ("Static trail"), 1 `BTT_MOVING` ("Moving trail") |
+| `EBulletType` (shooter member `en_btBulletType`) | 0 `BT_PHYSICAL`, 1 `BT_RAY_STATIC_TRAIL`, 2 `BT_RAY_MOVING_TRAIL`, 3 `BT_RAY_NO_TRAIL` (`weapon-classes.md` section 3) |
+| `EDamageType` (member `bp_dtDirectDamageType`, shooter `en_dtDamageType`) | -1 `DMT_NONE`, 1 `DMT_PIERCING`, 2 `DMT_CUT`, 3 `DMT_CUTTING`, 4 `DMT_PUNCH`, 5 `DMT_BLUNT`, 6 `DMT_CRUSHING`, 7 `DMT_KICKING`, 8 `DMT_IMPACT`, 9 `DMT_FALLING`, 11 `DMT_EXPLOSION`, 12 `DMT_SHOCKWAVE`, 13 `DMT_DROWNING`, 14 `DMT_HEAT`, 15 `DMT_COLD`, 16 `DMT_ELECTRICITY`, 17 `DMT_ACID`, 18 `DMT_PLASMA`, 19 `DMT_BULLET`, 20 `DMT_SNIPER_BULLET`, 21 `DMT_SLUG`, 22 `DMT_KILL_ALL_CHEAT`, 23 `DMT_SERIOUS_BOMB`, 24 `DMT_KILLER`, 25 `DMT_ABYSS` (there is no 10). The projectile files use 8 (85 files), 18 (7) and 14 (2) |
+| `DamageInflictorWeapon` | `weapon-classes.md` section 3 (a projectile carries one: `bpp_diwDamageInflictorWeapon`, the shooter `en_diwDamageInflictorWeapon`; the data's shooters have 15, 16, 17 or none) |
+| `DebrisCollision` (member `ep_dcCollision`) | -1 `DC_INVALID`, 0 `DC_IGNORE_ALL` ("No collision"), 1 `DC_COLLIDE_WITH_SOLIDS`, 2 `DC_IGNORE_CHARACTERS_WHEN_STOPS` (**obsolete**: the debris prints "Debris uses obsolete collision category" and keeps its setting), 3 `DC_COLLIDE_WITH_EVERYTHING` |
+| `DebrisToughness` (member `ep_dtDebrisToughness`) | 0 `DT_ALWAYS_BREAKS`, 1 `DT_EASY_TO_BREAK`, 2 `DT_NORMAL_TO_BREAK`, 3 `DT_TOUGH_TO_BREAK`, 4 `DT_NEVER_BREAKS` |
+| Collision category identifiers | The binary names these identifiers near the projectile code: `projectile_solid` (the base projectile; a physical generic projectile), `projectile_magic` (a magic generic projectile), `projectile_bullet` (the physical bullet), `bullet` and `bullet_no_solids` (the rays of the shooter), `debris_with_solids`, `debris_with_all`. Which one the flamer projectile uses was not resolved |
+
+### 4. `SBaseProjectileParams` and `SGenericProjectileParams`: the 50 members
+
+All 94 files of `Databases/GenericProjectiles` (and the two world-embedded definitions, 96 type tables in all) have the **same 48 + 2 members in the same order**. "Data" is the member as the data stores it (`p.N` of the other specs: the number, or the name when the data gives one). Values are over the **94 files** (script section 3: distinct values, range, the commonest in brackets). Units: seconds, metres (world units), degrees as named; "pair" = value at fire power 0 and 1 (section 5.3). **Medium** for meanings (names; the entity functions read agree where a "read" is said), **high** for the position-to-name assignment.
+
+| Pos | Data | Binary name | Meaning | Values in the data | Confidence |
+|---|---|---|---|---|---|
+| 0 | `bp_pmcModel` | `bp_pmcModel` | the projectile's model (`.mdl`); it must contain the mechanism the class asks for (5.1) | 62 distinct | high (type) |
+| 1 | `100` | `bp_ulFlags` | `ProjectileFlags` | 0 (38), 1 (32), 2 (24) | high (type) |
+| 2 | `1` | `bp_fFlyingSpeed` | the speed when the launcher gives none: **a launch velocity of -1 means "use this"** (read in `OnCreate`) | 0 to 500, commonest 30 (29), 100 (9), 25 (6) | medium |
+| 3 | named | `bp_bAddShooterVelocity` | add the launcher's own velocity | 0 (77), 1 (17) | medium (name) |
+| 4 | named | `bp_bHorizontalProjectile` | keep the flight horizontal | 0 (91), 1 (3) | low (name) |
+| 5 | named | `bp_vMinRandomRotation` | random spin: the lower bound of the angular velocity (degrees per second, 3 components); a random value between min and max is given at creation (read in `OnCreate`; skipped when both are 0) | 0 (85), (-900, -900, 0) (8) | medium |
+| 6 | named | `bp_vMaxRandomRotation` | the upper bound | 0 (85), (900, -1800, 0) (8) | medium |
+| 7 | `10` | `bp_fStretch` | model stretch at fire power 0 (read in `OnCreate`, `SetupTrailEffect`) | 0.35 to 4, commonest 1 (57) | medium |
+| 8 | `20` | `bp_fStretchMax` | stretch at fire power 1 | 0 to 2, commonest 1 (87); below the previous member in 19 files | medium |
+| 9 | named | `bp_slPiercingPowerMin` | piercing power: flies through entities whose piercing resilience is lower; -1 = does not pierce | -1 (80), 0 (7), 300, 350, 110, 20 | medium (5.2) |
+| 10 | named | `bp_slPiercingPowerMax` | the power at fire power 1 | -1 (81), 0 (7), 500, 580 | medium |
+| 11 | named | `bp_dtDirectDamageType` | `EDamageType` of the direct hit | 8 (85), 18 (7), 14 (2) | high (type) |
+| 12 | `2` | `bp_slDirectDamage` | damage to the thing the projectile hits, at fire power 0 | 0 to 6000, commonest 10 (24), 0 (12) | medium |
+| 13 | `11` | `bp_slDirectDamageMax` | at fire power 1 (0 in 47 files) | 0 to 6000 | medium |
+| 14 | named | `bp_fImpactForceImpulse` | impulse given to the body that is hit; **-1 = the engine default** (read: a value below 0 is not applied) | -1 (49), 200, 100, 1500, 1000, up to 1700 | medium |
+| 15 | named | `bp_fImpactForceImpulseUpRatio` | the share of that impulse pointing up | 0.5 (90), 0.3 (3), 0.4 (1) | medium |
+| 16 | `3` | `bp_slAreaDamage` | area (range) damage at the centre, fire power 0 | 0 to 300, 0 in 48 | medium (read) |
+| 17 | `12` | `bp_slAreaDamageMax` | at fire power 1 (0 in 79 files) | 0 to 300 | medium (read) |
+| 18 | named | `bp_fRangeForceImpulse` | impulse of the explosion on bodies in range; -1 = the default | -1 (53), 1500 (12), 1000, 2000, up to 4000 | medium |
+| 19 | named | `bp_fRangeForceImpulseUpRatio` | the up share of that impulse | 0.5 (91), 0.2 (2), 0.3 (1) | medium |
+| 20 | `7` | `bp_fDamageHotspot` | radius of full area damage, fire power 0 (read) | 0 to 8, commonest 0 (28), 8 (22) | medium |
+| 21 | `13` | `bp_fDamageHotspotMax` | at fire power 1 | 0 to 8 | medium |
+| 22 | `8` | `bp_fDamageFalloff` | the distance beyond the hot spot over which the damage falls to 0 (read as a "hot spot + fall-off" pair; the curve is not read) | 0 to 16, 16 (21), 8 (18) | medium |
+| 23 | `14` | `bp_fDamageFalloffMax` | at fire power 1 | 0 to 16 | medium |
+| 24 | `5` | `bp_fLifeTime` | seconds until the projectile explodes by itself (an event is scheduled at start, `OnBoot`) | 0.8 to 15, commonest 5 (52), 2.5 (13), 6 (7) | medium |
+| 25 | `15` | `bp_fIgnoreLauncherPeriod` | seconds after the start during which the owner's own bodies are ignored (read in `CollisionCheck`) | 0.35 to 2, 0.5 (86) | medium |
+| 26 | `16` | `bp_fDontExplodePeriod` | seconds after the start during which a touch does not explode it (read) | 0 (84), 0.5, 1, 1.5 | medium |
+| 27 | `17` | `bp_bExplodesOnFirstTouch` | explode at the first touch (read; 0 = the projectile bounces and waits for its life time or `en_fProjectileLifeAfterTouch`) | 1 (70), 0 (24) | medium |
+| 28 | `18` | `bp_bExplodesOnPuppets` | explode when the thing touched is a puppet (read) | 1 (88), 0 (6) | medium |
+| 29 | named | `bp_bUpwardProjectile` | the model's up axis follows the velocity upwards (name) | 1 (79), 0 (15) | low |
+| 30 | `21` | `bp_fSeekFrequency` | seconds between homing target searches (> 0 required with `PF_SEEK_TARGET`: the entity prints "Projectile ... has target seeking ability but seek frequency is 0" and does not start otherwise; read). All 24 seeking files have it > 0; 18 non-seeking files have it > 0 too (ignored) | 0 (52), 0.2 (19), 0.25 (11), 0.1 (10), 0.01 (2) | medium |
+| 31 | named | `bp_fSeekPredictionRatio` | how far ahead of the target's motion the projectile aims (0 = at the target) | 0 (88), 0.5, 0.8, 1 | medium (name) |
+| 32 | `22` | `bp_fSeekingConeDeg` | half angle of the cone in which a target is acquired (read as a cosine limit) | 30 (78), 10 (9), 90, 180 | medium |
+| 33 | `25` | `bp_fSeekingAngVSDistRatio` | weight of the angle against the distance when candidate targets are scored (read) | 0.5 (89), 0, 0.1 | medium |
+| 34 | `27` | `bp_fSeekingMaxDistance` | candidates farther than this are ignored (read) | 0 to 1000, 100 (55), 40 (13) | medium |
+| 35 | named | `bp_fStopSeekingDistance` | closer than this the projectile stops steering (read) | 0 (77), 5, 10, 20, 50, 100 | medium |
+| 36 | `23` | `bp_fSeekingAngularVelocity` | the turn rate, degrees per second (read: multiplied by the step time) | 0 to 240, 30 (52), 2 (10) | medium |
+| 37 | named | `bp_fSeekMovedCheckPeriod` | the "has the target moved" check period (read) | 0.25 (91) | medium |
+| 38 | named | `bp_fSeekMovedCheckDistanceRatio` | the distance share that counts as "moved" (read) | 0.25 (91) | medium |
+| 39 | named | `bp_bSeekMoreTimes` | acquire a new target again after losing one | 0 (93), 1 (1) | medium |
+| 40 | `24` | `bp_fMinPowerSeekingRatio` | the turn rate at fire power 0 as a share of the full one: the rate is `(1 - ratio) x firepower + ratio` (read) | 1 (89), 0.5 (4), 0.25 (1) | medium |
+| 41 | named | `bp_idEffectType` | identifier choosing the explosion and trail effects in the model's effect scheme (`SpawnExplosion`, `GetTrailEffect`; read) | values 0 (91), 1 (3) (`empty`, `Dust` in `ep-schema.md`) | medium |
+| 42 | `30` | `bp_fFlyingSoundFallOff` | the flying sound's fall-off distance; **-1 = the global default 30** (read) | -1 (32), 60 (27), 75 (17), up to 800 | medium |
+| 43 | `31` | `bp_fFlyingSoundHotSpot` | its hot spot; -1 = the global default 1 | 0 (49), -1 (32), 50, 10, 15 | medium |
+| 44 | `32` | `bp_fExplodeSoundFallOff` | the explosion sound's fall-off; -1 = the global default 90 | -1 (58), 100 (18), 75, 150, 200 | medium |
+| 45 | `33` | `bp_fExplodeSoundHotSpot` | its hot spot; -1 = the global default 1 | -1 (58), 10 (17), 20, 0 | medium |
+| 46 | named | `bp_fRangeDamageOwnerMultiplier` | multiplier of the **area damage that hits the owner** itself (read: applies when the entity hit is the owner) | 1 (77), 0.2 (6), 0.5 (4), 0 (4), 0.25, 0.1 | medium |
+| 47 | named | `bp_fDirectDamageOwnerMultiplier` | multiplier of the direct damage when the owner is hit | 1 (81), 0 (6), 0.1 (5), 0.2 (2) | medium |
+| 48 | named | `gpp_pnProjectileNature` | `ProjectileNature` | 0 (50), 1 (44) | high (type) |
+| 49 | named | `gpp_slHealth` | hit points of a **physical** projectile that damage can shoot down; -1 = cannot be shot down (5.2) | -1 (70), 20, 30, 15, 35, 1, up to 100 | medium |
+
+The global defaults named in the table are the parameter file's `ggp_fProjectileDefFlyingSoundFallOff` 30 and `...HotSpot` 1, `ggp_fProjectileDefExplodeSoundFallOff` 90 and `...HotSpot` 1 (script section 4; read in `SetupFlyingSound` and `SpawnExplosion`). `ggp_fProjectileThreatDistance` is 100: the distance within which a flying projectile is a threat the AI hears (`ai.md`; not read here). The flamer's file (`flamer.ep`, class `CFlamerProjectileParams`, no member of its own) has a life time of 1.0, a direct damage of 6 and a flying speed of 30. The 7 files with a piercing power are the arrows and similar (the flags/pierce pairing is not further read).
+
+**Pair statistics (script section 3).** Of 94 files: direct damage has max = min in 50, max above min in 8, **max 0 with min above 0 in 36**; area damage 59 / 2 / 33; hot spot 82 / 4 / 8; fall-off 78 / 4 / 12; stretch 59 / 15 / 1 (+19 with the max below the min but not 0). No file has a non-zero max below its min for damage, hot spot or fall-off. The 8 direct-damage files with a larger max are plausible "grows with charge or power" projectiles (the cannon ball 600 to 700, the deathmatch cannon ball 0 to 750, the acid big ball 10 to 80, guided red plasma 10 to 60, ...).
+
+### 5. The projectile entities
+
+#### 5.1 `CBaseProjectileEntity`
+
+**Role.** The flying thing: it builds the model renderable and a physics mechanism from the projectile's model, gives it a speed, optionally steers it towards a target, reacts to touches, explodes (damage, impulses, effects, sound) and removes itself. **Net:** `NEB_DYNAMIC` (2); relevant distance = the model's effective cull distance (0 without a model); priority **6.0** (0 without a model); 8 of its 35 members are replicated (section 9).
+
+**Members (`SBaseProjectileEntity`, 35; `#` replicated, `@` owned object).** Meaning from the name unless stated; none is saved.
+
+| Group | Members |
+|---|---|
+| links | `en_hmech@` (the physics mechanism), `en_hbo@` (its root body), `en_hre@` (the model renderable), `en_hreTrail@` (the trail effect), `en_hssFlying@` (the flying sound source), `en_henOwner#` (who launched it), `en_pbppProjectileParams#` (the parameter file), `en_henSeekingPuppet` (the current homing target), `en_henImmediatellyHit` (an entity it already hit when created; used by `Explode` as the hit entity), `en_hhuHit` (a hull hit), `en_henSpawner`, `en_iSpawnee` (the spawner that created it as a spawnee, and which; the spawner is told at the end, name) |
+| launch | `en_fFireingPower#` (0 to 1, from the launcher), `en_fLaunchVelocity` (m/s; -1 replaced by `bp_fFlyingSpeed` at creation, read), `en_fDamageMultiplier#` (a multiplier on every damage the projectile deals: the owner's damage multiplier at launch, read as a call to the owner at creation), `en_fStretch#` (the stretch interpolated from `bp_fStretch` and `bp_fStretchMax`), `en_qvOriginalPlacement#`, `en_diwDamageInflictorWeapon` (who gets the credit) |
+| placement and velocity | `en_qvNetPlacement#`, `en_vNetVelocity#` (the server copies the mechanism's placement and velocity here before sending and applies them after receiving; read in `PreSendUpdate` and `PostReceiveUpdate`), `en_vLastDesiredVelocty` (sic) |
+| homing | `en_tmLastSeekTime`, `en_tmLastMovedCheck`, `en_baOwnerAligment` (sic; the owner's alignment, used to choose enemies), `en_fSeekingConeCos` (the cosine of the cone angle), `en_bTargetMissed`, `en_bBeenLookingTowardsTarget` |
+| life and sound | `en_tmSpawnTime`, `en_fProjectileLifeAfterTouch` (seconds the projectile survives after touching; -1 = until its life time), `en_bProjectileWaitsDeath`, `en_ulSoundFlags`, `en_iConeAngle`, `en_iSoftAngle`, `en_fConeVolume` (sound cone), `en_pbsFlyingSound` (the sound) |
+
+**Exported methods (45 functions, 38 named).** **(read)** = read in the detail stated; **(name)** = from the name only.
+
+| Group | Methods | What they do |
+|---|---|---|
+| life cycle | `OnCreate`, `OnBoot`, `OnDelete`, `OnShutDown`, `DeleteProjectile`, `DeleteMechanismAndRenderable` | `OnCreate` (read, large): takes the properties (owner, fire power, launch velocity, damage multiplier, spawner), looks up the mechanism name (`GetDefaultMechanism`) in the model and **refuses with a console message when the model has none** ("Invalid projectile mechanism", "Projectile's model ... doesn't have mechanism ..."), builds the model renderable (stretch from the pair) and the mechanism, sets the friction multiplier of the root body, and **on the host** gives the root body its velocity (forward direction x launch velocity, plus the launcher's velocity when `bp_bAddShooterVelocity`) and a random angular velocity between the two rotation members; starts the model's "Alive" animation if it has one; with `PF_SEEK_TARGET` it enables the per-step update. `OnBoot` (read): starts the flying sound and schedules the end of life (`bp_fLifeTime`). `DeleteProjectile` (read): stops the trail effect's emission and deletes the entity after the effect's dying time (at once without one). `OnShutDown` is the plain delete. `OnDelete` frees the effect and the sound source |
+| per step | `OnStep` | **homing, only with `PF_SEEK_TARGET`** (read for structure): every `bp_fSeekFrequency` seconds acquire a target; every `bp_fSeekMovedCheckPeriod` seconds check whether the target moved by at least `bp_fSeekMovedCheckDistanceRatio` x the distance flown, if not give up the target; steer the velocity towards the target (or the predicted point, `bp_fSeekPredictionRatio`) with a turn per step of `step time x bp_fSeekingAngularVelocity x ((1 - ratio) x fire power + ratio)` degrees, keeping the speed; stop steering when closer than `bp_fStopSeekingDistance`; re-orient the renderable along the velocity. The exact turning law is not read |
+| homing | `AcquireSeekTarget` | (read for structure) walks the world's list of puppets and scores each candidate that is inside the cone (`bp_fSeekingConeDeg`), within `bp_fSeekingMaxDistance` and an enemy of the owner's alignment, by angle and distance weighted with `bp_fSeekingAngVSDistRatio`; returns the best, or none |
+| touch | `OnHullTouched`, `CollisionCheck`, `OnBodyTunneling` | `OnHullTouched` forwards to `CollisionCheck` (read). **`CollisionCheck`** (read for structure) answers "is this a collision that ends the flight": ignores the owner's own bodies during `bp_fIgnoreLauncherPeriod`; for a projectile with a **piercing power** above 0 decides per entity with the entity's own questions `ForcesPiercingProjectileToExplode` and `GetPiercingProjectileResilience`, tells a pierced entity `BeDestroyedByPeircingProjectile` and flies on; otherwise ignores a touch during `bp_fDontExplodePeriod`, explodes at once when `bp_bExplodesOnFirstTouch` (or on a puppet with `bp_bExplodesOnPuppets`), else schedules the explosion after `en_fProjectileLifeAfterTouch`. `OnBodyTunneling` (read for structure): a fast body that passed through something gets the same check at the crossing point, except for piercing projectiles |
+| explode | `Explode`, `OnExplode`, `SpawnExplosion`, `GetTrailEffect`, `SetupTrailEffect`, `SetupFlyingSound` | `Explode` (read): disables the per-step update of a homing projectile and calls `OnExplode` with the stored hit entity and the projectile's own placement. **`OnExplode`** (read for structure): spawns the destruction effects of the model (`destruction.md`), then **on the host only**: the **direct hit** (a damage record carrying amount, `bp_dtDirectDamageType`, owner, hit point, direction and the impulse `bp_fImpactForceImpulse` mixed with its up ratio, delivered to the entity hit; when that entity is the owner the amount and impulse are scaled by `bp_fDirectDamageOwnerMultiplier`), the impulse on the hit body, then the **area damage**: `(max - min) x fire power + min` of the area damage times `en_fDamageMultiplier`, applied within the hot spot and fall-off interpolated the same way, with `bp_fRangeDamageOwnerMultiplier` for the owner, and the range impulse `bp_fRangeForceImpulse`; finally the explosion effect and `DeleteProjectile`. `SpawnExplosion` (read): spawns a simple-effect entity at the hit point with the particle effect and the sound that the model's effect scheme gives for `bp_idEffectType`, the sound's fall-off and hot spot from the file or the global defaults. `GetTrailEffect` looks the trail effect up in the same scheme; `SetupTrailEffect` attaches it to the model with the file's stretch; `SetupFlyingSound` makes the flying sound source with the file's fall-off and hot spot |
+| net | `GetNetBehavior`, `GetRelevantDistance`, `GetUpdatePriority`, `PreSendUpdate`, `PostReceiveUpdate` | `NEB_DYNAMIC`; the model's effective cull distance (0 without a renderable); 6.0 (0 without a renderable); copy placement and velocity into the replicated members before sending, and set the placement from them after receiving (read) |
+| questions to other entities | `ForcesPiercingProjectileToExplode`, `GetPiercingProjectileResilience`, `BeDestroyedByPeircingProjectile` (sic), `CanBeKicked`, `EnablesDynamicShadow`, `ReceiveForceImpulse`, `GetCollisionCategory`, `GetDefaultMechanism` | what the projectile answers when another projectile or a kick asks: it **forces a piercing projectile to explode when its own piercing power is above 0**; its resilience is 0 (it never stops one); when it is itself hit by a piercing projectile it **explodes**; it **cannot be kicked**; it casts no dynamic shadow; it ignores force impulses; its collision category is `projectile_solid`; its default mechanism is a fixed identifier (read, name not resolved) |
+| placement and render | `GetAbsPlacement`, `GetBoundingBox`, `GetModelRenderable`, `GetVelocity`, `SetVelocity`, `GetViewTarget`, `RenderTranslucent`, `RenderDebugData` | the model's placement; the model's bounding box; the renderable; the root body's velocity (read, through the mechanism); the centre of the bounding box in the world, used as the view target for line-of-sight checks; a translucent draw and a debug draw of the homing state (name) |
+
+#### 5.2 `CGenericProjectileEntity` and `CFlamerProjectileEntity`
+
+| Class | What it adds (read) |
+|---|---|
+| `CGenericProjectileEntity` (`SGenericProjectileEntity`, one member `en_slHealth`) | the **only projectile class that is placed by a parameter file**: the generic properties carry `ep_pgppProjectileParams`, and `OnCreate` takes the file and copies `gpp_slHealth` into `en_slHealth` (-1 when there is no file). `OnReceiveDamage`: a **physical** projectile (`PN_PHYSICAL`) with health above 0 loses the damage it receives and calls `OnProjectileKilled` when the health is gone; a magic one, or one with health -1, ignores damage. `OnProjectileKilled`: on the host it raises the **remote call `OnProjectileKilled`** (the one listed in `replication.md`) which all machines execute; a client that gets no such call only schedules the end by itself when the script machine is active. `IsAimable` (so that the player's auto-aim may pick a projectile): the code tests that the file is a generic projectile file, that one member of it (an integer at the position of the nature member, read as a test for 0, that is a physical projectile) is 0, and that the owner puppet reports a value of 1 in a member that was not identified; the third test is not resolved (open question 1). `GetCollisionCategory`: `projectile_magic` for a magic file, otherwise `projectile_solid` |
+| `CFlamerProjectileEntity` (no member of its own except one flag) | **touches**: on a body whose entity is not a puppet it spawns an effect entity (a simple effect at the hit point) and explodes; on a **puppet that can burn** (a question to the puppet) it makes sure the puppet has a `CFlameEntity` (creating one) and gives it a hit (`CFlameEntity::AddFlame`), delivers a damage record to the puppet and explodes (read for structure). **`OnFluidTouched`**: touching a fluid sets the flag and explodes (the flame goes out in water). The parameter class `CFlamerProjectileParams` exports `GetCollisionCategory` (its own identifier) and `GetNetObjectDataType` (returns the flamer projectile entity's type, so that a client creates the right class from the file); both are the only methods that make the flamer file differ from `SGenericProjectileParams` |
+
+#### 5.3 What "fire power" is, and what is open
+
+`en_fFireingPower` is passed by the launcher to `CShooterEntity::FireProjectile(params, firePower, launchVelocity)` and stored in the properties. **AI shots pass fire power 0** (read in `GenericOwnerShootOntoFoe`: it calls the launch with power 0 and a computed velocity). The weapons' launch functions are the owner puppet's (T01-119); `weapon-classes.md` records that the cannon, grenade launcher and zap gun launch with `min + (max - min) x power`. What the **uncharged** player weapons pass (rocket launcher, Klodovik gun, plasma rifle, flamer) and how the 36 files with a max of 0 behave at power above 0 is **not read** and is the most important open point of this family (open question 2).
+
+#### 5.4 Flames: `CFlameEntity`, `CFlameHitData`, `CFlamerFlameParams`
+
+A **flame entity is one per burning puppet** (it is created by the flamer projectile when it first sets a puppet on fire and found again afterwards). It owns a list of `CFlameHitData` records, one per visible flame, each remembering where it was set and **when it expires**. All numbers come from the global parameter file's `ggp_ffpFlamerFlameParams` (`CFlamerFlameParams`, 11 members, one `.rsc`; names by the member-order rule, section 3):
+
+| Pos | Data | Binary name | Meaning | Value | Confidence |
+|---|---|---|---|---|---|
+| 0 | `1` | `ffp_pefPuppetFlame` | the flame effect on a puppet (`Ptr<CEffect>`) | `Flamer_Fire.pfx` | high (type), medium (name) |
+| 1 | `11` | `ffp_pefModelFlame` | the flame effect on a model entity that is not a puppet | `Flamer_Fire.pfx` | medium |
+| 2 | `2` | `ffp_pbsFlameBurning` | the burning sound, started with the flame entity | `Burning.wav` | medium |
+| 3 | `3` | `ffp_fMinFlameSize` | smallest size multiplier of one flame | 0.75 | medium |
+| 4 | `4` | `ffp_fMaxFlameSize` | largest | 1.25 | medium |
+| 5 | `5` | `ffp_ghFlameSizeMultiplierOverPuppetSize` | a graph (value 1.0 and a step-up graph) of the size multiplier over the puppet's size (`GetFlameSizeMultiplier(size)` evaluates it; the data value of the graph's own parameter is 1.0) | step-up graph | medium |
+| 6 | `6` | `ffp_fApplyDamageIncrement` | seconds between two damage applications | 1.0 | medium |
+| 7 | `7` | `ffp_slDamageAmount` | damage of one application | 5 | medium |
+| 8 | `8` | `ffp_fFlameLifetime` | seconds a flame lasts (set at its creation and **refreshed by `CFlameHitData::RefreshFlame`** when the puppet is hit again) | 4.0 | medium |
+| 9 | `9` | `ffp_fFlameEntityLifetime` | seconds the flame entity itself lives | 7.5 | medium |
+| 10 | `10` | `ffp_ctMaxFlames` | the most flames at once | 5 | medium |
+
+`CFlameEntity` methods (read for structure): `OnCreate` sets the end of its life (now + `ffp_fFlameEntityLifetime`), takes the damage amount and starts the burning sound on the puppet; `AddFlame(position)` adds one flame unless there are already `ffp_ctMaxFlames`: it picks a bone of the puppet's skeleton (a spot not yet burning), spawns the flame effect attached to it with a random size between the minimum and the maximum, scaled by the size graph, and records a `CFlameHitData`; `OnStep` applies `ffp_slDamageAmount` to the puppet every `ffp_fApplyDamageIncrement` seconds as long as one flame is alive, removes expired flames, and deletes the entity when no flame is left; `GetTarget` returns the burning puppet (name); `OnDelete` stops the sound. `CFlameHitData` (8 functions: `Initialize` sets the expiry to now + the flame lifetime, `RefreshFlame` renews it, `GetHitLocation` returns the flame effect's position). The exact order and the conditions under which a puppet **cannot** burn (immune puppets, a puppet in water) were not resolved: `OnStep` ends the flame when two health-related members of the puppet are at or below a small constant (medium-low; the members were not identified).
+
+### 6. The shooter, the bullet and the trails
+
+#### 6.1 `CShooterEntity` (saved as `SBulletShooterEntity`)
+
+**Role.** The object that fires **hitscan bullets** (and launches projectiles) for an owner: the player weapons and enemies own one (`SPuppetEntity.en_henShooter`, 133 references in the worlds; `weapon-classes.md`), and the data has **133 stored shooters in 26 worlds** (`SBulletShooterEntity`, 17 members, 2 definitions), each the shooter of an embedded puppet: 90 are embedded in legged characters, 29 in turrets, 12 in aircraft and 2 in hovercraft (script, `en_henOwner`). **Net:** not replicated (inherited `NEB_NONE`; no flagged member). The 17 members, in the binary's order (data number or name, binary name, meaning; **medium**, names), with the stored values of the 133 instances (script, named members only: bullet type 1, scatter distance 10, both radii 0, prediction 0, ray radius 0.5, impulse -1 in every one ; the number-only members were not tallied because an embedded owner puppet shares the same member numbers in the flat listing of the script, so the table's last column below is from `wld-entity-schema.md`):
+
+| Pos | Data | Binary name | Meaning | World value |
+|---|---|---|---|---|
+| 0 | `1` | `en_qvShootOrigin` | placement of the shot (origin and orientation) | |
+| 1 | `2` | `en_fBulletShootDistance` | the range of the shot | 100 |
+| 2 | `3` | `en_slBulletDamage` | damage of one bullet | 0 |
+| 3 | named | `en_dtDamageType` | `EDamageType` | -1 (stored as 4,294,967,295) |
+| 4 | `5` | `en_ctBulletsToFire` | pellets per shot | 0 |
+| 5 | `6` | `en_henOwner` | the puppet that fires (133 references in the worlds) | |
+| 6 | `8` | `en_btBulletType` | `EBulletType` | 1 |
+| 7 | `9` | `en_fBulletVelocity` | speed of a `BT_PHYSICAL` bullet | 0 |
+| 8 | named | `en_fBulletImpulse` | impulse on the target; **below 0 = the global default** (read) | -1 |
+| 9 | named | `en_fBulletImpulseUpRatio` | the up share; below 0 = the default | 0 |
+| 10 | named | `en_vPatternStretch` | stretch of the pellet pattern in two axes | (1, 1) |
+| 11 | named | `en_fScatteringDistance` | the distance at which the scatter radii apply | 10 |
+| 12 | named | `en_fScatteringRangeMin` | smallest scatter radius | 0 |
+| 13 | named | `en_fScatteringRangeMax` | largest | 0 |
+| 14 | named | `en_fPredictionRatio` | how much of the target's motion an AI shot leads | 0 |
+| 15 | named | `en_fRayRadius` | radius of the ray (the global bullet ray diameter is 1.0, so the default is 0.5) | 0.5 |
+| 16 | `10` | `en_diwDamageInflictorWeapon` | who gets the credit | 15, 16, 17 or none |
+
+**Methods (25 functions, 18 named).**
+
+| Method | What it does |
+|---|---|
+| `SetOwner`, `SetPattern`, `SetShootDistance`, `SetBulletVelocity`, `SetBulletImpulse(impulse, upRatio)`, `SetParameters(bulletType, count, damage, damageType, scatterDistance, radiusMin, radiusMax)`, `SetBulletDamage`, `SetBulletRadius`, `SetDamageInflictorWeapon`, `UseThinBullet` | setters of the members above (read, one line each); `SetPattern` stores a two-value pattern setting and the two stretch factors; **`UseThinBullet` sets the ray radius to 0** |
+| `ShootPTP(from, to)`, `ShootETE(puppet, puppet)`, `FireBulletsFromPlacement(placement)` | "point to point": builds the placement that looks from the first point at the second and fires; "entity to entity": from the first puppet's shoot origin towards the second's aim point, then `ShootPTP`; the third stores the given placement and fires (read, short) |
+| `ClampShootOriginAngles`, `GenericOwnerShootOntoFoe` | the AI path (read for structure): `GenericOwnerShootOntoFoe` takes the **owner's attack description** (a `CBulletFireing` of 90 `.ep` files, or a projectile), fills the shooter (count, damage, type, scatter, prediction; **a bullet velocity or reach of -1 in the description means the global default**, 80 and 160), aims at the foe (leading by the prediction ratio), clamps the angle between the aim and the owner's forward direction (`ClampShootOriginAngles`) and fires bullets or `FireProjectile` (with fire power 0) |
+| `FireBullets` | the shot (6.2) |
+| `FireProjectile(params, firePower, launchVelocity)` | launches a projectile: **returns at once on a client**; on the host builds a `CGenericProjectileProperties` (the parameter file, fire power, launch velocity, the owner, the damage inflictor weapon) at the shoot origin (moved back a little when the shot starts at a wall, see below) and spawns it; deletes the properties again (read) |
+| `ApplyScattering` | the scatter model (6.3) |
+
+#### 6.2 `FireBullets`: the pellet loop (read for structure; **medium**)
+
+For each of `en_ctBulletsToFire` pellets:
+
+1. **Direction.** The shoot placement's orientation is deflected by `ApplyScattering` (6.3), starting from the pellet's offset in the pattern (the pattern value times `en_vPatternStretch`; a pattern exists when the engine's pattern list is non-empty, **where the list comes from is not resolved**).
+2. **Origin.** The origin is checked for "shooting from a wall" (an engine helper) and moved back along the direction when it is inside something.
+3. **`BT_PHYSICAL`:** a `CBulletEntity` is spawned at the origin with the damage, the damage type, the owner, `en_fBulletVelocity`, the range and the two impulses (6.4); nothing is hit instantly.
+4. **The three ray types:** a **ray of radius `en_fRayRadius` and length `en_fBulletShootDistance`** is cast with the collision category `bullet` (or `bullet_no_solids`). When the first thing hit is **the owner's own ride** the ray is cast again from the hit, **up to 10 times**. On a hit, **on the host only** (`netIsRemote` is false): the **impulse** is applied to the hit body (`en_fBulletImpulse`, below 0 meaning the global default 250 and up ratio 0.5); a **damage record** is delivered to the hit entity (amount = `en_slBulletDamage` times the owner's damage multiplier, `en_dtDamageType`, the owner as attacker, `en_diwDamageInflictorWeapon`, hit point, direction, the body hit); on every machine an **impact effect is spawned by the hit surface's material** (`samSpawnEffectForMaterial`; the debug name "Bullet hit"). When the loop ends without a hit nothing is delivered.
+5. **Trail:** for bullet types 1 and 2 a `CBulletTrailEntity` is spawned at the shot with the trail type (static for type 1, moving for type 2) and the distance to the hit (or the range); type 3 has no trail.
+
+The owner's damage multiplier is read once per shot with a call to the owner puppet (its name was not resolved; it is the same kind of call `CBaseProjectileEntity::OnCreate` makes). `en_ctBulletsToFire` times the loop is how the shotguns fire their pellets (`weapon-classes.md` rule 6).
+
+#### 6.3 `ApplyScattering(orientation, patternX, patternY)` (read in full; **medium**)
+
+Given `D = en_fScatteringDistance`, `Rmin = en_fScatteringRangeMin`, `Rmax = en_fScatteringRangeMax`, with `D` above a tiny constant (otherwise both radii are 0):
+
+1. `r0 = Rmin / D`, `r1 = Rmax / D`.
+2. Draw two uniform random numbers `u1`, `u2` in [0, 1). The offset radius is **`r = r0 + (r1 - r0) x sqrt(u1)`** and the angle is **`a = 360 degrees x u2`** (the constant is 2 pi in radians).
+3. The offset in the plane one unit in front of the shot is `(x, y) = (patternX + r cos a, patternY + r sin a)`; the new forward direction is the normalised vector `(x, y, 1)` (the forward axis is taken as one unit; the sign convention of the engine's forward axis is negative Z, which the function folds in).
+4. The direction is turned into a heading and a pitch (pitch from the vertical component, heading from the horizontal ones; 0 when the direction is within a tiny angle of straight up or down) and the shot's orientation matrix is **rotated by that heading and pitch**.
+
+So the pellets are spread **uniformly over a ring** between the angles `atan(Rmin / D)` and `atan(Rmax / D)`, centred on the pattern point. The random generator is the engine's global one (`mth_ulRandom`); the sequence is not reproduced here (open question 3). Cross-check with the data: the Colt and sniper have radii 0 and 0 at distance 10 (no scatter, exact aim), the minigun has distance 200 and radius 0 to 1 (a spread of at most `atan(1/200)` = 0.29 degrees), the Uzi distance 100, radius 0.1 to 2 (up to 1.1 degrees) in single player (`weapon-classes.md` section 4.2); the shooter members of the same names are the ones the weapons fill (`SetParameters`).
+
+#### 6.4 `CBulletEntity` (the flying bullet of `BT_PHYSICAL`; binary only)
+
+A small entity with a model (`Content/SeriousSam2/Models/Projectiles/HotBullet/HotBullet.mdl`, a constant in the code) whose mechanism it requires; the console message "Bullet model ... doesn't have required mechanism" appears otherwise. Members (`SBulletEntity`, 12; none replicated): `en_hmech@`, `en_hbo@`, `en_hre@`, `en_henOwner`, `en_fVelocity`, `en_fMaxDistance`, `en_fDamage`, `en_btBulletType`, `en_fBulletImpulse`, `en_fBulletImpulseUpRatio`, `en_bPlaySound`, `en_pmcBody` (an editor-side member). **`OnCreate`** builds the model and mechanism (collision category `projectile_bullet`), gives the root body the velocity `en_fVelocity` along its forward direction and schedules `NothingHit` after `en_fMaxDistance / en_fVelocity` seconds. **`OnHullTouched`** applies the impulse to the touched body (below 0 = the global default 250 and up ratio 0.5, as 6.2) and calls `OnTargetHit` (virtual) with the entity; **`OnTargetHit`**, on the host only, builds a damage record (damage `en_fDamage` times the owner's multiplier, the damage type, the owner), delivers it to the entity and **deletes the bullet**; **`NothingHit`** (max distance reached) is a debug-only message and then the end of the bullet. `CBulletProperties` carries the 9 matching members (`ep_henOwner`, `ep_fDamage`, `ep_fMaxDistance`, `ep_fVelocity`, `ep_vStretch`, `ep_fBulletImpulse`, `ep_fBulletImpulseUpRatio`, `ep_bPlaySound`, `ep_btBulletType`). Whether the retail data uses `BT_PHYSICAL`: **no weapon file and no stored shooter has bullet type 0** (weapons use 1 and 2, the 133 shooters 1), but `ep-schema.md` lists bullet types 0 to 3 for `CBulletFireing` (the attack descriptions of enemies, 90 files), so **some enemy attack descriptions fire flying bullets** and the bullet entity is **live for enemies and unused by the player weapons** (medium; which enemies is open question 3).
+
+#### 6.5 `CBulletTrailEntity`, `CBulletTrailRenderable`, `CStaticBulletTrail`, `CMovingBulletTrail`
+
+`CBulletTrailEntity` (`SBulletTrailEntity`, 3 members `en_hreBulletTrail@`, `en_ptxFullTrailTexture`, `en_ptxMovingTrailTexture`; properties `ep_fTargetDistance`, `ep_bttBulletTrailType`) is a **short-lived cosmetic**: `OnCreate` loads two textures (`Textures/Effects/Bullets/BulletTrail_01.tex` for the static and `_02` for the moving trail, constants in the code), creates a `CBulletTrailRenderable`, gives it the trail type, the target distance and the textures, and schedules its own deletion after the renderable's **dying time**. Not replicated. `CBulletTrailRenderable` (13 functions: `SetBulletTrailType`, `GetDyingTime`, `AddToRendering`, `RenderObject`, `GetBoundingBox` (a tiny box), `CheckRay`): **`GetDyingTime`**: a static trail lives `sbt_fLifeTime`; a moving one lives `target distance / mbt_fTrailVelocity` (1 s when the velocity is 0). `RenderObject` draws a static trail as a strip of width `sbt_fStartWidth` to `sbt_fEndWidth` that fades in and out (`sbt_fTailDelayRatio`, `sbt_fHeadDelayRatio` shaping the fade) with the texture repeated every `sbt_fTextureLength`, and a moving one as a segment of length `mbt_fTrailLength` and width `mbt_fTrailWidth` travelling at `mbt_fTrailVelocity` (read for structure). The values come from `CBulletParameters` (6.6). `CStaticBulletTrail` and `CMovingBulletTrail` are the two records inside it.
+
+#### 6.6 `CBulletParameters` in the global parameter file (data)
+
+`ggp_bpBulletParams` (7 members, one file: `globalgameparameters.rsc`; all named in the data, **high**): `bp_fDefaultBulletVelocity` 80, `bp_fDefaultBulletReach` 160, `bp_fDefaultBulletForceImpulse` 250, `bp_fBulletUpImpulseRatio` 0.5, `bp_fBulletRayDiameter` 1.0; `bp_sbtStaticBulletTrail` = `CStaticBulletTrail` (`sbt_fLifeTime` 0.25, `sbt_fTailDelayRatio` 0.1, `sbt_fHeadDelayRatio` 0.7, `sbt_fStartWidth` 0.02, `sbt_fEndWidth` 0.04, `sbt_fTextureLength` 10); `bp_mbtMovingBulletTrail` = `CMovingBulletTrail` (`mbt_fTrailLength` 10, `mbt_fTrailVelocity` 30, `mbt_fTrailWidth` 0.1). Used by `FireBullets`, `GenericOwnerShootOntoFoe`, `CBulletEntity` and the trail (**medium**: the use of each default is read; the units are metres and seconds by the engine's convention).
+
+### 7. Debris and crumbs
+
+#### 7.1 `CDebrisEntity` and `CDebrisProperties` (binary only)
+
+**Role.** One broken-off piece that flies and tumbles after a destruction or an explosion: a model with a mechanism, optionally a trail effect and a sound, removed after a time or when it breaks again. Created by `CDebrisProperties::CreateEffectEntity(launch parameters)` (the properties class builds and spawns the entity from a `CDebrisLaunchParams`; read for structure) and by the debris tools of the character files (`CDebrisToolEntityCreator`, 7 `.ctl` files, `rsc-ctl-schema.md`). **Net:** `NEB_DYNAMIC` **when `en_dcCollision` is non-zero, else none** (a debris with `DC_IGNORE_ALL` exists only where it was created; read, same as `replication.md`); the model's cull distance as relevant distance; 13 of the 27 members are replicated.
+
+Members (`SDebrisEntity`, 27; `#` replicated, `@` owned): `en_hmech@`, `en_hbo@`, `en_hre@`, `en_hreTrail@`, `en_hss@` (the sound source), `en_tmSpawnTime`, `en_ulSoundFlags`, `en_fVolume`, `en_fPitch`, `en_fHotSpot`, `en_fFallOff`, `en_iConeAngle`, `en_iSoftAngle`, `en_fConeVolume`; replicated: `en_pmcDebrisModel#`, `en_fStretch#`, `en_fLifeTime#`, `en_dcCollision#`, `en_dtDebrisToughness#`, `en_hfxTrail#` (the trail effect), `en_bExplodeOnTimer#`, `en_vLaunchVelocity#`, `en_vLaunchRotationEul#`, `en_henOwner#`, `en_bIgnoreCollisionWithOwner#`, `en_qvNetPlacement#`, `en_qvOriginalPlacement#`. The matching properties members are `ep_pmcDebrisModel`, `ep_vLaunchVelocity`, `ep_vLaunchRotationEul`, `ep_fStretch`, `ep_fLifeTime`, `ep_dcCollision`, `ep_dtDebrisToughness`, `ep_hfxTrail`, `ep_bExplodeOnTimer`, `ep_bIgnoreCollisionWithOwner`, `ep_henOwner`.
+
+Methods (22 functions, 15 named; read for structure): `OnCreate` refuses with "Debris's model doesn't exist" or "Debris's model ... doesn't have required mechanism" (a mechanism name from a fixed identifier), builds the model and mechanism, sets the **collision category from `en_dcCollision`** (`DC_COLLIDE_WITH_SOLIDS` gives `debris_with_solids`, `DC_COLLIDE_WITH_EVERYTHING` gives `debris_with_all`, no collision keeps it out), starts the model's animation, attaches the trail effect and a sound source, gives the root body the launch velocity and rotation and, with `en_bIgnoreCollisionWithOwner`, adds the owner's mechanism to the ignore list. `OnBoot` starts the trail effect and schedules `ExplodeAndDie` after `en_fLifeTime` when `en_bExplodeOnTimer`. `OnHullTouched` (host only): a piece with the obsolete collision value 2 that has slowed below a speed limit switches to `debris_with_solids`; with `DT_*` toughness the break test uses the global `ggp_fNormalDebrisBreakVelocity` (4.0 in the data; the rest not resolved). `ExplodeAndDie` creates the destruction effects of the model (`destruction.md`), stops the trail and sound, and deletes the entity once the effect has died. Not read: the toughness rules, the sound events, the launch parameters (open question 5).
+
+#### 7.2 `CCrumbsEntity` and `CCrumbsProperties` (data: `SCrumbsEntity` 2 members, `SCrumbsProperties` 8, 33 worlds, 186 instances)
+
+A **crumbs** entity is a **scatter renderer** (not a projectile): it covers a target model with small pieces (grass, pebbles) placed by a layout (`CCrumbsLayout`, `CCrumbConfig`, `CCrumbKind`, `CCrumbBag`, `CCrumbInstance`, `CCrumbMapBaker`, `CCrumbMapMask`, all in the data in the same 33 worlds; `classes-catalog.md`). By the member-order rule the properties are: `1` `ep_fGapSize` (0.45 to 10), `7` `ep_fRandomGapMargin` (0 or 0.1), `6` `ep_fMaxDistance` (25 to 400: the draw distance), `10` `ep_fFadeOutLength` (0, 5, 10, 20), `2` `ep_pccConfig` (`Ptr<CCrumbConfig>`), `3` `ep_pclLayout` (`Ptr<CCrumbsLayout>`), `8` `ep_hepTarget` (the entity whose model carries the crumbs), `9` `ep_hepLight` (a directional light the crumbs are lit by); the binary also declares `ep_bPreviewTiles` flagged as not stored (editor preview). The entity holds the renderable `en_hre@` (`CCrumbsRenderable`) and an editor primitive `en_hreEdt@`. `OnCreate` and `OnUpdate` (read for structure) pass these to the renderable (`SetGapSize`, `SetRandomGapMargin`, `SetMaxDistance`, `SetFadeOutLength`, `SetCrumbConfig`, `SetCrumbsLayout`, `SetCrumbsTarget`, `SetLightSource`, `EnableTilePreview`). `GetBoundingBox` of the properties is a fixed box of half size 0.55. Not replicated. The renderer itself (`CCrumbsRenderable`, the bakers) is not in this family (`T01-110` world content, T01-131 here).
+
+### 8. Launchers, launch velocities and the puppet's projectile parameters
+
+#### 8.1 `CLaunchVelocities` (data: a struct member `ct_lvLaunchVelocities` of `CCharacterTool`, 68 `.ctl` files)
+
+13 members, **all named in the data** (high): `lv_bRelativeToAttachment` (0 in 66, 1 in 2), `lv_fMinVelocity` 3 to 30 (5 in 65 files), `lv_fMaxVelocity` 6 to 40 (10 in 57, 20 in 9), `lv_fMinHeading` and `lv_fMaxHeading` (-10 and 10 in 56; -45 and 45 in 9), `lv_fMinPitch` and `lv_fMaxPitch` (30 and 60 in 65), `lv_fMinRotationH/P/B` and `lv_fMaxRotationH/P/B` (-180 to 180, -90 to 90, -10 to 10 in 66 files). **`CalculateLaunchVelocities(entity, attachment, out velocity, out angular velocity)`** (read in full; **medium**): draws independent uniform values: the speed in [`MinVelocity`, `MaxVelocity`], the heading in [`MinHeading`, `MaxHeading`] and the pitch in [`MinPitch`, `MaxPitch`] (degrees, converted to radians), and builds the velocity in the entity's own frame as `speed x (-cos(pitch) sin(heading), sin(pitch), -cos(pitch) cos(heading))` (forward is negative Z, up is positive Y); the angular velocity is three independent uniform values between the min and max of H, P and B (degrees per second); then **rotates the velocity into the world** by the entity's placement, or by the placement of the named attachment when `lv_bRelativeToAttachment` is set. It is the throw of a **dropped tool**: the data's common setting (speed 5 to 10, heading +-10 degrees, pitch 30 to 60 degrees, free tumble) is how an ammunition pack or weapon leaves a killed enemy (`ammopack_l.ctl` has exactly these values); 2 files differ.
+
+#### 8.2 `CMarkersLauncher` and `CRelativeRandomConeLauncher` (data `SMarkersLauncher` 5 members in 29 worlds, `SRelativeRandomConeLauncher` 5 in 24; base `CLauncher`)
+
+A launcher is the `Handle<CLauncher>` member of a spawner (`SSpawnerEntity.32`, 690 references in the worlds; `ai.md`): when the spawner creates something it asks the launcher for a **launch velocity** (virtual `GetLaunchVelocity(spawned, ...)`), so that spawned enemies and objects are thrown out of the spawn point. By the order rule (**high** for the order, **medium** for meanings):
+
+| Class | Members | Meaning |
+|---|---|---|
+| `SMarkersLauncher` | `ml_fLaunchPower` (`1`), `ml_bClosestToPlayer` (`2`), `ml_bCTPFlagConverted` (named), `ml_wfmWeightedFormationMarkers` (`3`), `ml_pgrSpawnSourceLaunchPitchOverDistance` (a graph) | `GetLaunchVelocity` (read): picks the **closest player** to the spawn point (when `ml_bClosestToPlayer`) as the destination, asks the engine for the **free-falling launch** that reaches it at a **fixed pitch** (the pitch from the graph over the distance), and returns that velocity scaled by `ml_fLaunchPower`; when no solution exists it returns a zero velocity. **In the data the pitch graph is empty in all 166 instances**, so the pitch comes from the caller (the spawner), not from a graph; the per-instance values of the number-only members (`ml_fLaunchPower`, `ml_bClosestToPlayer`) were not tallied (the script's flat listing mixes them with the nested formation-marker struct). `SetupPreview`, `UpdateLinks`, `BreakPropertiesLinks` are editor functions (name) |
+| `SRelativeRandomConeLauncher` | `rcl_fMinPitch` (`1`), `rcl_fMaxPitch` (`2`), `rcl_fAngleH` (`3`), `rcl_fMinVelocity` (`4`), `rcl_fMaxVelocity` (`5`) | `GetLaunchVelocity` (read): a random pitch between the two pitch limits, a random heading within +-`rcl_fAngleH`, and a random speed between the two velocities (degrees converted to radians), turned into a velocity vector and **rotated by the spawner's placement**. Data (524 instances in 24 worlds, script, member order as above): both pitch limits are 90 in 432 and 437 instances (the angle's zero direction was not resolved, so whether 90 means straight up is not claimed), `rcl_fAngleH` is 0 in 464, the minimum speed is 5 in 358 and the maximum 10 in 242 and 15 in 194 |
+
+#### 8.3 `CPuppetProjectileParams` (data `SPuppetProjectileParams`: member `pp_pppProjectileParams` of the puppet parameters, 126 `.ep` files; 9 members)
+
+The puppet's own "how I throw things" numbers (names by the order rule, **high** for the order; values over the 126 files, script section 4): `1` `ppp_fProjectileDamageMultiplier` (1 in all 126), `2` `ppp_fMinThrowPitchDeg` (30 in 125, 10 in 1), `3` `ppp_fMaxThrowPitchDeg` (60 in 125, 45 in 1), `8` `ppp_fMinThrowPitchDistance` (4 in 121, 10 in 5), `9` `ppp_fMaxThrowPitchDistance` (20 in 121, 50 in 5), `4` `ppp_fMinPredictRatio` (0 in 119; 0.1, 0.3, 0.5), `5` `ppp_fMaxPredictRatio` (0 in 119; 0.5, 0.75), `6` `ppp_fMinUndershootRatio` and `7` `ppp_fMaxUndershootRatio` (0 in all 126). Meaning by the names (**medium**): the throw pitch rises from the minimum to the maximum between the minimum and the maximum **distance** to the foe, the predict ratio (lead of the target's motion) between the two predict values, the undershoot ratio is how short of the target the throw may fall (never used in the data). The puppet's launch function that uses them is T01-103/T01-119. The binary has another group of "bomb throw" members in the player puppet's parameters (`ppp_fMinBombThrowVelocity` and others; `players-session-classes.md`).
+
+### 9. Net behaviour and replicated members
+
+| Class | Net behaviour | Relevant distance | Priority | Replicated members | Source |
+|---|---|---|---|---|---|
+| `CBaseProjectileEntity` and children | `NEB_DYNAMIC` (2) | the model's effective cull distance (0 without a renderable) | 6.0 (0 without a renderable) | 8: `en_fFireingPower`, `en_fStretch`, `en_henOwner`, `en_pbppProjectileParams`, `en_fDamageMultiplier`, `en_qvNetPlacement`, `en_vNetVelocity`, `en_qvOriginalPlacement` | read + `replication.md` (**high**) |
+| `CDebrisEntity` | `NEB_DYNAMIC` if `en_dcCollision` is non-zero, else none | the model's cull distance | default | 13 (7.1) | read + `replication.md` (**high**) |
+| `CBulletEntity`, `CBulletTrailEntity`, `CFlameEntity`, `CCrumbsEntity`, `CShooterEntity` | none (inherited) | | | none flagged | tables (**medium**: the net functions were not exported by these classes) |
+| remote calls | `OnProjectileKilled` (the generic projectile, server to all) | | | | `replication.md` |
+
+Consequences (**medium**): a client never spawns a projectile (`FireProjectile` returns when remote) and never delivers damage (bullets, explosions and flames apply damage on the host only); it spawns its **own** impact effects and bullet trails when it runs a shot itself (the player's own weapon fires locally, `weapon-classes.md` section 9), and it receives projectile positions and velocities from the server, which `PostReceiveUpdate` applies.
+
+### 10. The bullets ammunition pickup
+
+`CBulletsItemEntity` (`SBulletsItemEntity`, no member, 38 worlds) is the **bullets** ammunition pickup: `CAmmoItemEntity` supplies `IsNeeded`, `OnPicked`, `OnlyFirstPlayerPicks` and `GetPickupScore`; this class overrides only `GetName` (the translated string `ETRSBulletsItem.Name`, "Bullets") and `GetPickupAmount` (a constant, **value not resolved**: the decompiler shows a shared function returning 100, which is not trusted). The other ammunition pickups and the rule table of the ammunition items are T01-108.
+
+### 11. Which `.ep` file has which class
+
+(Script section 3.) **94** files under `Databases/GenericProjectiles`: 93 of class `SGenericProjectileParams` and one (`flamer.ep`) of `CFlamerProjectileParams`; **2 more** type tables with the class come from worlds that embed one (`SBaseProjectileParams` in 96 type tables in all). The files that name a projectile: `SBaseWeaponParams.bwp_pgppProjectileParams` (16 of the 35 weapon files, `weapon-classes.md`), `CSingleBlast.sb_pgppProjectileParams` (145 references, 23 null; `ep-schema.md`), the player's `ppp_pgppHandGrenade`, and the spawning files; the entity side is `CGenericProjectileProperties.ep_pgppProjectileParams`. `SPuppetProjectileParams` is a struct of every puppet file (126), `CBulletFireing` a struct of every blast that fires bullets (90), `CLaunchVelocities` a struct of the character tools (68 `.ctl`).
+
+## Invariants
+
+1. Every projectile file has **the same 48 + 2 members in the same order**; a reader assigns the binary's names of section 4 by position (checked on all 94 files; 13 of 13 data classes pass the three order checks).
+2. `bp_ulFlags` is 0, 1 or 2 (never 3): 38 + 32 + 24 files; `PF_SEEK_TARGET` files **all** have `bp_fSeekFrequency` above 0 (24 of 24); `gpp_pnProjectileNature` is 0 (50) or 1 (44).
+3. No projectile file has a direct damage max, an area damage max, a hot spot max or a fall-off max **below its min unless it is 0** (94 of 94).
+4. `bp_fImpactForceImpulse`, `bp_fRangeForceImpulse` and the four sound members are **-1 or non-negative**; 49, 53, 32, 32, 58 and 58 files use -1 (the global default).
+5. `SPuppetProjectileParams`: `ppp_fProjectileDamageMultiplier` is 1.0 and the two undershoot members are 0 in all 126 files; the throw pitch members have 2 distinct values each.
+6. `CLaunchVelocities`: minimum is never above maximum for speed, heading, pitch or rotation (68 of 68).
+7. The global bullet parameters are one object (80, 160, 250, 0.5, 1.0; trails 0.25 / 10 and 30); the flame parameters one object with the 11 values of 5.4.
+8. Reject a projectile file whose `bp_pmcModel` does not name a model with the mechanism that `GetDefaultMechanism` asks for: the original refuses to create the entity (section 5.1).
+9. No class of the 17 binary-only entity, properties and helper classes appears in any file (script).
+
+## Open questions
+
+Ranked by what blocks an implementer. Task IDs are **new** (appended to `docs/roadmap/T01-reverse-engineering.md`).
+
+1. **The projectile's flight, touch and explosion order in detail** (`OnCreate` velocity law, `OnStep` turning law and the target acquisition scoring, `CollisionCheck` decision table with piercing, the order of effects in `OnExplode`, the unit of the hot spot and fall-off curve, how `ProjectileFlags` bit 1 `PF_FALLING` and `bp_bUpwardProjectile`, `bp_bHorizontalProjectile` act): only the structure and the members used were read. **T01-131.**
+2. **Fire power and the max-0 pairs**: what fire power each launcher passes, and why 36 projectile files have a max of 0 next to a positive value (the interpolation would then fall to 0 at full power: the grenade `grenade.ep` has a direct damage of 35 and area damage of 100 with maxima 0). Joins T01-119 (launch and charging). **T01-132.**
+3. **The hitscan shot**: where the pellet **pattern list** comes from, what the owner's damage multiplier call is, the ray radius semantics, the random sequence and a distribution test, the "shooting from a wall" origin shift, and the use of `BT_PHYSICAL` by blast descriptions (the bullet entity is dead code for the weapons; `ep-schema.md` shows bullet type 0 in some `CBulletFireing`). Joins T01-118. **T01-133.**
+4. **Flames**: the burning rules (which puppets burn, immunity and water, the two health-like members `OnStep` tests, the effect size graph over puppet size, how `AddFlame` chooses a bone), and the flame's effect on enemies (`enemies.md`). **T01-134.**
+5. **Debris**: who creates it (`CDebrisToolEntityCreator`, the destruction system), `CDebrisLaunchParams`, the toughness rules, the sound events, `CDFXDebris` of the models (`destruction.md`). **T01-135.**
+6. **Launchers and launch velocities**: the call sites (spawners, tool drops), the free-fall solution `samGetFreeFallingLaunchParamsForFixedPitch`, the pitch graph, `CLauncher` itself and the world values of the 29 + 24 launchers (the script reports counts only). **T01-136.**
+7. **Crumbs**: `CCrumbsRenderable` and the bakers (the layout, bag, kind and mask records, 33 worlds), with `T01-110`. **T01-137.**
+8. **Run-time checks on the original** of the numbers of this page (speed, life time, explosion radius and damage, homing turn rate, flame ticks, scatter distribution, debris lifetime; needs T01-038/T01-039). **T01-138.**
+9. Smaller: the value of `CBulletsItemEntity::GetPickupAmount` (T01-108); the exact identifiers of the collision categories of the flamer projectile (T01-131); `en_pmcBody` of the bullet and the one remaining editor-only member; the meaning of `PF_FALLING` as used by the weapon-launched projectiles (T01-131); `IsAimable` (T01-131).
+
+## Test vectors
+
+All from the retail install via `tools/re/projectile_classes_verify.py` unless said.
+
+1. **Position rule.** In `SBaseProjectileParams` the data number `5` is at position 24 and the binary's name there is `bp_fLifeTime`; 52 of 94 files have 5.0. The number `1` is `bp_fFlyingSpeed` (30 in 29 files); `100` is `bp_ulFlags` at position 1.
+2. **Class counts.** 32 exported classes, 332 exported functions (120 named), 14 saved under the exported name or twin, `SBulletShooterEntity` under another name, 17 binary only; 94 projectile files (70 + 17 + 7), 126 `SPuppetProjectileParams`, 68 `CLaunchVelocities`, 33 worlds with crumbs (186 instances), 26 with shooters (133), 29 + 24 with launchers (166 + 524).
+3. **Interpolation (reading, medium).** The deathmatch cannon ball (`cannonballdm.ep`) has a direct damage of 0 and a max of 750: at fire power 0.5 the direct damage is `0 + (750 - 0) x 0.5` = **375**, times the projectile's damage multiplier. The single-player ball (`cannonball.ep`) 600 to 700 gives 650 at 0.5.
+4. **Scatter (reading, medium).** Minigun: scatter distance 200, radii 0 to 1: `r0 = 0`, `r1 = 1/200 = 0.005`; a pellet with `u1 = 0.25` has `r = 0.005 x 0.5 = 0.0025` and with `u2 = 0.25` the angle 90 degrees: the offset is (0, 0.0025) from the pattern point, i.e. 0.14 degrees up.
+5. **Dropped tool throw (reading, medium).** With the ammunition pack's values (speed 5 to 10, heading -10 to 10, pitch 30 to 60): speed 10, heading 0, pitch 45 degrees gives the local velocity `(0, 7.07, -7.07)`.
+6. **Defaults.** A shot whose impulse is -1 uses 250 and the up ratio 0.5; a blast description with bullet velocity -1 and reach -1 uses 80 and 160 (`CBulletFireing` values in the data: velocity -1 in all 90 files, reach -1, 1000 or 800).
+7. **Flames.** The global parameters give a flame entity of at most 5 flames, a flame of 4.0 s, an entity of 7.5 s, 5 damage every 1.0 s: a puppet that is hit once burns for at most 4 s of one flame, with the damage applied at 1 s intervals while it lives (the number of ticks is not resolved: open question 4).
+8. **Net.** A projectile is `NEB_DYNAMIC` (2) with priority 6.0; a debris with collision value 0 is not replicated and with 1 or 3 is.

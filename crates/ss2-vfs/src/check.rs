@@ -19,6 +19,8 @@ const MOVIE_ARCHIVES: [&str; 2] = ["Movies_PC_01.gro", "Movies_PC_02.gro"];
 /// How bad a [`Finding`] is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Severity {
+    /// Worth knowing, nothing to fix (used by the mod checks, `docs/MOD_VALIDATION.md`).
+    Info,
     /// The install is usable but probably not what the player expects.
     Warning,
     /// The install cannot be used as it is.
@@ -105,7 +107,7 @@ impl PatchLevel {
         })
     }
 
-    fn key(&self) -> (u32, u32, u32) {
+    pub(crate) fn key(&self) -> (u32, u32, u32) {
         (self.major, self.minor, self.build.unwrap_or(0))
     }
 }

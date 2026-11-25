@@ -20,3 +20,5 @@ mod author.
 - Benchmark harness and proposed performance budgets (T00-019), documentation site and
   architecture overview (T00-020), release engineering policy and tooling (T00-021).
 - Placeholder main menu (no game data used): `cargo run -p ss2-app`.
+- Effect file loaders (`ss2-format-fx`, T02-024): `.pfx` particle effects, `.lfx` lens flares, `.tfx` text effects and `.vfx` vibration effects as typed data.
+- Animation sets (`.ans`) load, with pose sampling (interpolation, looping), animation events and root-motion deltas (T02-016).

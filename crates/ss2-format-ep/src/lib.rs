@@ -145,6 +145,16 @@ impl ParamObject {
             .map(|m| &m.value)
     }
 
+    /// Every file referenced from this object or the objects it owns, in order of appearance
+    /// without repeats (compared without regard to case).
+    pub fn referenced_files(&self) -> Vec<&str> {
+        let mut all = Vec::new();
+        self.visit_files(&mut all);
+        let mut seen = std::collections::BTreeSet::new();
+        all.retain(|p| seen.insert(p.to_lowercase()));
+        all
+    }
+
     fn visit_files<'a>(&'a self, out: &mut Vec<&'a str>) {
         for m in &self.members {
             m.value.visit_files(out);
@@ -188,9 +198,14 @@ fn bad(detail: impl Into<String>) -> Error {
 struct Walker<'a> {
     container: &'a Container<'a>,
     decoded: &'a Decoded,
+    what: &'static str,
 }
 
 impl Walker<'_> {
+    fn bad(&self, detail: impl Into<String>) -> Error {
+        Error::invalid(self.what, detail)
+    }
+
     fn types(&self) -> &TypeSystem {
         &self.decoded.types
     }
@@ -206,18 +221,18 @@ impl Walker<'_> {
                 .container
                 .files
                 .get(e.file_ref as usize)
-                .ok_or_else(|| bad("a reference points past the file table"))?;
+                .ok_or_else(|| self.bad("a reference points past the file table"))?;
             return Ok(ParamValue::File(file.path.to_string()));
         }
         let o = self.decoded.object(id).ok_or_else(|| {
-            bad(format!(
+            self.bad(format!(
                 "a reference names object {id}, which does not exist"
             ))
         })?;
         let s = o
             .value
             .as_struct()
-            .ok_or_else(|| bad("an object is not a class instance"))?;
+            .ok_or_else(|| self.bad("an object is not a class instance"))?;
         // Every object points back to the file's own `CResourceFile` (`CResource.2`), which in
         // turn lists the root: that bookkeeping link is not a parameter, so it reads as null.
         if self.types().type_name(s.type_id) == Some("CResourceFile") {
@@ -230,13 +245,13 @@ impl Walker<'_> {
 
     fn struct_value(&self, s: &Struct, depth: usize) -> Result<ParamObject> {
         if depth > MAX_DEPTH {
-            return Err(bad("objects are nested too deeply (a reference cycle?)"));
+            return Err(self.bad("objects are nested too deeply (a reference cycle?)"));
         }
         let class = self.types().type_name(s.type_id).unwrap_or("?").to_string();
         let layout = self
             .types()
             .members(s.type_id)
-            .ok_or_else(|| bad(format!("class `{class}` has no layout")))?;
+            .ok_or_else(|| self.bad(format!("class `{class}` has no layout")))?;
         let mut members = Vec::with_capacity(layout.len());
         for (m, v) in layout.iter().zip(&s.values) {
             members.push(ParamMember {
@@ -263,7 +278,9 @@ impl Walker<'_> {
             Value::Ident(i) => ParamValue::Ident(
                 self.container
                     .ident(*i)
-                    .ok_or_else(|| bad(format!("identifier {i} is not in the identifier table")))?
+                    .ok_or_else(|| {
+                        self.bad(format!("identifier {i} is not in the identifier table"))
+                    })?
                     .to_string(),
             ),
             Value::Enum { type_id, value } => ParamValue::Enum {
@@ -285,16 +302,28 @@ impl Walker<'_> {
     }
 }
 
-impl EntityParams {
-    /// Read an `.ep` file.
-    ///
-    /// Checks the rules of `ep.md`: exactly one shared root (`rf_crsShared`), its class chain
-    /// contains `CEntityParams`, every reference is external (a file path) or an object of the
-    /// file, owned objects nest no deeper than 32 levels.
+/// A decoded resource file of the shared `.ep`/`.rsc`/`.ctl` layout: the class chain of its one
+/// shared root and the root as a [`ParamObject`] tree.
+///
+/// This is the generic part of [`EntityParams`] (the other loaders built on the same container,
+/// such as `ss2-format-rsc`, reuse it); the `.ep` rule that the root derives from `CEntityParams`
+/// is **not** checked here.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParamTree {
+    /// The class names from the root class up to its oldest base.
+    pub class_chain: Vec<String>,
+    /// The root object.
+    pub root: ParamObject,
+}
+
+impl ParamTree {
+    /// Decode a format-8 resource file with exactly one shared root.
     ///
     /// # Errors
-    /// [`Error::Invalid`] naming what is wrong.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    /// [`Error::Invalid`] (with `what` as the subject) when the file is not a decodable
+    /// resource file, has no or several shared roots, or has a bad reference.
+    pub fn from_bytes(bytes: &[u8], what: &'static str) -> Result<Self> {
+        let bad = |detail: String| Error::invalid(what, detail);
         let container = Container::parse(bytes)?;
         if container.header.format_version != 8 {
             return Err(bad(format!(
@@ -308,12 +337,12 @@ impl EntityParams {
             .iter()
             .find(|o| decoded.types.type_name(o.type_id) == Some("CResourceFile"))
             .and_then(|o| o.value.as_struct())
-            .ok_or_else(|| bad("the file has no CResourceFile"))?;
+            .ok_or_else(|| bad("the file has no CResourceFile".into()))?;
         let shared = decoded
             .types
             .member(file, "CResourceFile", "rf_crsShared")
             .and_then(shared_roots)
-            .ok_or_else(|| bad("the CResourceFile has no rf_crsShared list"))?;
+            .ok_or_else(|| bad("the CResourceFile has no rf_crsShared list".into()))?;
         let [root_id] = shared.as_slice() else {
             return Err(bad(format!(
                 "{} shared roots, exactly one expected",
@@ -322,39 +351,58 @@ impl EntityParams {
         };
         let root_object = decoded
             .object(*root_id)
-            .ok_or_else(|| bad("the root object does not exist"))?;
+            .ok_or_else(|| bad("the root object does not exist".into()))?;
         let root_struct = root_object
             .value
             .as_struct()
-            .ok_or_else(|| bad("the root is not a class instance"))?;
+            .ok_or_else(|| bad("the root is not a class instance".into()))?;
         // The chain by parent links (classes without members, such as CEntityParams, count).
         let mut cursor = Some(root_struct.type_id);
-        let mut full = Vec::new();
+        let mut class_chain = Vec::new();
         while let Some(id) = cursor {
-            full.push(decoded.types.type_name(id).unwrap_or("?").to_string());
+            class_chain.push(decoded.types.type_name(id).unwrap_or("?").to_string());
             cursor = container.type_def(id).and_then(|t| match &t.shape {
                 ss2_meta::TypeShape::Struct { parent, .. } => *parent,
                 ss2_meta::TypeShape::Short { .. } => None,
             });
-            if full.len() > MAX_DEPTH {
-                return Err(bad("the class chain is too long or circular"));
+            if class_chain.len() > MAX_DEPTH {
+                return Err(bad("the class chain is too long or circular".into()));
             }
-        }
-        if !full.iter().any(|c| c == "CEntityParams") {
-            return Err(bad(format!(
-                "the root class `{}` does not derive from CEntityParams",
-                full[0]
-            )));
         }
         let walker = Walker {
             container: &container,
             decoded: &decoded,
+            what,
         };
         let root = walker.struct_value(root_struct, 0)?;
-        Ok(Self {
-            class_chain: full,
-            root,
-        })
+        Ok(Self { class_chain, root })
+    }
+
+    /// Every file the tree refers to, in order of appearance without repeats (compared without
+    /// regard to case).
+    pub fn referenced_files(&self) -> Vec<&str> {
+        self.root.referenced_files()
+    }
+}
+
+impl EntityParams {
+    /// Read an `.ep` file.
+    ///
+    /// Checks the rules of `ep.md`: exactly one shared root (`rf_crsShared`), its class chain
+    /// contains `CEntityParams`, every reference is external (a file path) or an object of the
+    /// file, owned objects nest no deeper than 32 levels.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] naming what is wrong.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let ParamTree { class_chain, root } = ParamTree::from_bytes(bytes, WHAT)?;
+        if !class_chain.iter().any(|c| c == "CEntityParams") {
+            return Err(bad(format!(
+                "the root class `{}` does not derive from CEntityParams",
+                class_chain[0]
+            )));
+        }
+        Ok(Self { class_chain, root })
     }
 
     /// The root class name.
@@ -365,11 +413,7 @@ impl EntityParams {
     /// Every file the parameters refer to, in order of appearance without repeats: the models,
     /// controls, textures, sounds and other `.ep` files to request from the asset manager.
     pub fn referenced_files(&self) -> Vec<&str> {
-        let mut all = Vec::new();
-        self.root.visit_files(&mut all);
-        let mut seen = std::collections::BTreeSet::new();
-        all.retain(|p| seen.insert(p.to_lowercase()));
-        all
+        self.root.referenced_files()
     }
 }
 
