@@ -5,7 +5,7 @@ descriptor. **`InSamnity2Game.dll` is a 6 MB native C++ game DLL** — a Rust en
 so a mod like that can only be supported by (a) reproducing its gameplay in Rust or (b) a new mod API.
 Data-only mods (textures, models, `.ep` tweaks) should load directly through the VFS.
 
-- [ ] **T13-001** · Mod loading semantics: `.mod`/`.nfo`/`DefaultMod.txt`, load order, content overlays on the VFS (T02-004), conflict reporting · `M` · `P1` · Deps: T01-040
+- [~] **T13-001** [INPRG @Ihor-Ihorevych/agent · branch `T13-001-mod-loading` · 2026-11-25] · Mod loading semantics: `.mod`/`.nfo`/`DefaultMod.txt`, load order, content overlays on the VFS (T02-004), conflict reporting · `M` · `P1` · Deps: T01-040
 - [ ] **T13-002** · **SPIKE/RFC**: mod gameplay strategy — scripting runtime (Lua/Rhai/WASM via an interpreter) vs Rust plugin crates vs "port each mod by hand"; sandboxing; multiplayer implications · `M` · `P1`
 - [ ] **T13-003** · Data-only mod support verified: `Sam2Renovation` loads and plays; diff report of what it overrides · `M` · `P1` · Deps: T13-001
 - [ ] **T13-004** · Scripting runtime integration per T13-002: sandbox, resource limits, hot reload, error isolation · `L` · `P2`
