@@ -328,6 +328,12 @@ Hitscan shot (docs/re/hitscan-shot.md):
 python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
 ```
 
+Projectile launch (docs/re/projectile-launch.md):
+
+```
+python -I tools/re/projectile_launch_verify.py "C:\path\to\Serious Sam 2"    # the charging, recoil and launch-velocity members of the seven projectile weapons, the projectile files they name with the pairs at fire power 0 and 1, the launch speed per charge, the zap gun's bullet count, the player's hand grenade and which of the 94 projectile files a player weapon names (about 1 minute; the formulas come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
@@ -346,6 +352,7 @@ Puppet classes (docs/re/puppet-classes.md and its four companion pages):
 
 ```
 python -I tools/re/puppet_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 101 exported puppet classes are in the data (50), the member-order rule against the declared member tables (16 classes), the root classes of the 124 puppet parameter files, and what the install does not contain (about 5 minutes)
+python -I tools/re/puppet_attacks_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-attacks.md: the 123 shooting processes, 168 blasts, 71 melee attacks, 75 melee blasts, 13 run-over and 30 throw-description records of the 322 .ep files (value tables, graphs, projectile flags of the blasts), and the formulas of the page evaluated for its test vectors (melee direction, free-fall launch, tool throw); under a second
 Projectile classes (docs/re/projectile-classes.md):
 
 ```
