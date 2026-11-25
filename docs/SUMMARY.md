@@ -165,6 +165,7 @@
   - [Projectile launch and charging](re/projectile-launch.md)
 - [Brain classes](re/brain-classes.md)
   - [Which brain each puppet gets](re/brain-assignment.md)
+  - [Mover choice, patrol and tactics](re/brain-movement.md)
 - [AI behaviour and action classes](re/behavior-classes.md)
   - [Actions and validity terms](re/behavior-action-classes.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
