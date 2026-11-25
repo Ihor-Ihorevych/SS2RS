@@ -158,6 +158,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2859,6 +2865,32 @@ dependencies = [
  "ss2-core",
  "ss2-meta",
  "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-fuzzkit"
+version = "0.0.0"
+dependencies = [
+ "arbitrary",
+ "flate2",
+ "ss2-audio",
+ "ss2-audio-api",
+ "ss2-core",
+ "ss2-format-ans",
+ "ss2-format-bmf",
+ "ss2-format-ep",
+ "ss2-format-fnt",
+ "ss2-format-fx",
+ "ss2-format-mat",
+ "ss2-format-mtr",
+ "ss2-format-rsc",
+ "ss2-format-tex",
+ "ss2-game",
+ "ss2-meta",
+ "ss2-net",
+ "ss2-testkit",
+ "ss2-ui",
  "ss2-vfs",
 ]
 

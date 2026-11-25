@@ -410,6 +410,20 @@ fn reads_names_header_tracks_and_events() {
 }
 
 #[test]
+fn frame_numbers_at_the_extremes_do_not_overflow() {
+    // Found by the fuzz sweep of T02-030: `last_frame - first_frame` was computed in 32 bits.
+    let mut a = set().animations[0].clone();
+    a.first_frame = i32::MIN;
+    a.last_frame = i32::MAX;
+    assert_eq!(a.span_seconds(), (u32::MAX as f64) / f64::from(a.fps));
+    assert_eq!(a.loop_period_frames(), u32::MAX as f64);
+    assert!(a.frame_at(1.0e9, LoopMode::Once) <= f64::from(i32::MAX));
+    assert!(a.frame_at(1.0e9, LoopMode::Loop).is_finite());
+    let _ = a.sample(5.0, LoopMode::Loop);
+    let _ = a.events_between(0.0, 10.0, LoopMode::Loop);
+}
+
+#[test]
 fn rotation_keys_are_normalised_on_load() {
     let s = set();
     let q = s.animations[0].rotations[0].keys[1].value;

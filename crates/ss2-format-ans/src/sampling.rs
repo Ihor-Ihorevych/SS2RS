@@ -141,6 +141,12 @@ fn sample_keys<T: Copy>(keys: &[Key<T>], frame: f32, lerp: impl Fn(T, T, f32) ->
 }
 
 impl Animation {
+    /// `last_frame - first_frame` as a float. Computed in 64 bits: the two frame numbers are 32-bit values read from the file
+    /// and their difference can exceed `i32` (found by the fuzz sweep of T02-030).
+    fn span_frames(&self) -> f64 {
+        (i64::from(self.last_frame) - i64::from(self.first_frame)) as f64
+    }
+
     /// Number of frames from the first to the last frame inclusive: `last - first + 1`.
     pub fn frame_count(&self) -> u32 {
         (i64::from(self.last_frame) - i64::from(self.first_frame) + 1) as u32
@@ -148,7 +154,7 @@ impl Animation {
 
     /// Time from the first to the last key frame, in seconds: `(last - first) / fps`.
     pub fn span_seconds(&self) -> f64 {
-        f64::from(self.last_frame - self.first_frame) / f64::from(self.fps)
+        self.span_frames() / f64::from(self.fps)
     }
 
     /// Length of one pass of a looping animation, in frames: `last - first` (at least 1), so the
@@ -158,7 +164,7 @@ impl Animation {
     /// animations with more than one frame have identical poses on their first and last frame
     /// (within 1e-3), which is what a loop with a duplicated end frame looks like.
     pub fn loop_period_frames(&self) -> f64 {
-        f64::from((self.last_frame - self.first_frame).max(1))
+        self.span_frames().max(1.0)
     }
 
     /// The (fractional) frame number shown `time` seconds after the start. Negative and
@@ -168,7 +174,7 @@ impl Animation {
         let elapsed = clean_time(time) * f64::from(self.fps);
         let first = f64::from(self.first_frame);
         match mode {
-            LoopMode::Once => first + elapsed.min(f64::from(self.last_frame - self.first_frame)),
+            LoopMode::Once => first + elapsed.min(self.span_frames()),
             LoopMode::Loop => first + elapsed.rem_euclid(self.loop_period_frames()),
         }
     }
