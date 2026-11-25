@@ -334,6 +334,12 @@ Projectile launch (docs/re/projectile-launch.md):
 python -I tools/re/projectile_launch_verify.py "C:\path\to\Serious Sam 2"    # the charging, recoil and launch-velocity members of the seven projectile weapons, the projectile files they name with the pairs at fire power 0 and 1, the launch speed per charge, the zap gun's bullet count, the player's hand grenade and which of the 94 projectile files a player weapon names (about 1 minute; the formulas come from the spec, the script reads data only)
 ```
 
+Weapon view (docs/re/weapon-view.md):
+
+```
+python -I tools/re/weapon_view_verify.py "C:\path\to\Serious Sam 2"    # the six sway members and the double-weapon fire delay of the 17 weapons, the eight members of the 16 rendering files (with the field of view in degrees), the sniper zoom curve and the player's view-spring numbers (about 1 minute; the formulas come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
