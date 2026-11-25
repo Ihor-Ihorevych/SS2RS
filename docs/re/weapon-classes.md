@@ -106,7 +106,7 @@ The type table that each data file carries lists the members of a class in an or
 | 6 | `b.30` | `bwp_fMinRecoilDuration` | the **recoil duration**, which is the **period between shots**; `GetRecoilDuration` interpolates between this and the next member by the fire power, and **0 means "as long as the recoil animation"** | 0 (sniper sp, saw, bomb) to 1.3 (`weapons.md` table) | medium (one function read; the sniper's 0 fits) |
 | 7 | `b.31` | `bwp_fMaxRecoilDuration` | the recoil duration at full fire power | 0 for most; cannon 0.75, grenade launcher 0.5, zap gun 0.5, plasma rifle 0.15 | medium |
 | 8 | `b.32` | `bwp_fReloadDuration` | when positive, the reload animation is rescaled to this duration (the direction of the factor is not read); every weapon with a reload has 0 (the Colt) | flamer 0.05, rocket launcher 1, others 0 | medium |
-| 9 | `b.7` | `bwp_fOffsetX` | view kick / sway amplitude along X (name; **meaning of the group 9 to 14 unread**) | 0.005 or 0.01 | low |
+| 9 | `b.7` | `bwp_fOffsetX` | charge and recoil displacement amplitude along X (**`weapon-view.md` section 2: used only by the three charging weapons; not walking sway**) | 0.005 or 0.01 | low |
 | 10 | `b.9` | `bwp_fOffsetY` | the same along Y | 0.005 or 0.01 | low |
 | 11 | `b.11` | `bwp_fOffsetZ` | the same along Z | 0.1 or 0.4 | low |
 | 12 | `b.8` | `bwp_fFrequencyX` | frequency of the X motion | 5 or 10 | low |
@@ -265,7 +265,7 @@ Ranked by what blocks an implementer. Task IDs are **new** (appended to `docs/ro
 2. **The hitscan shot:** what the shooter does with the bullet description (scatter model with the section 4.2 members, bullet types and trails, damage type, the bullet description record, the owned shooter's creation and ownership), shotgun pellet setup. Joins T01-107 (shooters and bullets). **Answered in `hitscan-shot.md` (T01-118).**
 3. **Projectile launch and charging:** the owner puppet's launch function (the two variants), what "fire power" is (0 to 1 over the charging time, `bwp_fChargingAutoFireTime`), `ctMaxFirePowerWorthBullets` of the zap gun, the flamer and Klodovik launches. **Answered in `projectile-launch.md` (T01-119).**
 4. **Special weapons:** the beam gun's damage tick (`DoDamage`), the saw's cutting volume (`CutWithSaw`) and its damage numbers, the Serious Bomb's effect, the plasma rifle's ampule arithmetic, who creates the blades entity. **T01-120.**
-5. **The view feel members** (`bwp_fOffsetX` to `bwp_fOffsetZExponent`), the double-weapon placement and delay, sniper zoom presentation and the rendering parameters' use (with `camera-view.md`). **T01-121.**
+5. **The view feel members** (`bwp_fOffsetX` to `bwp_fOffsetZExponent`), the double-weapon placement and delay, sniper zoom presentation and the rendering parameters' use (with `camera-view.md`). **Answered in `weapon-view.md` (T01-121).**
 6. **Pickups and combo:** the table that maps a `WeaponIndex` to its two parameter files, `GetPickupAmount` of ammunition items, the co-op stay rules together with the player side, the combo-weapons mode (`CWU_*`), the remaining `C<Weapon>ItemEntity` classes (T01-108 owns their inventory). **T01-122.**
 7. **Throw descriptions and mounted tools** (enemies' throws; graph units; the obsolete identifier): **T01-123.**
 8. **Run-time checks on the original** of the numbers of this page (recoil periods, the Colt's 6-shot magazine, launch velocities, ampule fill, the Uzi mode): **T01-124.**
