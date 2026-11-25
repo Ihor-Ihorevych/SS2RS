@@ -172,6 +172,7 @@
   - [Boarding and leaving rides](re/brain-rides.md)
 - [AI behaviour and action classes](re/behavior-classes.md)
   - [Actions and validity terms](re/behavior-action-classes.md)
+    - [How the brain chooses among actions](re/behavior-action-choice.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
   - [Behaviour entities and the foe manager](re/behavior-entity-classes.md)
 - [Puppet classes](re/puppet-classes.md)
