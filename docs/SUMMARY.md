@@ -145,6 +145,7 @@
 - [0009 Simulation contract](rfcs/0009-sim-contract.md)
 - [0010 UI framework](rfcs/0010-ui-framework.md)
 - [0011 Split-screen scheduling](rfcs/0011-split-screen.md)
+- [0012 Mod gameplay strategy](rfcs/0012-mod-gameplay-strategy.md)
 
 # Reverse-engineering specs
 
