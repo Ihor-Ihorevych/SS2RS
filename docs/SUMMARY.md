@@ -184,3 +184,7 @@
   - [Effects: particle, simple, sound, shaker, spawn, text](re/worldcontent-effects.md)
   - [Static sounds, vibration, environment sound, movies, flares](re/worldcontent-sound-media.md)
   - [Markers and debug helpers](re/worldcontent-markers-debug.md)
+- [HUD classes](re/hud-classes.md)
+  - [HUD element base classes and the simple elements](re/hud-classes-simple.md)
+  - [HUD elements: weapon lists, Netricsa, scanner, messages](re/hud-classes-special.md)
+  - [HUD parameter classes and the HUD database](re/hud-classes-params.md)
