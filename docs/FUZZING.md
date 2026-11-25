@@ -150,7 +150,7 @@ corpus is where bugs are found.
 
 Each target ran 60 seconds under libFuzzer with AddressSanitizer on Windows, starting from its seeds (from 585 executions for
 `audio_decode`, which decodes whole Vorbis streams, to 858,000 for `audio_event`; 17 of 17 ended without a crash, timeout or
-out-of-memory). The stable sweep (`SS2_FUZZKIT_ITERS=60000`, a debug build, about 1,000,000 inputs) stopped at the 8,463th input of
+out-of-memory). The stable sweep (`SS2_FUZZKIT_ITERS=60000`, a debug build) stopped at the 8,463th input of
 `format_ans`: `Animation::span_seconds` computed `last_frame - first_frame` in `i32`, which overflows for a file whose frames run
 from about -2^31 to 2^31 (a panic in a debug build, a wrong number in a release build). It is fixed in `ss2-format-ans` (the
 difference is computed in 64 bits) with a unit test, and the sweep then passed 40,000 inputs for each of the 17 targets. The
