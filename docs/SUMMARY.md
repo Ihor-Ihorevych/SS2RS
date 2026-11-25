@@ -172,6 +172,7 @@
   - [The puppet base class](re/puppet-entity-classes.md)
   - [The puppet base class: methods](re/puppet-entity-methods.md)
   - [Legged puppets](re/puppet-legged-classes.md)
+  - [The moving-animation chooser](re/puppet-moving-anim.md)
   - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
   - [Puppet attacks: shooting chain, melee blasts, projectiles, tool launch](re/puppet-attacks.md)
 - [Projectile classes](re/projectile-classes.md)

@@ -83,7 +83,7 @@ The 121 methods are in the table at the end of this page (`Basis`: `R` read, `P`
 ## Open questions
 
 1. **The movement step** `LerpToDesiredVelocityAndLook` (14 KB): blending, cones, pose choice, air control, jump and fall: T01-141.
-2. **The moving-animation chooser** (`PlayMoveAnim`, `PlayPoseChangedAnim`, `PrepareMovingAnimData`, how `CMovingAnimData` selects a `CAllMovingAnimation` of the model's scheme, what `ma_*`/`pep_*` numbers feed it): T01-148 (with `ans.md`).
+2. **The moving-animation chooser** (`PlayMoveAnim`, `PlayPoseChangedAnim`, `PrepareMovingAnimData`, how `CMovingAnimData` selects a `CAllMovingAnimation` of the model's scheme): **specified in [`puppet-moving-anim.md`](puppet-moving-anim.md)** (T01-148; follow-ups T01-265, T01-266).
 3. **Knock-out, leap and ride sequences** in detail, and the numbers of the unnamed `SPuppetEnvironmentParams` members: T01-147.
 4. **Diving and drowning**: breath numbers, damage per second, the `Drown` trigger: T01-149.
 5. **Run-time checks** of the walking characters on the running original (speeds per pose, knock-out timings): T01-146.
