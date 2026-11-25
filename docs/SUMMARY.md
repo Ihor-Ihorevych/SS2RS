@@ -164,6 +164,7 @@
   - [The hitscan shot](re/hitscan-shot.md)
   - [Projectile launch and charging](re/projectile-launch.md)
   - [Weapon view and rendering parameters](re/weapon-view.md)
+  - [Weapon pickups, tables and combo weapons](re/weapon-pickups.md)
 - [Brain classes](re/brain-classes.md)
   - [Which brain each puppet gets](re/brain-assignment.md)
   - [Mover choice, patrol and tactics](re/brain-movement.md)

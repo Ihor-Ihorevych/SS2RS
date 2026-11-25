@@ -340,6 +340,12 @@ Weapon view (docs/re/weapon-view.md):
 python -I tools/re/weapon_view_verify.py "C:\path\to\Serious Sam 2"    # the six sway members and the double-weapon fire delay of the 17 weapons, the eight members of the 16 rendering files (with the field of view in degrees), the sniper zoom curve and the player's view-spring numbers (about 1 minute; the formulas come from the spec, the script reads data only)
 ```
 
+Weapon pickups (docs/re/weapon-pickups.md):
+
+```
+python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```

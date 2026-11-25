@@ -132,7 +132,7 @@ Each shot adds `1 + (zgwp_ctMaxFirePowerWorthBullets - 1) × power` to the weapo
 Not a weapon: the player puppet itself throws `ppp_pgppHandGrenade` (`HandGrenade.ep` in `playerpuppet.ep`, `HandGrenadeDM.ep` in `playerpuppet_dm.ep`; the two other player-puppet files, `player.ep` and a cut-scene file, have none) when the attack of type 2 is requested. In this order:
 
 1. **Interval.** If the time since the last throw is **less than `ppp_fHandGreandeRecoil`** (sic; 1.0 s in the data) nothing happens. If the player is **riding**, nothing happens. Otherwise the last-throw time is **set to now** (so a throw that then fails for lack of ammunition still starts the interval).
-2. **Ammunition.** One unit of ammunition kind `AI_HAND_GRENADES` is drained, **unless** the game info's mode value is 2 and a second game-info member (not identified) is non-zero; if the drain fails, nothing is thrown.
+2. **Ammunition.** One unit of ammunition kind `AI_HAND_GRENADES` is drained, **unless** the game is a **co-op** game (game type 2) **and** the session option `sgp_bInfiniteAmmo` is on (the two game-info members read; `weapon-pickups.md`); if the drain fails, nothing is thrown.
 3. **Direction.** The owner's view placement (eye position, view orientation) with the **pitch increased by `ppp_fAddedPitchDeg`** (10 degrees in the data) and wrapped into -180 to 180 degrees.
 4. **Speed.** `t = clamp((pitch - Pmin) / (Pmax - Pmin), 0, 1)` using that adjusted pitch and the two limits `ppp_fMinBombThrowPitchDeg`, `ppp_fMaxBombThrowPitchDeg` (-20 and 20 degrees); `speed = Vmin + (Vmax - Vmin) × t` with `ppp_fMinBombThrowVelocity`, `ppp_fMaxBombThrowVelocity` (20 and 40). The names are by the order rule of `players-session-classes.md` section 7 (**medium**); looking up (positive pitch, by the engine's convention of `hitscan-shot.md` section 4) throws harder.
 5. **Launch.** The wall test of 2.3 runs; on a hit the start is the hit point. `SpawnProjectile(params, placement, fire power 0, speed, hit entity, inflictor 14)`. The projectile's own fuse and damage come from its file (`HandGrenade.ep`: direct 20, area 120, hot spot 4, fall-off 10, life 5.0 s, speed member 30 unused; the deathmatch file area 80).
@@ -162,7 +162,7 @@ Ranked by what blocks an implementer. New task IDs are appended to `docs/roadmap
 2. **Whether a projectile that was given an "immediately hit" entity explodes at once** and what its `OnCreate` does with it (`projectile-classes.md` 5.1 open question 1). **T01-222.**
 3. **Which scripts launch projectiles and with which fire power** (the script native function; the 36+ files whose maxima no player weapon uses may be used there). **T01-223.**
 4. **Run-time checks on the original** of the numbers of this page (charge times, speeds, recoil periods, the zap gun's two powers): **T01-124.**
-5. The game info members of the hand grenade's free-ammunition rule (mode value 2 and a flag) and the sign of the engine's Euler pitch are not identified; the identity of achievements 14 and 17: part of **T01-114** (the player puppet).
+5. The sign of the engine's Euler pitch and the identity of achievements 14 and 17: part of **T01-114** (the player puppet).
 6. **The grenade launcher's fire power 0**: it is certain that the code passes 0 (read in the call), but it is unusual next to the cannon; the data's maxima (direct 35 against 0) agree with a power that never exceeds 0 (the same for the rocket), so a defect of the original is possible. Left to T01-124.
 
 ## Test vectors
