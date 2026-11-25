@@ -165,6 +165,7 @@
   - [Projectile launch and charging](re/projectile-launch.md)
   - [Weapon view and rendering parameters](re/weapon-view.md)
   - [Weapon pickups, tables and combo weapons](re/weapon-pickups.md)
+  - [Mounted tools and throw descriptions](re/mounted-tools.md)
 - [Brain classes](re/brain-classes.md)
   - [Which brain each puppet gets](re/brain-assignment.md)
   - [Mover choice, patrol and tactics](re/brain-movement.md)

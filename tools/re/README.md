@@ -346,6 +346,12 @@ Weapon pickups (docs/re/weapon-pickups.md):
 python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
 ```
 
+Mounted tools and throw descriptions (docs/re/mounted-tools.md):
+
+```
+python -I tools/re/tools_throw_verify.py "C:\path\to\Serious Sam 2"    # the CMountedTool records of the puppet files (identifier or pointer, the named .ctl files), the CThrowDescription identifiers and speed windows, and the throw behaviour actions of the .cb files (about 3 minutes; the lookup and mounting rules come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
