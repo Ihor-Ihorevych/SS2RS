@@ -6,7 +6,7 @@ It prints
   1. for each of the 82 exported classes of the family (names quoted from the export table of Sam2Game.dll): whether it is in the data
      (own name, or the `S` twin of a `C` name), its base class, own member count, number of files and extensions; the data class `CTestJointEntity`
      (the data name of the exported `CExternalJointEntity`) is listed too;
-  2. the member-order check: for every data class whose member table the binary also declares (29 classes), the data's members in file order
+  2. the member-order check: for every data class whose member table the binary also declares (23 classes), the data's members in file order
      against the binary's declared names (counts equal, every member the data names at the position of the same name, every data type fitting
      the Hungarian prefix of the binary's name);
   3. the census of the worlds: placed entities and property records per class, worlds, and for every member the most common values
