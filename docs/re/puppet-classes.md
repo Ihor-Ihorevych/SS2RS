@@ -234,7 +234,7 @@ Each open item has a follow-up task in `docs/roadmap/T01-reverse-engineering.md`
 1. **`GetPuppetParameters` in generic puppets and the `_DM` rule** (T01-139): whether a generic puppet has a deathmatch variant and how the identifier becomes a resource name.
 2. **Damage, hits and kills** (T01-140): the rest of `OnReceiveDamage`, `OnHullTouched`, `ApplyDamageImpact`, the use of the co-op multiplier and of `CDamageMultipliers`, kick damage.
 3. **Movement steps** of the legged kind (T01-141) and of the other models (T01-142).
-4. **Attacks** (T01-143): the shooting chain, melee and run-over blasts, projectile spawning, `LaunchTool`.
+4. **Attacks** (T01-143, done: [`puppet-attacks.md`](puppet-attacks.md)): the shooting chain, melee and run-over blasts, projectile spawning, `LaunchTool`.
 5. **Tools, carrying, rides and seats** (T01-144).
 6. **Spawning, appearing and the spawn-source states** (T01-145).
 7. **Run-time checks on the running original** (T01-146): numbers for every rule marked **medium** here (co-op multiplier, deathmatch health cap, corpse timings, knock-out gate, the order of the step).
