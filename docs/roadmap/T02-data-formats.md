@@ -46,7 +46,7 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-029** · Config/script-ish text types (`.cfg .mac .scp …` per T01-019) · `M` · `P2`
 
 ## Quality
-- [ ] **T02-030** · `cargo-fuzz` targets for every parser, corpus from synthetic fixtures, nightly CI run · `M` · `P1` · 🟢
+- [~] **T02-030** [INPRG @Ihor-Ihorevych/agent · branch `T02-030-fuzz-targets` · 2026-11-25] · `cargo-fuzz` targets for every parser, corpus from synthetic fixtures, nightly CI run · `M` · `P1` · 🟢
 - [ ] **T02-031** · "Load everything" smoke tool & test: open every file in an install with its loader, print coverage table, fail on unknown/errored · `M` · `P0`
 - [x] **T02-032** · Loader benchmarks (MB/s) and memory profile on PC (Android device in Phase 2) · `S` · `P2`
   PC measurements and reproduction commands are in [Performance budgets](../PERF_BUDGETS.md#58-loader-throughput-and-working-set-t02-032).
