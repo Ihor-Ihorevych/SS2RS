@@ -325,7 +325,7 @@ python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # whic
 Hitscan shot (docs/re/hitscan-shot.md):
 
 ```
-python -I tools/re/hitscan_shot_verify.py "C:\path	o\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
+python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
 ```
 
 Brain classes (docs/re/brain-classes.md):
