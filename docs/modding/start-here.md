@@ -143,8 +143,8 @@ The keys of a mod descriptor ([full table](api.md#nfo-keys)): `NAME`, `AUTHOR`, 
 
 `Content/CurrentMod.txt`, or `Content/DefaultMod.txt` when there is no `CurrentMod.txt`, holds `CURRENTMOD = <file>.mod ;`
 (lines that start with `#` are comments). The install's `DefaultMod.txt` names `SeriousSam2.mod`, the game itself: "the game"
-is just the default mod. `ss2_vfs::selected_mod` reads these two files. Whether and how the program lets you change it is
-**not decided** (T13-001).
+is just the default mod. `ss2_vfs::selected_mod` reads these two files. `ss2_vfs::scan_installed_mods` reads the same two files and lists the mods. Whether and how the program lets you change it
+is not wired yet; see [Mod loading](../MOD_LOADING.md).
 
 ## Load order and overrides, as the code does them
 

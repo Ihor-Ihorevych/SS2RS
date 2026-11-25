@@ -126,8 +126,8 @@ None of these exists; do not write a mod that expects one.
 - **A Mod API**: registering entity classes, subscribing to events, spawning or damaging things, UI hooks, replication
   attributes, a stability policy (T13-005, after the entity API is stable).
 - **Loading native game modules** (`.dll`): never. A mod like `InSamnity! 2` can only have its content used.
-- **Choosing a mod in the program** (no mod list, no profile, no enable/disable: T13-007); how several mods combine is open
-  (T13-001). Whether the game window mounts a mod at all is not wired yet.
+- **Choosing a mod in the program** (no mod list, no profile, no enable/disable: T13-007); how several mods combine is SS2RS's own
+  rule, in [Mod loading](../MOD_LOADING.md). Whether the game window mounts a mod at all is not wired yet.
 - **Mod versions and dependencies.** There is no version field, and no way to say "needs mod B". `REQUIRES_PATCH` only
   speaks about the game's patch level.
 - **Mods in multiplayer**: mod list and hash in the handshake, mismatch handling (T13-006).

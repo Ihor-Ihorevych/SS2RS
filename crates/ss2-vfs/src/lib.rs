@@ -31,7 +31,10 @@ mod locate;
 mod locate_tests;
 mod memory;
 mod modcheck;
+mod modinstall;
+mod modload;
 mod mods;
+mod overlay;
 mod path;
 
 use std::io::{Read, Seek};
@@ -55,9 +58,21 @@ pub use modcheck::{
     Lint, ModCheckEnv, ModFinding, ModLayer, ModReport, ModSpec, ModSummary, ModUnderTest,
     check_install_mods, check_mods, installed_mod_names,
 };
+pub use modinstall::{
+    DescriptorSource, InstalledMod, InstalledMods, ModProblem, MountedArchive, MountedMods,
+    ProblemKind, mount_mods, scan_installed_mods,
+};
+pub use modload::{
+    BASE_MOD_ID, LoadOrderError, LoadPlan, ModNode, PlannedMod, REQUIRES_MOD_KEY, Why,
+    normalize_mod_id, parse_mod_list, resolve_load_order,
+};
 pub use mods::{
     ModInfo, ModManifest, ModModule, Nfo, discover_mods, mod_archive_names, mount_mod,
     parse_current_mod, selected_mod,
+};
+pub use overlay::{
+    ModLayers, ModOverlay, OverlayReport, PairSummary, PathConflict, Sameness, analyze_overlays,
+    overlay_report,
 };
 pub use path::VfsPath;
 

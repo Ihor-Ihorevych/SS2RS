@@ -3028,6 +3028,7 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "proptest",
  "serde",
  "ss2-core",
  "ss2-testkit",
