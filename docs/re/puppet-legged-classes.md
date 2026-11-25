@@ -61,7 +61,7 @@ The numbered members the data stores (`.50` front direction, `.51` relative look
 
 ### 3. Environments and poses (`GetEnvironmentParams`; **medium**)
 
-`EPuppetPose` 1 stand, 2 crouch, 3 dive, 4 swim, 5 fly, 6 fall, 7 roll, 8 knock-out, 9 riding wheel. The record used: pose 5 -> air; poses 3 and 4 -> water; all others (stand, crouch, fall, roll, knock-out, riding wheel, invalid) -> land. `GetDeclaredNominalVelocity`, `GetCurrentAcceleration`, `GetCurrentDeceleration` and `CanRotateInPlace` read the chosen record (name and profile). Diving: `GetDipContent` answers land, air or water from the fluid ratio; entering water plays `DiveIn` and `Diving`, leaving plays `DiveOut` and one of `InhaleEasy`, `InhaleMedium`, `InhaleHard` by how long the breath was held (`pbp_fKeepBreathPeriod`), and while diving too long `OnStep` plays the `Drown` effect and sound (names from the code).
+`EPuppetPose` 1 stand, 2 crouch, 3 dive, 4 swim, 5 fly, 6 fall, 7 roll, 8 knock-out, 9 riding wheel. The record used: pose 5 -> air; poses 3 and 4 -> water; all others (stand, crouch, fall, roll, knock-out, riding wheel, invalid) -> land. `GetDeclaredNominalVelocity`, `GetCurrentAcceleration`, `GetCurrentDeceleration` and `CanRotateInPlace` read the chosen record (name and profile). Diving: `GetDipContent` answers land (0), air (1) or water (2) **from the pose** (fly; dive and swim; else), not from the fluid ratio (corrected in [`puppet-legged-diving.md`](puppet-legged-diving.md)); entering water plays `DiveIn` and `Diving`, leaving plays `DiveOut` and one of `InhaleEasy`, `InhaleMedium`, `InhaleHard` by how long the breath was held (`pbp_fKeepBreathPeriod`), and while diving too long `OnStep` plays the `Drown` effect and sound (names from the code).
 
 ### 4. Methods
 
@@ -85,7 +85,7 @@ The 121 methods are in the table at the end of this page (`Basis`: `R` read, `P`
 1. **The movement step** `LerpToDesiredVelocityAndLook` (14 KB): blending, cones, pose choice, air control, jump and fall: T01-141.
 2. **The moving-animation chooser** (`PlayMoveAnim`, `PlayPoseChangedAnim`, `PrepareMovingAnimData`, how `CMovingAnimData` selects a `CAllMovingAnimation` of the model's scheme): **specified in [`puppet-moving-anim.md`](puppet-moving-anim.md)** (T01-148; follow-ups T01-265, T01-266).
 3. **Knock-out, leap and ride sequences**: **specified in [`puppet-legged-sequences.md`](puppet-legged-sequences.md)** (T01-147); the numbers of the unnamed `SPuppetEnvironmentParams` members: T01-214 (the slow limit and the move-speed pair are in `puppet-moving-anim.md`).
-4. **Diving and drowning**: breath numbers, damage per second, the `Drown` trigger: T01-149.
+4. **Diving and drowning**: **specified in [`puppet-legged-diving.md`](puppet-legged-diving.md)** (T01-149; follow-ups T01-269, T01-270).
 5. **Run-time checks** of the walking characters on the running original (speeds per pose, knock-out timings): T01-146.
 
 ## Test vectors
@@ -134,7 +134,7 @@ Columns: method; what it does; **Basis** (`R` the function was decompiled and re
 | `GetLookDirEul` | The look direction as Euler angles (body heading plus the relative look). | N |
 | `GetCurrentLookDirEul` | The same value (two exported names). | N |
 | `SetLookDirEul` | Sets the relative look direction. | N |
-| `GetDipContent` | The medium the puppet is in, from the fluid ratio (land, air or water). | N |
+| `GetDipContent` | The medium the puppet is in, from the pose: fly 1 (air), dive or swim 2 (water), else 0 (land). | R |
 | `GetOperatorMoveDir` | The operator's movement direction in the body's frame. | N |
 | `ProcessOperatorInput` | The base input handling, then the legged jump and crouch buttons. | P |
 | `MovingIn3DArea` | True while the pose is fly or swim (name). | N |
