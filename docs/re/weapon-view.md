@@ -67,7 +67,7 @@ So while a charge builds, the weapon **shakes in x and y with growing amplitude*
 
 A weapon may start its shot only when its state is **idle or boring** and (rule in this order):
 
-1. In **combo-weapons mode** (the game's combo option is on **and** the player has the combo mode active) the answer is **yes**.
+1. When **combo weapons are enabled** (`weapon-pickups.md` section 5: setting 2, option `sgp_bUseComboWeapons` on, single player or co-op) **and** the player's dual-wielding switch is on, the answer is **yes**.
 2. Let the partner be the weapon in the other hand. With **no partner, or a different weapon index**: **yes** (no delay).
 3. **Equal weapons** (same index in both hands), with `d` = this weapon's `bwp_fDoubleWeaponFireDelay`:
    - If the partner is **reloading**: **yes** when the time since the **later** of the two last shots is at least `d`.
