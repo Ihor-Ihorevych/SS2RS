@@ -173,3 +173,8 @@
 - [Item and pickup classes](re/item-classes.md)
   - [Health, armor, treasure, life, repair and power-ups](re/item-classes-vitals.md)
   - [Ammunition, ammunition packs and weapon pickups](re/item-classes-ammo-weapons.md)
+- [World content entity classes](re/worldcontent-classes.md)
+  - [Static models and props](re/worldcontent-models-props.md)
+  - [Effects: particle, simple, sound, shaker, spawn, text](re/worldcontent-effects.md)
+  - [Static sounds, vibration, environment sound, movies, flares](re/worldcontent-sound-media.md)
+  - [Markers and debug helpers](re/worldcontent-markers-debug.md)
