@@ -159,6 +159,7 @@
 - [Multiplayer replication: what state is sent](re/replication.md)
 - [Player, session and inventory classes](re/players-session-classes.md)
 - [Weapon classes](re/weapon-classes.md)
+  - [The hitscan shot](re/hitscan-shot.md)
 - [Brain classes](re/brain-classes.md)
 - [AI behaviour and action classes](re/behavior-classes.md)
   - [Actions and validity terms](re/behavior-action-classes.md)
