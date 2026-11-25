@@ -130,7 +130,7 @@ The base `CWeaponItemEntity` (`weapon-classes.md` section 8) supplies `OnCreate`
 
 ## Open questions
 
-1. The pack's and the weapon pickup's behaviour in co-op beyond the stay options, and the exact interplay of `ReceiveAmmo` with the enemy multiplier at a pickup (the co-op term): **T01-115** (`players-session-classes.md`), **T01-122** (the weapon index to parameter-file table and the combo pickup).
+1. The pack's and the weapon pickup's behaviour in co-op beyond the stay options, and the exact interplay of `ReceiveAmmo` with the enemy multiplier at a pickup (the co-op term): **T01-115** (`players-session-classes.md`), **T01-122** (the weapon index to parameter-file table and the combo pickup: **answered in `weapon-pickups.md`**, which also gives the receive and co-op stay rules).
 2. The base pickup flow, creation and tool use: **T01-160**, **T01-161**; run-time checks of every amount, score and respawn here: **T01-163**.
 3. Whether `AI_BLADES` and `AI_NAPALM` pickups can be made at all (the obsolete blades class; no creator of the napalm pickup was found): **T01-164**.
 4. The editor-side catalogue of weapon pickups (the help lists 15; the live classes here are 14 + the cannon): **T01-164**.

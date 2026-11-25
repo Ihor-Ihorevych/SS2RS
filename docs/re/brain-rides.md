@@ -1,0 +1,124 @@
+# Boarding and leaving rides by AI brains (T01-128)
+
+- **Roadmap task:** T01-128 (follow-up of [`brain-classes.md`](brain-classes.md) open question 4; the player's own ride rules are T01-114 and T01-144)
+- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
+- **Confidence:** **high** only for what `tools/re/brain_rides_verify.py` reproduces from the data (the seat data of the 22 parameter files that declare seats, the instance mounts and ride links of the placed puppets, the global limits); **medium** for the rules read from the binary (the brain's ride methods, the possession and exit behaviours, the puppet's registration and unregistration), because each rests on one reading of a function decompiled once and the callers were scanned; **medium-low** where a call is identified only by its position in a virtual table (marked) and **low** for "(name)" and the open questions. **Nothing was run.**
+
+Prerequisites: [`brain-classes.md`](brain-classes.md), [`behavior-entity-classes.md`](behavior-entity-classes.md) (4.3 and 4.4, the two ride behaviours), [`brain-assignment.md`](brain-assignment.md) (rides and `RegisterRide`), [`brain-movement.md`](brain-movement.md) (state `BS_PATROLLING_MARKERS` and the go-to-point behaviour), `vehicles.md`, [`puppet-entity-classes.md`](puppet-entity-classes.md), [`puppet-vehicle-classes.md`](puppet-vehicle-classes.md).
+
+## Summary
+
+A **ride** is a puppet with seats (a vehicle, a turret, a mount: 22 parameter files, **one seat each**); a **rider** is another puppet. An **AI brain boards** a ride when a **script macro** tells its puppet to (`EnterRide`, a method of the legged puppet) and leaves it when a macro or a ride event asks (`ExitFromRide`). **Nothing in the stored data and no `.cb` action starts a boarding on its own**: `CBATryRiding` has no code (`behavior-action-classes.md`) and the seat chooser `GetAvailableSeat` has **no caller** in `Sam2Game.dll` (a scan of every direct virtual call; **medium-low**, it may be used by the GUI module or by scripts through a macro table).
+
+Findings an implementer needs first:
+
+1. **Entering** (section 2): `PossesRide(ride, seat, way, ...)` is refused while the brain is entering or exiting a ride (states 3 and 8). If the ride is **not "fixed"** (tilted: pitch or bank beyond **80 degrees**, the global limits) the brain asks it to repair itself (`AutoFixRide`, only when the caller's last flag is set) and raises the macro event `CantPossesRide`; otherwise the puppet **registers on the ride** (ride, seat and way stored in the puppet's `en_henRide`, `en_idSeat`, `en_iWayToSeat`) and the brain enters **`BS_ENTERING_RIDE`** (3).
+2. **In state 3** the brain spawns a **`CPossessRideEntity`** behaviour that does the walking and the climbing (section 3); with **teleport** (`ShouldTeleportToEnterRide`: false for every brain except the player brain, which overrides it) the puppet is placed at the seat's enter point and the walk is skipped. While entering, the brain's own **abilities are all off except "may move"**, and **the ride's own brain, if it has one, is held in `BS_WAITING_RIDERS_TO_CLIMB`** (13) with its puppet stopped until all riders have climbed on (section 4).
+3. **Leaving** (section 5): `ExitFromRide` does nothing on a **client** or while entering or exiting; otherwise it spawns a `CExitFromRideEntity` and enters `BS_EXITING_FROM_RIDE` (8); the entity asks the puppet (host only) to **stop riding**, the exit sequence is played, the brain's abilities return to "all", and the puppet **unregisters** from the ride.
+4. **Possession of a character by a player brain** (`PossesCharacter`, `SwitchToDefaultPuppet`, section 6) is the other half of the ride story: a player brain takes over a puppet through `ChangeToBrain` and gives it back through `ChangeToDefaultBrain`.
+5. **Seat choice** (section 1): first free seat in table order, skipping way-point seats, seats that puppets cannot use, seats with a rider and seats reserved by the ride's **instance mounts**. In the data every ride has **one** seat named `Seat` with neither skip flag, so the choice is always that seat unless it is occupied or mounted.
+
+## Evidence
+
+- **Binary.** `Sam2Game.dll` of the install used for the other specs. Decompiled and read in full: `CBrainEntity::GetAvailableSeat`, `PossesRide`, `CantPosessRide`, `PossesCharacter`, `ExitFromRide`, `OnBeginEnteringRide`, `OnEndEnteringRide`, `PossessingRideState`, `WaitRiderToClimb`, `OnAllRidersClimbed`, `OnEndExitingFromRide`, `OnStartRiding`, `OnStopRiding`, `OnBehaviorFinished` (the entering case), `SetState`, `OnDelete`; `CPossessRideEntity` (`OnCreate`, `PossesRide`, `ReachDestinationSeat`, `OnReachDestinationSeatBegin`, `SendPuppetTowardsClimbPoint`, `ReachWaypointSeatLoop`, `OnActionFinished`, `EnterOntoSeat`, `WaitRideIdleLoop`, `OnGoalPointReached`, `SetState`); `CExitFromRideEntity` (`OnCreate`, `OnDelete`, `ExitFromRide`); `CPuppetEntity::RegisterForRide`, `UnregisterFromRide`, `IsRideFixed`, `AutoFixRide`, `IsRidable`, `GetCountOfSeats`, `DoStartRiding`, `DoStopRiding`, `ExitAllRidersFromRide`, `MountRide`, `macMountRide`, `FindBestSeat` (outline); `CLeggedPuppetEntity::EnterIntoRide`, `ExitFromRide`, `PlayEnteringIntoRideSequence` (outline), `DetachFromSeat`. Member identities come from byte offsets compared with the DLL's member tables (names and order only; offsets are not recorded here, `conventions.md`); virtual calls were identified by their position in the virtual tables of 13 classes (the names of identical shared stubs are not used as evidence).
+- **Callers.** Every function of the DLL was scanned for direct virtual calls through the table positions of the brain's `PossesRide`, `GetAvailableSeat`, `ExitFromRide`, `CantPosessRide`, `ShouldTeleportToEnterRide`/`PossesCharacter`, and of the puppet's `ExitAllRidersFromRideInternal` and `FallOutAllRidersFromRideInternal`.
+- **Data.** `python -I tools/re/brain_rides_verify.py "<install>"` (`.ep` part 2 minutes, worlds about 25) prints sections 1 to 3 quoted in section 8.
+- **Not checked.** Nothing was run. The entering and exiting **animation sequences** and their timing (`PlayEnteringIntoRideSequence`, `PlayExitingFromRideSequence`: scripted by the seat's way-to-seat data), the physics of attaching the rider (`CMechanism::Attach`), the player's seat search (`FindBestSeat` uses the seat flags and `ggp_fAllowedPlayerDistanceFromSeat` = 8: T01-114) and how the ride's brain, if any, drives the ride once boarded were not read.
+
+## Layout / rules
+
+### 1. Seats and the choice (`GetAvailableSeat`; **medium**; data **high**)
+
+**Seat data.** A ride's parameter file has a container of `SPuppetSeatData` objects (`SPuppetParams.4`): `psd_idSeatName`, attachment, `psd_sfSeatFlags` (`SeatFlags`: 1 `SF_RIDER_CAN_SHOOT_OWN_WEAPON`, 2 `SF_WAY_POINT_SEAT`, 4 `SF_PUPPETS_CANT_SEAT`, 8 `SF_RIDER_DIES_WITH_RIDE`, 16 `SF_PLAYER_CANT_SEAT`, 32 `SF_PLAYER_CAN_BE_DAMAGED`, 64 `SF_NON_PLAYER_IS_INVOULNERABLE`, 128 `SF_PLAYER_CANT_EXIT`), mechanism and animation names, and the container of **ways to the seat** (`SWayToSeat`: an enter-point attachment and an entering and an exiting animation sequence). `IsRidable` is true when the puppet's parameter file has at least one seat; `GetCountOfSeats` is the length of that container; `FindSeatDataByIndex(i)`, `FindSeatDataByName(id)` read it.
+
+**`GetAvailableSeat`** (a method of the **ride's own brain**; the puppet it looks at is the ride): for `i` from 0 to the seat count - 1, in table order:
+
+1. skip the seat when its flags contain **`SF_WAY_POINT_SEAT` (2) or `SF_PUPPETS_CANT_SEAT` (4)**;
+2. skip it when **any puppet in the ride's rider list** (`en_eaRiders`) has `en_idSeat` equal to the seat's name;
+3. skip it when the ride has **instance mounts** (`en_hcpInstanceMounts`, the placed record's `CCharacterMounts`) and any mount's `cm_idSeat` equals the seat's name (a seat reserved for a default rider);
+4. otherwise return the seat's name; with no free seat return the invalid identifier.
+
+The player-only flags (16, 32, 64, 128) and 1, 8 do not take part. Result in the data: see section 8 (22 seats, none with flag 2 or 4).
+
+### 2. Entering: `PossesRide` and the registration (**medium**)
+
+The macro `EnterRide(ride, seat, way, a, b)` of a **legged** puppet (`CLeggedPuppetEntity::EnterIntoRide`; default arguments: seat = the **first seat of the ride** (index 0), `a` and `b` = 0) first stops when the ride is **not alive** (`IsAlive`, **medium-low**: the call is the shared "is alive" slot), prints `Ride provided to meta macro EnterRide() is NULL` for a missing ride, resolves the seat (a given seat that does not exist ends the macro silently) and calls the puppet's brain `PossesRide(ride, seat, way, a, b)`. The related macro `MountRide(ride, seat)` (`macMountRide`, default seat = first) is **immediate**: it needs both mechanisms and different parents, moves the puppet to the seat's enter placement (`RepositionPuppet`), registers it, **attaches** it to the ride's mechanism, sets `en_rsRidingState` to **3** (riding), calls the brain's `OnStartRiding` (the moment `StartRiding`), adds it to the ride's rider list and plays the "not moving" rider animation: a rider placed **without walking** (used for default riders).
+
+**`CBrainEntity::PossesRide(ride, seat, way, a, b)`**:
+
+1. **Ignored** when the brain's state is `BS_ENTERING_RIDE` (3) or `BS_EXITING_FROM_RIDE` (8).
+2. Ask the ride `IsRideFixed()`: the ride's orientation as Euler angles; **fixed when the absolute pitch is at most `ggp_fWheeledVehicleFallOutPitch` and the absolute bank at most `ggp_fWheeledVehicleFallOutBanking`** (degrees; both **80** in the data).
+3. **Not fixed:** when the last argument `b` is non-zero the ride is told `AutoFixRide(this puppet)` (the ride stores the rider in `en_henFixer` and enters `PS_AUTO_FIXING_RIDE` 11, whose think routine `AutoFixingRideState` repairs it: T01-144); then `CantPosessRide`: the macro event **`CantPossesRide`** is sent to the puppet (the same name is also an AI moment the brain can raise; no `.cb` uses it, `brain-classes.md` 4.3). Nothing else happens; the state does not change.
+4. **Fixed:** store `en_henRideToPossess` := ride, `en_idSeatToPosess` := seat, `en_iWayToSeatToPosess` := way; call the puppet's **`RegisterForRide(ride, seat, way)`**; enter **`BS_ENTERING_RIDE`** (3). (The fourth argument `a` is **not used** by this function: the teleport decision is `ShouldTeleportToEnterRide`, 3.)
+
+**`RegisterForRide(ride, seat, way)`** (puppet): prints the warning `Rider tried to register twice onto same ride` when the puppet is already in the ride's rider list; sets `en_henRide` := ride, `en_idSeat` := seat, `en_iWayToSeat` := way; and when the puppet **cannot fire from its own weapons** (`CanFireFromOwnWeapons` false) calls one of its virtual hooks (identity not resolved, probably "put the weapons away", **low**). It does **not** add the puppet to the ride's rider list (that happens when the climb ends, 4).
+
+### 3. The possession behaviour (`CPossessRideEntity`; **medium-low**, see also `behavior-entity-classes.md` 4.3)
+
+`PossessingRideState` (the think routine of state 3, scheduled 1e-5 s after entering it, `brain-movement.md` 5.2) **spawns a `CPossessRideEntity`** with the brain, the puppet's `en_henRide` and **`teleport` = `ShouldTeleportToEnterRide()`** and makes it the brain's current behaviour; then sets the brain's abilities to **0** (nothing: no moments, no movement). **`ShouldTeleportToEnterRide`** is a virtual question: the base brain's answer is the shared constant "no" (read; the same function as `CanOperateWithoutTargetEntity`), so **AI brains walk**; the player brain overrides it (`players-session-classes.md`).
+
+The behaviour's states (`PossesRideState`): `PRS_REACH_DESTINATION_SEAT` 0, `PRS_REACH_WAYPOINT_SEAT` 1, `PRS_ENTER_ONTO_SEAT` 2, `PRS_WAIT_RIDE_IDLE` 3.
+
+1. **`OnCreate`:** ride := properties' ride, teleport := the flag; `en_idDestSeat` := the puppet's `en_idSeat`, `en_iWayToDestSeat` := its `en_iWayToSeat`; `en_idSeatToReach` := the destination seat; state value 0 recorded; schedule `PossesRide` after 1e-5 s.
+2. **`PossesRide`:** missing ride: finish at once. With a brain and puppet: **teleport:** the puppet is placed at the ride's **enter point** for the destination seat and way (`AdjustSeatForRiderEntering`, `GetEnterPointAbsPlacement`, `RepositionPuppet`), the seat to reach := the destination seat, and the state becomes `PRS_ENTER_ONTO_SEAT` (2); **walk:** the state becomes `PRS_REACH_DESTINATION_SEAT` (0). (Entering state 0 runs `ReachDestinationSeat`.)
+3. **`ReachDestinationSeat`** (state 0): look the seat to reach up on the ride. When the seat data names an **"approach from" seat** (`psd_idApproachFromSeat`) that is not the seat already reached, the approach seat becomes the seat to reach (a **way-point chain**: first stand on the approach seat, then the real one); in every case the state then becomes **`PRS_REACH_WAYPOINT_SEAT` (1)**, which is the walk. All 22 seats in the data have an empty approach seat, so the chain is never used (section 8).
+4. **Walking to the climb point** (state 1: `ReachWaypointSeatLoop`, `SendPuppetTowardsClimbPoint`): the target is the ride's **enter point** placement for the seat to reach and the way (the stored way is used only when the seat to reach is the destination seat, else way 0); the puppet gets a **rotated goal point** there (`SetRotatedGoalPoint`: position and the enter point's orientation as Euler angles) and an `UpdateGoalPoint` order, and its look target is cleared; the function returns whether both calls say the puppet is already there. The loop **re-arms every 0.5 s** while the puppet has not arrived (while the ride is alive; a dead ride ends the behaviour); the exit test that sends the state on to 3 is **medium-low** (the reading shows the state change to `PRS_WAIT_RIDE_IDLE` in the same function). `OnGoalPointReached` (ride alive, state not 3) also moves to state 3.
+5. **`PRS_WAIT_RIDE_IDLE` (3):** `RequestIdle(2.0)` on the puppet (it must stand still for up to **2.0 s**), then `WaitRideIdleLoop` **every 0.25 s**: while the ride is alive and the puppet is not at the climb point or **not yet idle** (`IsIdle`) it keeps sending it to the climb point and re-arms; when both hold the state becomes `PRS_ENTER_ONTO_SEAT` (2) (**medium-low**, same reason).
+6. **`PRS_ENTER_ONTO_SEAT` (2):** `EnterOntoSeat`: the puppet is **stopped** (`StopMoving`) and told `PlayEnteringIntoRideSequence(ride, seat, way, 0)` (the way's entering animation sequence; on a host it also forwards the call to the clients as a script RPC; the sequence itself attaches the rider and is **not read**). When it ends the puppet reports `OnActionFinished` to the behaviour; in state 2 the behaviour sets **reached seat := the seat just entered** (and its owner), places the puppet at the seat's **absolute placement** (`GetSeatAbsPlacement`) and returns to state 0, where `ReachDestinationSeat` finds the reached seat equal to the destination and the behaviour **finishes** (`OnReachDestinationSeatBegin` also finishes when the reached seat is already the destination).
+7. **Finishing** (`BehaviorFinished`): the brain's `OnBehaviorFinished` in state 3: **`en_bSuccessfullyEnteredRide` := true**, the puppet's `DoStartRiding` (`en_rsRidingState` := **3**), the behaviour cleared and `ReconsiderBehavior`.
+
+Entering a state 1 sets the puppet's `en_rsRidingState` to 1 and leaving state 1 or 2 clears it to 0 (the member is replicated, `replication.md`); the values 0 `RS_NOT_RIDING`, 1 and 2 are the "walking to the seat" and "entering" phases, 3 "riding", 4 `RS_EXITING` (`puppet-classes.md` 3.3).
+
+### 4. State `BS_ENTERING_RIDE`: hooks (**medium**)
+
+- **`OnBeginEnteringRide`:** when the puppet's ride has a brain, call **`WaitRiderToClimb`** on **that** brain: the ride's puppet is **stopped**, its behaviour cleared, its brain state set to **`BS_WAITING_RIDERS_TO_CLIMB`** (13) and its execution abilities to **0**. Then this (the rider's) brain's abilities := **all but bit 0** (moments off, may move) and `en_bSuccessfullyEnteredRide` := false.
+- **`OnEndEnteringRide`** (leaving state 3, by success or by anything else): when the entry **did not succeed** and the puppet is a legged puppet, `DetachFromSeat(placement)` (the puppet pose := 6, `PP`-like "fall", and placement := its own: it drops out of the ride), then **`UnregisterFromRide`** on the ride puppet-side object (virtual; clears `en_henRide`, `en_idSeat` := invalid, `en_iWayToSeat` := -1, `en_rsRidingState` := 0, re-evaluates the ride and rider relations (`ProcessRideRiderRelations`) and calls a hook, probably the ride's `OnAllRidersClimbed`-like release; **medium-low**); then the abilities := **all**; when the entry **succeeded** raise the AI moment **`StartRiding`**; finally `ReconsiderBehavior`.
+- **`OnAllRidersClimbed`** (the ride's brain, called when the riders are on): abilities := all, `ReconsiderBehavior` (the ride resumes its `.cb` loop). `OnStartRiding` and `OnStopRiding` raise the moments `StartRiding` and `StopRiding` (queued when moments are disabled: `brain-classes.md` 3.3). Only **2 of the 82** `.cb` files use `StartRiding` and 2 `StopRiding` (`ai.md`).
+
+### 5. Leaving: `ExitFromRide` (**medium**)
+
+- **`CBrainEntity::ExitFromRide`:** nothing on a **remote** machine (`netIsRemote`: a client), nothing in state 3 or 8. Otherwise spawn a **`CExitFromRideEntity`** (properties: this brain) as the brain's behaviour and enter **`BS_EXITING_FROM_RIDE`** (8).
+- **`CExitFromRideEntity`:** `OnCreate` schedules `ExitFromRide` after 1e-5 s; `ExitFromRide`: on the **host** only (`netIsHost`) the puppet's **`DoStopRiding`**: it stores the ride in `en_henCurrentClimbingRide` and calls **`PlayExitingFromRideSequence(ride, ride, seat, 0)`** (the way's exiting animation sequence, scripted); `OnDelete` clears `en_rsRidingState` to 0.
+- **`OnEndExitingFromRide`** (leaving state 8): abilities := all, and the puppet's **`UnregisterFromRide`** (as in 4).
+- **Who calls it:** the legged puppet's macro-level `ExitFromRide` (`CLeggedPuppetEntity::ExitFromRide`, the macro `ExitRide`), the puppet's `ExitAllRidersFromRideInternal` (when a ride dies or its riders must leave: `DoDying`) and the puppet's state change when a ride is fixed or destroyed. `FallOutAllRidersFromRide` makes riders fall instead of climbing out.
+
+### 6. Player brains and character possession (**medium**)
+
+`CPuppetEntity::ChangeToBrain(brain)`: the old brain's `OnDisconnectFromPuppet`, `en_henBrain` := the new brain, the new brain's puppet link := this puppet, the new brain's `OnConnectedToPuppet`; when the new brain is a **player brain** its handle is stored as the **operator** (`en_henOperator`); the puppet is stopped and its look target cleared. `ChangeToDefaultBrain` = `ChangeToBrain(en_henDefaultBrain)` (`CreateBrain` stores the default brain, `brain-assignment.md` 2). `DeleteBrain` removes the brain unless it is the default brain (then only the default one is deleted). `CBrainEntity::PossesCharacter` (called by the player brain's ride and takeover code through a table position shared with `ShouldTeleportToEnterRide`'s neighbour; **medium-low**): stop the puppet, find the **closest puppet in front** with an engine ray cast along the puppet's forward vector, and when it is a puppet **take its brain over**: the puppet's own brain goes back to its default (`ChangeToDefaultBrain`) and the found puppet `ChangeToBrain(this brain)`. `SwitchToDefaultPuppet` (`brain-classes.md` 3.1) gives the controlled puppet back.
+
+### 7. Net behaviour (**medium**)
+
+The ride brain, the possession and the exit behaviours exist on the host only (`NEB_NONE`, `brain-classes.md` 4.5); `ExitFromRide` of the brain and `ExitFromRide` of the exit entity test `netIsRemote` and `netIsHost`. The replicated results are the puppet's `en_henRide`, `en_rsRidingState`, `en_idSeat`, `en_iWayToSeat` (all four replicated, `replication.md`), so a client sees the registration and the riding state but never runs the walk. The entering and exiting sequences are **script RPCs**: the host forwards them to every machine.
+
+### 8. Data (script)
+
+From `python -I tools/re/brain_rides_verify.py` (22 parameter files with seats, 59 worlds):
+
+- **Rides in the data:** 22 parameter files declare seats, **one seat each**, all named `Seat`: `airfighter_rockets`, `albino`, `albinowithchick`, `dino_m`, `dino_s`, `harpy`, `hoverfighter` (and its `_pyramidfight` and `_slowrate` variants), `hoversaucer`, `kwongo_machinegun`, `lizard`, `playerhelicopter`, `rhino`, `robotfloater`, `rollingball_player`, `simba_bomber`, `turret_cannon`, `turret_crossbow`, `turret_machinegun`, `turret_machinegun_ctf` and `turret_plasma`.
+- **Seat flags** (value: seats): 0 in 12, 17 in 5 (can shoot own weapon + player can't seat: `albinowithchick`, `harpy`, `lizard`, `rhino`, `robotfloater`), 136 in 2 (dies with ride + player can't exit: `hoverfighter_pyramidfight`, `playerhelicopter`), 16 in 1 (`simba_bomber`), 32 in 1 (`turret_crossbow`), 81 in 1 (`albino`: 1 + 16 + 64). **No seat has `SF_WAY_POINT_SEAT` (2) or `SF_PUPPETS_CANT_SEAT` (4)**; 7 seats are closed to the player (flag 16).
+- **Ways to a seat:** 1 in 20 seats, 2 in `dino_s`, 0 in `simba_bomber`. The approach-from seat is empty in all 22.
+- **Placed puppets:** 2,328, **none with a stored ride link** (`en_henRide` is empty in every stored puppet: riders are registered at run time). 10 property records carry **instance mounts** (`ep_hcpInstanceMounts`): 4 name the seat `Seat`, 6 have an empty seat name (the mount's character and behavior are carried by pointers that the script does not decode). Placed rides with a brain and seats: 259 of the 2,328 placed puppets have seats (`brain-assignment.md` 6), 219 with a `.cb`.
+- **Global limits** (`rsc-ctl.md`, script of that page): `ggp_fWheeledVehicleFallOutPitch` 80, `ggp_fWheeledVehicleFallOutBanking` 80, `ggp_fAllowedPlayerDistanceFromSeat` 8 (player side), `ggp_fWheeledVehicleCorrectionVelocity` 30 (not used in this page).
+
+## Invariants
+
+1. Every one of the 22 ride parameter files has exactly one seat, named `Seat`; no seat has `SF_WAY_POINT_SEAT` or `SF_PUPPETS_CANT_SEAT` (script, **high**): the choice of 1 always yields that seat when it is free.
+2. `PossesRide` never changes state in `BS_ENTERING_RIDE` or `BS_EXITING_FROM_RIDE` (1 function, **medium**).
+3. A ride is "fixed" when |pitch| and |bank| are both at most 80 degrees (1 function and the data, **medium**).
+4. The base brain never teleports to a seat (1 virtual answer, **medium**).
+
+## Open questions
+
+1. **The animation sequences and the attach** (T01-245): `PlayEnteringIntoRideSequence` and `PlayExitingFromRideSequence` (durations, the attach and detach moments, the rider's placement lerp), the way-point chain (unused by the data), `AutoFixingRideState`.
+2. **Who starts an AI boarding in the shipped levels** (T01-246): the macro `EnterRide` calls in the level scripts (the world's macro blocks), whether a `.cb` or a spawner ever makes a puppet board by itself, who calls `GetAvailableSeat`.
+3. **The ride brain's behaviour with a rider** (T01-247): whether the ride's `.cb` loop runs while a rider sits (the abilities and `OnAllRidersClimbed` suggest it does), and who becomes the foe of whom.
+4. **Run-time check** (T01-130).
+
+## Test vectors
+
+- **Seat choice:** ride with one seat `Seat` (flags 0), no riders, no mounts: `GetAvailableSeat` = `Seat`; with a rider whose `en_idSeat` is `Seat`: invalid; with an instance mount whose `cm_idSeat` is `Seat`: invalid; a seat with flags 4 (or 2): skipped.
+- **Fixed ride:** pitch 79, bank 10: fixed; pitch 81 or bank -85: not fixed (`PossesRide` refuses, `CantPossesRide` sent; with the last flag also `AutoFixRide`).
+- **Entering (walk):** brain state 0, ride fixed: registers (`en_henRide`, `en_idSeat`, `en_iWayToSeat`), state 3, the ride's brain (if any) in state 13 with abilities 0, rider abilities all but bit 0; the puppet walks to the enter point, idles up to 2.0 s, plays the entering sequence, is placed on the seat, `en_rsRidingState` 3, `en_bSuccessfullyEnteredRide`; leaving state 3: abilities all, moment `StartRiding`, reconsider.
+- **Refused:** brain state 3 or 8: `PossesRide` and `ExitFromRide` do nothing; on a client `ExitFromRide` does nothing.
+- **Exiting:** state 8, the exit entity asks `DoStopRiding` on the host; at the end `UnregisterFromRide`: ride link empty, `en_idSeat` invalid, way -1, riding state 0.
+- `tools/re/brain_rides_verify.py` prints: 22 parameter files with seats, 22 seat objects (flags: 0 in 12, 17 in 5, 136 in 2, 16, 32 and 81 in 1 each), ways to a seat 1 in 20, 2 in 1, 0 in 1; 0 way-point seats and 0 "puppets can't seat" seats; the world counts of section 8.

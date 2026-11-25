@@ -340,6 +340,12 @@ Weapon view (docs/re/weapon-view.md):
 python -I tools/re/weapon_view_verify.py "C:\path\to\Serious Sam 2"    # the six sway members and the double-weapon fire delay of the 17 weapons, the eight members of the 16 rendering files (with the field of view in degrees), the sniper zoom curve and the player's view-spring numbers (about 1 minute; the formulas come from the spec, the script reads data only)
 ```
 
+Weapon pickups (docs/re/weapon-pickups.md):
+
+```
+python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
@@ -347,6 +353,7 @@ python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that 
 python -I tools/re/brain_assignment_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # docs/re/brain-assignment.md: the puppet entity classes the worlds place, which carry a character behavior (.cb), the behavior against the parameter file, the default state against the behavior, the spawner links and the seats (about 20 minutes; LIMIT reads only the smallest worlds)
 python -I tools/re/brain_mover_verify.py "C:\path\to\Serious Sam 2" [--cb-only] [LIMIT]    # docs/re/brain-movement.md: the distance band lists of the 82 .cb files (counts, order, last distance, velocity adjuster) and the tactic and patrol data of the worlds (about 1 minute with --cb-only, about 20 minutes with the worlds)
 python -I tools/re/brain_senses_verify.py "C:\path\to\Serious Sam 2" [--cb-only] [LIMIT]    # docs/re/brain-senses.md: the three ranges and the alignment of the 82 .cb files, the threat sensitivities and sense overrides of the placed puppets, the alignment table (about 1 minute with --cb-only, about 25 minutes with the worlds)
+python -I tools/re/brain_rides_verify.py "C:\path\to\Serious Sam 2" [--ep-only] [LIMIT]    # docs/re/brain-rides.md: the seat data of the puppet parameter files (names, flags, ways) and the instance mounts and ride links of the placed puppets (about 2 minutes with --ep-only, about 25 minutes with the worlds)
 ```
 
 AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):
