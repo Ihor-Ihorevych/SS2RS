@@ -145,3 +145,13 @@ slowest) with no crash in the code under test. One run stopped on an assertion o
 normalized path never contains `..`, but a name such as `a..b` is legal (only a whole `..` segment is refused). The target now
 checks segments. This is a smoke test, not coverage: the nightly job runs 5 minutes per target, and a long run on a
 corpus is where bugs are found.
+
+### T02-030 (the 17 format, sound and state targets)
+
+Each target ran 60 seconds under libFuzzer with AddressSanitizer on Windows, starting from its seeds (from 585 executions for
+`audio_decode`, which decodes whole Vorbis streams, to 858,000 for `audio_event`; 17 of 17 ended without a crash, timeout or
+out-of-memory). The stable sweep (`SS2_FUZZKIT_ITERS=60000`, a debug build, about 1,000,000 inputs) stopped at the 8,463th input of
+`format_ans`: `Animation::span_seconds` computed `last_frame - first_frame` in `i32`, which overflows for a file whose frames run
+from about -2^31 to 2^31 (a panic in a debug build, a wrong number in a release build). It is fixed in `ss2-format-ans` (the
+difference is computed in 64 bits) with a unit test, and the sweep then passed 40,000 inputs for each of the 17 targets. The
+nightly run and a longer sweep are where more will be found.

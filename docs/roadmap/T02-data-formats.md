@@ -46,7 +46,8 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [ ] **T02-029** · Config/script-ish text types (`.cfg .mac .scp …` per T01-019) · `M` · `P2`
 
 ## Quality
-- [~] **T02-030** [INPRG @Ihor-Ihorevych/agent · branch `T02-030-fuzz-targets` · 2026-11-25] · `cargo-fuzz` targets for every parser, corpus from synthetic fixtures, nightly CI run · `M` · `P1` · 🟢
+- [x] **T02-030** · `cargo-fuzz` targets for every parser, corpus from synthetic fixtures, nightly CI run · `M` · `P1` · 🟢 — 17 new targets in `fuzz/` (29 with T12-007; every reader that exists today: CTSEMETA container + write round trip, `.tex .bmf .ans .ep .fnt .pfx/.lfx/.tfx/.vfx .mat/.scs .mtr .rsc/.ctl`, WAV/Ogg decoders, audio events, the game's byte-form states, `.mod/.nfo` and install-locator text, lobby addresses, join chunk transfer); properties live in the new crate `ss2-fuzzkit` and also run on stable in `cargo test` (3,000 inputs per target); synthetic seeds in `fuzz/seeds/`; all 29 in the nightly matrix; found and fixed an `i32` overflow in `ss2-format-ans`. Readers that do not exist yet are `T02-030b`
+- [ ] **T02-030b** · Fuzz targets for the readers that did not exist at T02-030: `.wld` (T02-020), `.mdl` (T02-017), `.skl` (T02-015), text/localization (T02-027), `.preload` (T02-028), config/script text (T02-029), `ss2-server` config and `ss2-app` command line (binary-only crates: needs the parser in a library first); each reader task adds its target the same way (`docs/FUZZING.md`, "What is not fuzzed") · `S` · `P1` · Deps: those tasks
 - [ ] **T02-031** · "Load everything" smoke tool & test: open every file in an install with its loader, print coverage table, fail on unknown/errored · `M` · `P0`
 - [x] **T02-032** · Loader benchmarks (MB/s) and memory profile on PC (Android device in Phase 2) · `S` · `P2`
   PC measurements and reproduction commands are in [Performance budgets](../PERF_BUDGETS.md#58-loader-throughput-and-working-set-t02-032).
