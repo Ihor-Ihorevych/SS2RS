@@ -112,7 +112,7 @@ The placed record of a puppet. 29 of the 40 members have the same name as an ent
 2. **The movement step** `LerpToDesiredVelocityAndLook` of each model and the feelers, flocking and steering radius rules (numbers per environment record): T01-141 (legged), T01-142 (vehicles).
 3. **Attacks**: the generic shooting chain (`PrepareForCGS` to `OnCGSFinished`), the melee and run-over blast application (`OnAnimEventMeleeDamage`), projectile spawning and the throw/launch maths (`LaunchTool`): **specified in [`puppet-attacks.md`](puppet-attacks.md)** (T01-143; its open questions T01-260 to T01-264).
 4. **Tools, carrying and rides**: the tool state machine (`CTA_`), `HandleObjectCarrying`, `TakeObject`/`ThrowObject`, the seat and ride rules (`ProcessRideRiderRelations`, `FindBestSeat`, `AutoFixingRideState`): T01-144 (with T01-128 and T01-114).
-5. **Spawning and appearing**: `SetSpawner`, the spawn-source and spawnee animations, `Appear`/`Disappear`: T01-145 (with the spawner part T01-109).
+5. **Spawning and appearing**: `SetSpawner`, the spawn-source and spawnee animations, `Appear`/`Disappear`: **specified in [`puppet-spawning.md`](puppet-spawning.md)** (T01-145; follow-ups T01-271, T01-272; the spawner part is T01-109).
 6. **Run-time checks** on the running original: the state sequence of a Kleer, the numbers above (co-op multiplier, deathmatch health cap), the corpse timings: T01-146.
 
 ## Test vectors

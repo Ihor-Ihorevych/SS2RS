@@ -346,6 +346,12 @@ Weapon pickups (docs/re/weapon-pickups.md):
 python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
 ```
 
+Mounted tools and throw descriptions (docs/re/mounted-tools.md):
+
+```
+python -I tools/re/tools_throw_verify.py "C:\path\to\Serious Sam 2"    # the CMountedTool records of the puppet files (identifier or pointer, the named .ctl files), the CThrowDescription identifiers and speed windows, and the throw behaviour actions of the .cb files (about 3 minutes; the lookup and mounting rules come from the spec, the script reads data only)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
@@ -369,6 +375,9 @@ Puppet classes (docs/re/puppet-classes.md and its four companion pages):
 python -I tools/re/puppet_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 101 exported puppet classes are in the data (50), the member-order rule against the declared member tables (16 classes), the root classes of the 124 puppet parameter files, and what the install does not contain (about 5 minutes)
 python -I tools/re/puppet_attacks_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-attacks.md: the 123 shooting processes, 168 blasts, 71 melee attacks, 75 melee blasts, 13 run-over and 30 throw-description records of the 322 .ep files (value tables, graphs, projectile flags of the blasts), and the formulas of the page evaluated for its test vectors (melee direction, free-fall launch, tool throw); under a second
 python -I tools/re/moving_anim_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-moving-anim.md: the 20 .mas files and 40 embedded moving-animation schemes (167 all / 90 body / 58 pose-transition records, value tables, base chains, models per scheme) and a reference implementation of the chooser run over the whole selector grid, with the page's test vectors; under a second
+python -I tools/re/legged_ko_leap_ride_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-legged-sequences.md: the knock-out parameters of the 82 legged parameter files (10 can be knocked out), the 9 leap attacks, the 22 seats / ways to seat / 33 ride-and-rider pairs, and the formulas of the page for its test vectors; under a second
+python -I tools/re/legged_diving_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-legged-diving.md: the breath period of the 86 legged parameter files (5 s in 84, 60 s in the two player files) and the periodic dive and drowning events of the page for its test vectors; under a second
+python -I tools/re/puppet_spawning_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-spawning.md: the 835 spawn effect configurations (11 .sfc + 824 in worlds): stop chance, throw-direction flag, prepare / spawn-source / spawnee animations, and the formulas of the page; about 6 minutes (parses all worlds)
 Projectile classes (docs/re/projectile-classes.md):
 
 ```
