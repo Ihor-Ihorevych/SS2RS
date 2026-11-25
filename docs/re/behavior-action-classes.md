@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-105 (overview [`behavior-classes.md`](behavior-classes.md); the other parts are [`behavior-mover-classes.md`](behavior-mover-classes.md) and [`behavior-entity-classes.md`](behavior-entity-classes.md))
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the class, member and enumeration names, for every count and stored value of the 29 saved action and term classes and for the member order against the binary's tables (`tools/re/behavior_classes_verify.py`); **medium** for what each action's `Execute` and each term's `IsValid` does (every one was read, once, **nothing was run**); **low** for the cases marked `P`/`N` (profiled or from the name), for the formula the brain uses to *choose* among actions (not in this page's classes) and for the open questions.
+- **Confidence:** **high** for the class, member and enumeration names, for every count and stored value of the 29 saved action and term classes and for the member order against the binary's tables (`tools/re/behavior_classes_verify.py`); **medium** for what each action's `Execute` and each term's `IsValid` does (every one was read, once, **nothing was run**); **low** for the cases marked `P`/`N` (profiled or from the name), for the formula the brain uses to *choose* among actions (now in [`behavior-action-choice.md`](behavior-action-choice.md), T01-153) and for the open questions.
 
 Prerequisites: [`behavior-classes.md`](behavior-classes.md), `ai.md` (the `.cb` file, moments, weights, bands), `misc-schema.md` (the same members as a generated table), [`brain-classes.md`](brain-classes.md) (the brain calls an action through `StartCharacterAction`), [`behavior-entity-classes.md`](behavior-entity-classes.md) (the behaviours the actions start), [`puppet-legged-classes.md`](puppet-legged-classes.md).
 
@@ -24,7 +24,7 @@ Findings an implementer needs first:
 - **Data.** `tools/re/behavior_classes_verify.py` (about 10 minutes; reads 82 `.cb`, 322 `.ep`, 59 `.wld`) prints for each saved class: base class, member count, files, objects, and for every member the distinct values, range and commonest values; and that the member lists of the 11 saved action and term classes whose table the binary declares equal the binary's names in the same order (11 of 11; with `CBAPlayerAssigning` and the two tactic classes 14 of 14).
 - **Methods.** All 28 `Execute` and all 11 `IsValid` were decompiled and read (`R`); `CBAVTFoeAngle::IsValid` and the long `CBAShoot::Execute` and `CBARunOverFoe::Execute` were read in outline (`R-`). The editor strings (`mdGetNameScript`, `GetDescription`, `mdGetLMActionDescription`) were extracted as text.
 - **Binary build.** The `Sam2Game.dll` of the install used for the other specs; no other build was compared.
-- **Not checked.** Nothing was run; the engine's choice among the actions of a list (weights, validity, frequency graphs) is not in these classes (T01-153). `CBATryRiding` has no function of its own (only the 7 standard ones) and no member table.
+- **Not checked.** Nothing was run; the engine's choice among the actions of a list (weights, validity, frequency graphs) is not in these classes (specified in [`behavior-action-choice.md`](behavior-action-choice.md), T01-153). `CBATryRiding` has no function of its own (only the 7 standard ones) and no member table.
 
 ## Layout / rules
 
@@ -98,7 +98,7 @@ Every action derives from the data class `CBehaviorAction` (**the data's base, n
 
 ### 3. The validity terms (`IsValid(selection record)`, **medium**)
 
-Every term derives from the data class `CBAValidityTerm` (not exported; 1 member, `vt_bNotTrue`: **the base negates the result when it is true**, medium: the evaluation function of the base is not exported). `IsValid` takes the brain's **action-selection record** (`CActionSelectionData`; its first member is the brain) and returns whether the term holds. The classes:
+Every term derives from the data class `CBAValidityTerm` (not exported; 1 member, `vt_bNotTrue`: **whoever evaluates a term negates its `IsValid` when the flag is 1**: the list selection and the combiner; `IsValid` itself never reads it, T01-153 `behavior-action-choice.md` section 5). `IsValid` takes the brain's **action-selection record** (`CActionSelectionData`; its first member is the brain) and returns whether the term holds. The classes:
 
 | Class (data) | Members and values | Test | Editor name | Basis |
 |---|---|---|---|---|
@@ -108,7 +108,7 @@ Every term derives from the data class `CBAValidityTerm` (not exported; 1 member
 | `CBAVTFoeIsPlayer` (29 objects, 4 files) | none; `vt_bNotTrue` 1 in 16, 0 in 13 | the brain has a foe and the foe's puppet is a player puppet | `Is player foe` | R |
 | `CBAVTHasTool` (9 objects, 3 files) | `csd_idTool` (`GenericEntity` 6, `GenericItem` 3) | the puppet has an attached tool with that id | `Has tool: <id>` | R |
 | `CBAVTPlayerDistance` (9 objects, 5 files) | `pd_fPlayerDistance` (8 ×3, 30 ×2, 10 ×2, 50, 20); `vt_bNotTrue` 1 in 1 | a player puppet exists within that distance of the puppet (the closest-player query with that radius) | `Closest player distance` | R |
-| `CBAVTTermCombiner` (data only; 3 objects) | `tc_pTermA`, `tc_pTermB` (both set in 3), `vtr_tcTermCombineOperation` (`TermCombiner`: `TC_AND` 0, `TC_OR` 1; stored 0 in 3) | combines two terms | - | name |
+| `CBAVTTermCombiner` (data only; 3 objects) | `tc_pTermA`, `tc_pTermB` (both set in 3), `vtr_tcTermCombineOperation` (`TermCombiner`: `TC_AND` 0, `TC_OR` 1; stored 0 in 3) | both sub-terms are evaluated, each negated by its own `vt_bNotTrue`; AND / OR; false when a sub-term is missing or the operation is neither (`behavior-action-choice.md` section 5) | - | R (T01-153, **medium**) |
 | `CBAVTHasFoe` (not in data) | - | the foe manager has a foe | `Has foe` | R |
 | `CBAVTHasFoeCandidate` (not in data) | - | the foe manager's `en_bHasFoeCandidates` | `Has foe candidates` | R |
 | `CBAVTKnockOut` (not in data) | - | the foe's puppet is in knock-out (`IsInKO`) | `Foe is in KO` | R |
@@ -131,7 +131,7 @@ The data's terms: of 104 non-null `ba_pcValidityTerm`, the script prints which t
 
 ## Open questions
 
-1. **The choice among actions** (weights, term evaluation including `vt_bNotTrue`, frequency graphs, the behaviour-wide list, `CBADefaultAction` and `CBANoAction`, which have no exported function): **T01-153**.
+1. **The choice among actions**: **answered by T01-153** in [`behavior-action-choice.md`](behavior-action-choice.md) (the three handler levels, the weighted draw, `vt_bNotTrue` and the combiner, the two special actions, the band period graph; **medium**, nothing run). Still open there: the run-time confirmation (T01-158), the empty moment id (T01-126), the instance handlers (T01-159).
 2. **The generic-behaviour protocol** (what the puppet does for each request; `behavior-entity-classes.md`): **T01-152**.
 3. **Validity term details**: the sign convention of `CBAVTFoeAngle`, modes 2, 3 and 5 of `CBAVTHealth`, the four terms the data does not use, and the use of `CBATryRiding`, `CBAChangeAligment`, `CBASetActionSet`, `CBAForceMovingType`, `CBAStopTactic`, `CBAUnforceMovingType` (none occurs in a stored file): **T01-157**.
 4. **What `CBACrouch` calls** (the puppet method behind its slot) and the exact `CBARunOverFoe` data flow (action members against the puppet's attack record): **T01-152**.
