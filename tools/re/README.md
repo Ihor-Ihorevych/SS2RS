@@ -367,3 +367,9 @@ HUD classes (docs/re/hud-classes.md and its three companion pages):
 ```
 python -I tools/re/hud_classes_verify.py "C:\path\to\Serious Sam 2" [--all]    # which of the 95 exported HUD classes (plus the 4 of the player part) are in the data (47 saved, each in 1 file; 2 renamed), the member order of 31 data classes against the binary's names (141 members), the 44 entries of Databases/HudParams.rsc (positions, stacks, configuration records, textures), SimpleHudBarParams.rsc and the ammunition and weapon icon files against the enumeration captions; --all scans all 8,063 format-8 files (about 4 minutes)
 ```
+
+Menu screen classes (docs/re/menu-classes.md and its six companion pages):
+
+```
+python -I tools/re/menu_classes_verify.py "C:\path\to\Serious Sam 2"    # the 104 exported menu classes (1,412 functions, 684 named) against the 99 menu layouts: which layout belongs to which class, handler names against gadget names (263 of 372 name a gadget of their own layout), the binary's declared member names of 25 gadget classes against the data's type tables (22 match in full), option lists against the code's tables (enemy percentages, difficulties, quality levels, connection presets), the popup layouts, the mod trees' own Menus folders, the menu parameters (a fraction of a minute)
+```
