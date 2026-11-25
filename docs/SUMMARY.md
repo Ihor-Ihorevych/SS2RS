@@ -180,6 +180,7 @@
   - [Legged puppets](re/puppet-legged-classes.md)
   - [The moving-animation chooser](re/puppet-moving-anim.md)
   - [Knock-out, leap and ride sequences](re/puppet-legged-sequences.md)
+  - [Diving, breath and drowning](re/puppet-legged-diving.md)
   - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
   - [Puppet attacks: shooting chain, melee blasts, projectiles, tool launch](re/puppet-attacks.md)
 - [Projectile classes](re/projectile-classes.md)
