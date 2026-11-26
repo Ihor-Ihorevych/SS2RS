@@ -4,7 +4,7 @@
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
 - **Confidence:** **high** only for what `tools/re/puppet_params_verify.py` reproduces from the data (the 124 files of the `Puppets` folder, the 104 of `EntityParams`, the 18 `_DM` files, the 2,328 placed puppets and their identifiers); **medium** for the loading rules read from `Sam2Game.dll` and `Core.dll` (each rests on **one reading** of the functions; the file-table builder was read in full); **medium-low** for the items marked so; **low** for the open questions. **Nothing was run.**
 
-Prerequisites: [`puppet-classes.md`](puppet-classes.md) (3.2: the earlier outline, now refined), [`puppet-entity-classes.md`](puppet-entity-classes.md) (2: `OnCreate`), [`brain-assignment.md`](brain-assignment.md) (6: the placed pointers), [`game-modes.md`](game-modes.md) (the `_DM` files), `ep.md` (the `.ep` format).
+Prerequisites: [`puppet-classes.md`](puppet-classes.md) (3.2: the earlier outline, now refined), [`puppet-entity-classes.md`](puppet-entity-classes.md) (2: `OnCreate`), [`brain-assignment.md`](brain-assignment.md) (6: the placed pointers), `game-modes.md` (the `_DM` files), `ep.md` (the `.ep` format).
 
 ## Summary
 
