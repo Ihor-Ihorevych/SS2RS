@@ -4,7 +4,7 @@
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
 - **Confidence:** **high** for the enumeration values (`EDoorState`, `DoorFlags`, `AnimatedMoverState`: the binary's own name tables, agreeing with every stored door and mover) and for the data tables (all 59 worlds and the models they name, script `tools/re/door_mover_verify.py`); **medium** for every rule below (one reading of the code each, lost arguments recovered from the instruction listing; the length formulas read in the engine); **low** for the detection area geometry, the sound scheme details and the points marked "open". **Nothing was run**: no door was opened, no time measured.
 
-Prerequisites: [`mechanism-classes-movers.md`](mechanism-classes-movers.md), [`main-loop.md`](main-loop.md) (variable simulation steps), [`ans.md`](ans.md) (animations: frames, frame rate), [`wld-entities.md`](wld-entities.md), `replication.md`.
+Prerequisites: [`mechanism-classes-movers.md`](mechanism-classes-movers.md), [`main-loop.md`](main-loop.md) (variable simulation steps), [`ans.md`](ans.md) (animations: frames, frame rate), `wld-entities.md`, `replication.md`.
 
 ## Summary
 
