@@ -355,7 +355,7 @@ python -I tools/re/tools_throw_verify.py "C:\path\to\Serious Sam 2"    # the CMo
 Character tools, carried objects and rides (docs/re/puppet-tools.md and docs/re/puppet-carry-rides.md):
 
 ```
-python -I tools/re/tools_state_verify.py "C:\path	o\Serious Sam 2"    # the 68 .ctl character tools (empty animation terms, limbs, flags, stretch, health), the shield descriptions of the puppet files (the two files that have any) and the default riders (the one CCharacterMount) (about 1 minute)
+python -I tools/re/tools_state_verify.py "C:\path\to\Serious Sam 2"    # the 68 .ctl character tools (empty animation terms, limbs, flags, stretch, health), the shield descriptions of the puppet files (the two files that have any) and the default riders (the one CCharacterMount) (about 1 minute)
 ```
 
 Brain classes (docs/re/brain-classes.md):
