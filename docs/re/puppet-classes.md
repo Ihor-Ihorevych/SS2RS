@@ -142,7 +142,7 @@ A **generic puppet** is a puppet class whose character is chosen by data. The ba
 2. For a **non-generic puppet** (the old per-kind classes and the dummy foe): the name comes from the entity itself; **in deathmatch the text `.ep` in the name is replaced by `_DM.ep`** and that resource is loaded (the deathmatch variant of a character; the same convention as the `_dm` weapon files of `weapons.md`).
 3. `OnCreate` stores the result in `en_pppPuppetParams` (a replicated member) and the entity then reads every number from it; `SPuppetProperties.ep_pppPuppetParams` is the placed value.
 
-The `_DM.ep` rule is in the non-generic branch only; whether the generic branch has an equivalent (the install has the player's `PlayerPuppet_DM.ep` and no other puppet `_DM` file) was not read (T01-139).
+The `_DM.ep` rule is in the non-generic branch only; **the generic branch has no deathmatch variant**, the identifier of a generic character is looked up in a table of the `Puppets` folder, and only the player puppet's file has a `_DM` twin: all of this, the missing-file case and the order inside `OnCreate` are in [`puppet-params-loading.md`](puppet-params-loading.md) (T01-139).
 
 #### 3.3 Enumerations declared by the binary
 

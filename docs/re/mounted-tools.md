@@ -70,7 +70,7 @@ After both lists the puppet updates its tools (`UpdateTools`), which attaches th
 ## Open questions
 
 1. **Who uses `ThrowFar`, `CommonThrow`, `Throw`, `Exact` and `ThrowExact`** (scripts, animation events of tools, the boss behaviours) and the event identifier of `OnToolPicked`: **T01-226.**
-2. **The tool state machine and what `AddDesiredTool`, `UpdateTools`, `DrawTool`, `StoreTool` do:** T01-144 (the throw maths is complete in `puppet-attacks.md`).
+2. **The tool state machine and what `AddDesiredTool`, `UpdateTools`, `DrawTool`, `StoreTool` do:** now specified in [`puppet-tools.md`](puppet-tools.md) (T01-144; the throw maths is complete in `puppet-attacks.md`). A null tool is ignored by `AddDesiredTool` (so open question 3 is answered: harmless; **medium**).
 3. **Whether a null pointer is harmless in `AddDesiredTool`** (no record of the shipped data has one after resolution, if the two identifier files are found): the handling was not read; with the run-time checks **T01-163**.
 
 ## Test vectors
