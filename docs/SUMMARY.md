@@ -194,6 +194,8 @@
   - [Doors, movers, portals, bouncers, barrier fields, motors and joints](re/mechanism-classes-movers.md)
   - [Detectors, killers, secrets, objectives, beacons and cameras](re/mechanism-classes-triggers.md)
   - [Spawners, multi-spawners, delayers and markers](re/mechanism-classes-spawners.md)
+  - [Spawner state machine and delays](re/spawner-state-machine.md)
+  - [Spawner spawn side: placement, formations, effects, templates](re/spawner-spawn-side.md)
   - [Spawner tweak classes and tables](re/mechanism-classes-spawner-tweaks.md)
   - [World info and chapter info](re/mechanism-classes-world-info.md)
 - [World content entity classes](re/worldcontent-classes.md)
