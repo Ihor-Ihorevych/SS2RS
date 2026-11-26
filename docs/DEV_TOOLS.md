@@ -38,6 +38,7 @@ track's work · **Optional** = nice to have.
 | T01 | **ImHex** (or any hex editor with pattern language) | inspect/annotate formats next to `meta-dump` (`cargo run -p meta-dump -- FILE`, see [META_DUMP.md](META_DUMP.md)) | Role |
 | T01 | **`asset-export`** (`cargo run -p asset-export -- tex FILE -o out.png`, `mesh FILE -o out.glb`; see [ASSET_EXPORT.md](ASSET_EXPORT.md)) | look at textures and models in an image viewer or Blender; the optional Khronos `gltf-validator` (npm) and Pillow check its output | Optional |
 | T01 | Debugger of choice (x64dbg/WinDbg) | runtime checks, instrumentation harness (T11-008) | Optional |
+| T01 | **`tools/oracle`** (`python -I tools/oracle/oracle.py --help`; Python 3.9+, standard library only, Windows; see [ORACLE_HARNESS.md](ORACLE_HARNESS.md)) | read numbers (time, player position/velocity/health) out of a running copy of the original game into CSV, read-only; needs your own local target map that is never committed | Role (runtime measurements, T01-038/039) |
 | **T02 data** | **`cargo-fuzz`** (needs nightly; works on Windows with the ASan runtime on the `PATH`, see `docs/FUZZING.md`) | parser fuzzing (T12-007, T02-030) | Role |
 | T02 | `cargo-mutants` | test-quality checks on parsers | Optional |
 | **T03 platform** | Android NDK + `cargo-ndk`, `rustup target add aarch64-linux-android` | **Phase 2 only** (after M8); the non-blocking portability job uses the target | Phase 2 |
