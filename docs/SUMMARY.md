@@ -206,6 +206,8 @@
   - [Spawner spawn side: placement, formations, effects, templates](re/spawner-spawn-side.md)
   - [Spawner tweak classes and tables](re/mechanism-classes-spawner-tweaks.md)
   - [World info and chapter info](re/mechanism-classes-world-info.md)
+  - [Chapter restore: boot types, reset sequence, boot rule](re/chapter-restore.md)
+  - [Chapter restore: player rebuild, chapter save, level end](re/chapter-restore-players.md)
 - [World content entity classes](re/worldcontent-classes.md)
   - [Static models and props](re/worldcontent-models-props.md)
   - [Effects: particle, simple, sound, shaker, spawn, text](re/worldcontent-effects.md)
