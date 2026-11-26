@@ -178,6 +178,7 @@
   - [Movers and tactics](re/behavior-mover-classes.md)
     - [The steering of the movers](re/behavior-mover-steering.md)
   - [Behaviour entities and the foe manager](re/behavior-entity-classes.md)
+    - [The foe manager's numbers and periods](re/foe-manager-numbers.md)
 - [Puppet classes](re/puppet-classes.md)
   - [The puppet base class](re/puppet-entity-classes.md)
   - [The puppet base class: methods](re/puppet-entity-methods.md)
