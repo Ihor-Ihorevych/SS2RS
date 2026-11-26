@@ -192,6 +192,7 @@
   - [Ammunition, ammunition packs and weapon pickups](re/item-classes-ammo-weapons.md)
 - [Level mechanism, spawner and info classes](re/mechanism-classes.md)
   - [Doors, movers, portals, bouncers, barrier fields, motors and joints](re/mechanism-classes-movers.md)
+  - [Door, mover, platform and portal rules](re/door-mover-rules.md)
   - [Detectors, killers, secrets, objectives, beacons and cameras](re/mechanism-classes-triggers.md)
   - [Spawners, multi-spawners, delayers and markers](re/mechanism-classes-spawners.md)
   - [Spawner state machine and delays](re/spawner-state-machine.md)
