@@ -395,6 +395,7 @@ Level mechanism, spawner and info entity classes (docs/re/mechanism-classes.md a
 
 ```
 python -I tools/re/mechanism_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 82 exported classes are in the data (70) and under which name, the member order of 23 data classes against the binary's declared names, the census of the 59 worlds (7,651 placed entities and their records: member value tables, the spawner limit type against the spawnee class, the chapter links), the two spawner tweak files and ChapterMaxes.txt (about 12 minutes; --no-worlds skips the census, --short prints fewer values)
+python -I tools/re/spawner_spawn_verify.py "C:\path	o\Serious Sam 2" [--worlds N]    # T01-165 (docs/re/spawner-spawn-side.md): the 11 external `.sfc` spawn effect configurations member by member and the branch each takes, and a census of the 59 worlds: spawner record count/group/delay combinations, spawn effect configurations by branch, launchers, the five formation classes (kind number, flags, sizes, weighted marker lists) and the multi-spawner template lists; about 10 minutes
 ```
 
 World content entity classes (docs/re/worldcontent-classes.md and its four companion pages):
