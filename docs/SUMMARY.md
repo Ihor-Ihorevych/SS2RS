@@ -176,6 +176,7 @@
     - [How the brain chooses among actions](re/behavior-action-choice.md)
     - [Generic behaviours on the puppet side](re/behavior-generic-puppet.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
+    - [The steering of the movers](re/behavior-mover-steering.md)
   - [Behaviour entities and the foe manager](re/behavior-entity-classes.md)
 - [Puppet classes](re/puppet-classes.md)
   - [The puppet base class](re/puppet-entity-classes.md)
