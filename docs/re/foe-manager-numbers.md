@@ -1,6 +1,6 @@
 # The foe manager's numbers and periods (T01-156)
 
-- **Roadmap task:** T01-156 (follow-up of [`behavior-entity-classes.md`](behavior-entity-classes.md) open questions 2 and 3 and of [`brain-senses.md`](brain-senses.md); the line-of-sight service itself is the line-of-sight page (T01-244), T01-244)
+- **Roadmap task:** T01-156 (follow-up of [`behavior-entity-classes.md`](behavior-entity-classes.md) open questions 2 and 3 and of [`brain-senses.md`](brain-senses.md); the line-of-sight service itself is [`brain-line-of-sight.md`](brain-line-of-sight.md), T01-244, T01-244)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
 - **Confidence:** **high** only for what `tools/re/foe_manager_verify.py` reproduces from the data (the 82 `.cb` ranges and reaction periods, the auto-change chances, the empty foe-assigning tables of the 124 puppet files, the placed puppets' own-alignment flag) and for the enumeration values (read from the DLL's tables); **medium** for every rule and constant read from the binary (each is one reading of a function, the constants were read from the data section and the main branch decisions were checked a second time in the instruction listing, but **nothing was run**); **medium-low** where marked; **low** for the open questions.
 
