@@ -133,7 +133,7 @@ Consequence for the data (script block 4 and 4b, all **high** as counts):
 
 The **think-point oscillator** (`behavior-entity-classes.md` section 6) calls `ThinkPoint`, then schedules the next call. Its period rule, read from `ExecuteBehavior`:
 
-1. If the brain's "immediate think point" flag is set: clear it and schedule the next call for the next instant (**medium-low**: the delay argument of that call was not resolved; `behavior-entity-classes.md` section 2 gives 1e-5 s for such calls).
+1. If the brain's "immediate think point" flag is set: clear it and schedule the next call after **1e-5 s** (the delay passed is the float 1e-5, read from its bit pattern in T01-152: the same value as every "next instant" call).
 2. Otherwise start with `x = 1 + u`, `u` a fresh random number in [0, 1) (so a brain **without a foe, or with a foe and no band**, thinks every 1 to 2 s).
 3. If the brain has a foe **and** the current band (field 5) is not null: if the band's `cba_pgrActionFrequencyOverAreaRatio` is set, `x` becomes **its value at the area ratio (field 7)**; then multiply by `1 + 2 k` with `k = (en_fRnd - 0.5) * cba_fActionPeriodRandomizeMultiplier` (`en_fRnd` is the puppet's own random member, a float, replicated, assumed uniform in [0, 1): so the factor is in `1 +- cba_fActionPeriodRandomizeMultiplier`, **fixed per puppet**, not redrawn); then divide by the current difficulty's `dif_fThinkFrequencyMultiplier` (`player-rules.md`: Tourist and Easy 0.75, Normal 1, Hard 1.125, Serious 1.75; the game-info entity holds the current difficulty).
 4. The next think point is at `(time of the last action) + x`, i.e. the delay is `x` minus the time already elapsed since the last action reset (`ResetActionTime`), **never less than 1e-5 s**.
