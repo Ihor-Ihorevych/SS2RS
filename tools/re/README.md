@@ -358,6 +358,12 @@ Character tools, carried objects and rides (docs/re/puppet-tools.md and docs/re/
 python -I tools/re/tools_state_verify.py "C:\path\to\Serious Sam 2"    # the 68 .ctl character tools (empty animation terms, limbs, flags, stretch, health), the shield descriptions of the puppet files (the two files that have any) and the default riders (the one CCharacterMount) (about 1 minute)
 ```
 
+Puppet parameter file loading (docs/re/puppet-params-loading.md):
+
+```
+python -I tools/re/puppet_params_verify.py "C:\path\to\Serious Sam 2" [--no-worlds] [LIMIT]    # the .ep files of the Puppets and EntityParams folders (counts, identifiers, duplicates, the _DM files) and the placed puppets' parameter pointers and en_idPuppet against the pointed file's stem (about 12 minutes with the worlds, 20 seconds with --no-worlds)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
