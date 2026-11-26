@@ -184,6 +184,7 @@
     - [The navigation moving type](re/behavior-navigation-mover.md)
   - [Behaviour entities and the foe manager](re/behavior-entity-classes.md)
     - [The foe manager's numbers and periods](re/foe-manager-numbers.md)
+  - [Data leftovers of the behaviour family](re/behavior-leftovers.md)
 - [Puppet classes](re/puppet-classes.md)
   - [The puppet base class](re/puppet-entity-classes.md)
   - [The puppet base class: methods](re/puppet-entity-methods.md)

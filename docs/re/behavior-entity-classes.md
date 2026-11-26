@@ -226,7 +226,7 @@ The three data values of `CBAForcePlayerFoe.bafpf_fhFoeHostility` are **0, 6 and
 2. **Foe manager numbers**: **answered by T01-156** in [`foe-manager-numbers.md`](foe-manager-numbers.md) (periods, `CalculateSleepTime`, sort key, the "may be foes" test, `en_lafLastAssignedFoe`, the `FH_NEAR` interval, the auto-lose period, the reaction delay; **medium**, nothing run) and the line-of-sight request in [`brain-line-of-sight.md`](brain-line-of-sight.md) (T01-244); the original wording: the search and tracking periods, `CalculateSleepTime` constants, the line-of-sight request, the sorting key, the world info "may be foes" test, `en_lafLastAssignedFoe`, the `FH_NEAR` interval, the auto-lose period use.
 3. **Think period**: the formula and its factors are in [`behavior-action-choice.md`](behavior-action-choice.md) section 7 (T01-153, **medium**); the immediate-think delay (1e-5 s, on the brain's first foe) and the range of `en_fRnd` (uniform in [0, 1], drawn once in the puppet's constructor, 0 for a player) are **answered by T01-156** in [`foe-manager-numbers.md`](foe-manager-numbers.md) 6; T01-126 for the brain side.
 4. **Boarding and leaving rides** (T01-128): seat choice and the way to a seat; this page only gives the states.
-5. **Which of the two obsolete classes the shipped mods use**: none appears in the data, so no file can need them; whether a mod's level could create one is untested (**T01-159**).
+5. **Which of the two obsolete classes the shipped mods use**: **answered by T01-159** ([`behavior-leftovers.md`](behavior-leftovers.md)): neither class is declared or stored by the base game or by either mod installed for that test (InSamnity2, Sam2Renovation) — 0 of 0 in every `.wld`/`.cb`/`.ep` scanned.
 
 ## Test vectors
 
