@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-110 (overview [`worldcontent-classes.md`](worldcontent-classes.md); this is the page for `CStaticModelEntity`, `CStaticModelProperties`, `CPropEntity` and `CPropProperties`)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the member tables, the member-order rule, the counts, the copies from record to entity, the flag values and the construction defaults (all checked on every placed entity with `tools/re/worldcontent_classes_verify.py`); **medium** for the hooks, the net rules, the damage flags and the macro functions (each is one reading of a short function; **nothing was run**); **low** for every method marked `N` or `P` and for the open questions.
+- **Confidence:** **high** for the member tables, the member-order rule, the counts, the copies from record to entity, the flag values and the construction defaults (all checked on every placed entity with `tools/re/worldcontent_classes_verify.py`), and, as of T01-176, for `CPropEntity::GetUpdatePriority`'s exact formula and sleep multiplier (the constants read directly from the install's `Sam2Game.dll` bytes); **medium** for the hooks, the net rules, the damage flags and the macro functions (each is one reading of a short function; **nothing was run**); **low** for every method marked `N` or `P` and for the open questions.
 
 Prerequisites: [`worldcontent-classes.md`](worldcontent-classes.md) (marks `R`, `P`, `N`, the member-order rule, the base class), `wld-geometry.md` (static models as level geometry, the model renderable), `destruction.md` and `destruction-models.md` (the destruction data of a model), `physics.md` (mechanisms), `replication.md`, `wld-macro-vocab.md` (the macro functions).
 
@@ -128,7 +128,7 @@ Prerequisites: [`worldcontent-classes.md`](worldcontent-classes.md) (marks `R`, 
 | Function | Rule |
 |---|---|
 | `GetNetBehavior` | `NEB_DYNAMIC` when `en_bMultiSpawnerTemplate` is 0 and `en_henSpawner` is null, else `NEB_STATIC` |
-| `GetUpdatePriority` | falls with the distance to the closest player (the distance is clamped to 1..200 m); **multiplied by a constant when the root body of the mechanism is asleep (its active flag is clear)** (the constants were not extracted, T01-176); a constant when there is no body |
+| `GetUpdatePriority` | **read in full (T01-176):** `priority = (1.01 − 0.005 × clamp(distance, 1, 200)) × 5`, giving 5.025 at 1 m falling to 0.05 at 200 m; **the sleep multiplier is confirmed to be exactly 0.1** (applied when the mechanism's root body exists and its active-flag bit is clear); a mechanism whose body handle resolves to nothing (not the usual "no mechanism" case, a dangling one) returns a flat **0**; with no mechanism at all the plain distance-based value is returned unmultiplied |
 | `OnHullTouched(...)` | when collision effects are on and the other hull belongs to a different mechanism: reads the relative speed from the touching body; at most every 0.1 s and only above `en_fMinCollisionSpeedFX`, spawns a material effect (`samSpawnEffectForMaterial`) scaled by `(speed - min) / (max - min)` clamped to 0..1 |
 | `OnFluidTouched(...)` | when collision effects are on and at most every 0.25 s: spawns a `CSimpleEffectEntity` with the splash effect at the contact, its size from the relative speed |
 | `OnReceiveDamage` | the same pattern as the static model: store the last damage, raise a macro event once when a flag is set, ask the model's destruction rules (`ProcessModelReceiveDamage`), `Destroy` on a non-zero result |
@@ -154,7 +154,7 @@ Prerequisites: [`worldcontent-classes.md`](worldcontent-classes.md) (marks `R`, 
 ## Open questions
 
 1. `OnCreate`, `PostReceiveUpdate`, `PreSendUpdate`, `ApplyClientOffsetCorrection`, `SetupCollision`, `ResetDynamicMembers`, `ExecuteDestruction`, `DestroyOnePhaseLoop`, the model destruction data and the animation-event handler of the static model: **T01-175**.
-2. The prop's physics (mechanism category and gravity, tool handling, net update, the update priority constants, the splash and dust effect tables): **T01-176**.
+2. The prop's physics. **The update priority constants are now resolved** (T01-176, see "Behaviour" above: `GetUpdatePriority`'s formula and the 0.1 sleep multiplier, both read directly from the binary). **Still open**: the mechanism category and gravity (`EnablePhysics`/`DisablePhysics` are only profiled), tool handling beyond what section 3 already describes, the net update members beyond the existing pairing check, and the splash and dust effect tables — `en_pfxDust`'s own use site was not found in this reading (the doc's existing text only traces the collision effect through the generic, material-based `samSpawnEffectForMaterial`, not through this member).
 3. The values of `PropFlags`, `StaticModelAnimAction` (by order here) and the 6 low `ModelFlags` bits as numbers: run-time check **T01-184**.
 
 ## Test vectors
