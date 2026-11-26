@@ -121,7 +121,7 @@ Member names follow `puppet-legged-classes.md` section 2; the members of the lea
 ## Open questions
 
 1. **The movement step's part in the leap and the knock-out** (the jump itself, the puppet flag set during the leap, the touch value below 0.8, the two unresolved calls on the body objects): T01-141.
-2. **The seat choice, the seat flags and the ride's own functions** (`FindBestSeat`, `AutoFixingRideState`, `ProcessRideRiderRelations`): T01-144.
+2. **The seat choice, the seat flags and the ride's own functions** (`FindBestSeat`, `AutoFixingRideState`, `ProcessRideRiderRelations`): specified in [`puppet-carry-rides.md`](puppet-carry-rides.md) (T01-144).
 3. **The delay of `RiderLerpingFinished`, the `.sca` terms and the second half of the get-up** (the direction rule and the unresolved bits): **T01-267**.
 4. **Run-time check** of the knock-out timings (the 0.25 s gate, the sleep, the get-up wait) and of one leap's phases: **T01-268** (with T01-146).
 5. **The damage path of the leap and the kick** (`OnReceiveDamage`, double impulse): T01-140, T01-261.

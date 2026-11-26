@@ -352,6 +352,12 @@ Mounted tools and throw descriptions (docs/re/mounted-tools.md):
 python -I tools/re/tools_throw_verify.py "C:\path\to\Serious Sam 2"    # the CMountedTool records of the puppet files (identifier or pointer, the named .ctl files), the CThrowDescription identifiers and speed windows, and the throw behaviour actions of the .cb files (about 3 minutes; the lookup and mounting rules come from the spec, the script reads data only)
 ```
 
+Character tools, carried objects and rides (docs/re/puppet-tools.md and docs/re/puppet-carry-rides.md):
+
+```
+python -I tools/re/tools_state_verify.py "C:\path\to\Serious Sam 2"    # the 68 .ctl character tools (empty animation terms, limbs, flags, stretch, health), the shield descriptions of the puppet files (the two files that have any) and the default riders (the one CCharacterMount) (about 1 minute)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```

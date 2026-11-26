@@ -188,6 +188,8 @@
   - [Puppet spawning and appearing](re/puppet-spawning.md)
   - [Rolling ball, turret, aircraft, hovercraft and other models](re/puppet-vehicle-classes.md)
   - [Puppet attacks: shooting chain, melee blasts, projectiles, tool launch](re/puppet-attacks.md)
+  - [Character tools: desired and attached tools, the tool state machine](re/puppet-tools.md)
+  - [Carried objects, seats and rides](re/puppet-carry-rides.md)
 - [Projectile classes](re/projectile-classes.md)
 - [Item and pickup classes](re/item-classes.md)
   - [Health, armor, treasure, life, repair and power-ups](re/item-classes-vitals.md)
