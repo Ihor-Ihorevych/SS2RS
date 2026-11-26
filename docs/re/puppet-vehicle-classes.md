@@ -71,7 +71,7 @@ Rides use three records. **`SPuppetSeatData`** (`CPuppetSeatData`, 11 members, 2
 1. **Movement steps** of the aircraft, hovercraft, rolling ball, turret and wheeled vehicle (the formulas that turn the parameters into motion): T01-142.
 2. **The wheeled vehicle**: whether any shipped content ever used it (none found in the data) and its rules: T01-142 (low value; parked with the movement steps).
 3. **Seats, rides and the AI**: T01-144 and T01-128.
-4. **The dummy foe**: who creates one and what its built-in file contains (not in the install): T01-150.
+4. **The dummy foe**: answered in [`puppet-dummy-foe.md`](puppet-dummy-foe.md) (T01-150): nobody in the install creates one, the editor palette lists it, its built-in files are absent; the method rows below that say "name-level" or "not read" are refined there (health below 0 is the immortality test; goal-point movement).
 5. **Run-time checks** of the models (top speeds, turret turn rates, ball torque): T01-146.
 
 ## Test vectors
