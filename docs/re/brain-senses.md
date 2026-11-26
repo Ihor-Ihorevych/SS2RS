@@ -89,7 +89,7 @@ Each call, in order:
 4. Let `d` be the **3-D** distance from the brain to the candidate's puppet. Ranges: the **active range** `A` and the **sense range** `S` of the puppet's `.cb` (the first two of its three range members in declared order: `cb_fActiveRange`, `cb_fSenseRange`; **medium-low**, by order); when the puppet's `en_fInstanceSenseRange` is **0 or more** it replaces `S`. When `d >= A` (**not** `d > A`): go to 8 (a candidate beyond the active range is ignored).
 5. **Sensitivity 8:** `AssignFoe(candidate, FH_SEEN, -1)`; when the manager has left the looking state the call ends, else (the assignment was refused by its rank rules) continue at the see-distance test of step 6 (the field of view test is skipped).
 6. **Otherwise:** when `d < S`: `AssignFoe(candidate, FH_SENSED, -1)` (the foe manager's `AssignFoe` has its own rank rules, `behavior-entity-classes.md` 7.3); when the manager has left the looking state the call ends, else continue at the see-distance test below (the field of view test is skipped). When `d >= S`: **sensitivity 3:** go to 8; then the field of view test (section 3): a failing candidate goes to 8. **See distance** (every path that gets here): `d < GetSeeDistance()` is required, else go to 8.
-7. **Line-of-sight request** from this brain's puppet to the candidate's puppet, with the foe manager as the answer's receiver; the answer arrives later as `OnSeeTarget` (the target is seen: **in the looking state: `AssignFoe(that puppet's brain, FH_SEEN, -1)`**) or `OnNotSeeTarget` (clears `en_bFoeSeenOnLastTest`). `OnSeeTarget` also records `en_tmFoeLastSeenTime`, `en_vFoeLastSeenPos` and sets `en_bFoeSeenOnLastTest` when a foe exists.
+7. **Line-of-sight request** from this brain's puppet to the candidate's puppet, with the foe manager as the answer's receiver; **corrected by T01-244 ([`brain-line-of-sight.md`](brain-line-of-sight.md) 2): the answer is delivered inside the same call**, as `OnSeeTarget` (the target is seen: **in the looking state: `AssignFoe(that puppet's brain, FH_SEEN, -1)`**) or `OnNotSeeTarget` (clears `en_bFoeSeenOnLastTest`). `OnSeeTarget` also records `en_tmFoeLastSeenTime`, `en_vFoeLastSeenPos` and sets `en_bFoeSeenOnLastTest` when a foe exists.
 8. **Sleep and repeat.** With no puppet: the next period is `CalculateSleepTime`. Otherwise if the "auto-assign" time has passed (`en_tmAutoAssignFoe`, a request that `AssignFoe` stores) the candidate `en_henToBeFoe` is assigned now (`AssignFoeNow`) and the call ends; else the next call is after the **smallest period 1e-5 s** (the engine's minimum, the same as in `brain-movement.md` 5.2). **Corrected by T01-156 ([`foe-manager-numbers.md`](foe-manager-numbers.md) 2.1):** the 1e-5 s period applies only while a delayed assignment (`en_henToBeFoe`) is waiting; otherwise the next call is after `CalculateSleepTime` (0.1 to 0.5 s near, 5 s far, 1 s when no puppet may be a foe).
 
 ### 5. Sound (**medium**)
@@ -103,11 +103,11 @@ Each call, in order:
 | `TrackCurrentFoe` (a puppet that has had its foe for a while: section 5.4) | **the screamer's current foe** (T01-156) | `ggp_fPuppetThreatDistance` (read, T01-156) | 100 |
 | `CAlarmEntity::EmanateThreatSound` | none (empty) | the alarm entity's own member | (a world value) |
 
-`ggp_fProjectileThreatDistance` (100) has no direct caller of `samEmanateThreatSound` in this build, and **no function of the DLL that reads the global game parameters reads it** (T01-156): it is unused at run time (**medium**). The threat-sound position of a puppet is its position (`GetThreatSoundOrigin`).
+`ggp_fProjectileThreatDistance` (100) has no direct caller of `samEmanateThreatSound` in this build, and **no function of the DLL that reads the global game parameters reads it** (T01-156): it is unused at run time (**medium**). **Corrected by T01-244:** the threat-sound position (`GetThreatSoundOrigin`) of a puppet is its **eye point** (`GetViewOrigin` for the look purpose, [`brain-line-of-sight.md`](brain-line-of-sight.md) 3), of any other entity its placement; the distance test of the emitter loop above uses the emitter entity's **placement**.
 
 **5.2 `ThreatSoundHeard(emitter brain B, emitter entity E)`**, in order (my puppet is `P`):
 
-1. Ignore unless `P.ShouldExamineThreatSound()` is true: that is `en_bDisableThreatSoundCheck` is **false** (the turret class overrides this function; its body was not read, T01-244).
+1. Ignore unless `P.ShouldExamineThreatSound()` is true: that is `en_bDisableThreatSoundCheck` is **false** (**the turret class overrides this function with "false": a turret ignores every threat sound**, T01-244, **medium**).
 2. Ignore unless `P`'s current threat sensitivity is **4 or more**.
 3. Ignore when the brain has a current mover and that mover `CanOperateWithoutTargetEntity` (a **marker** or **navigation** mover: a patrolling or navigating character does not stop for sounds).
 4. `d` := 3-D distance from `P` to E's threat-sound position. With sensitivity **4** ignore when `GetSeeDistance() < d` (so a short-sighted puppet hears only within its short-sight distance).
@@ -156,9 +156,9 @@ All numbers from `python -I tools/re/brain_senses_verify.py` (2,328 placed puppe
 
 ## Open questions
 
-1. **The line-of-sight service** (the request object, its range, its answer timing, the ray test of 5.2) and `CTurretPuppetEntity::ShouldExamineThreatSound` (T01-244).
+1. **The line-of-sight service** (the request object, its range, its answer timing, the ray test of 5.2) and `CTurretPuppetEntity::ShouldExamineThreatSound`: **answered by T01-244** in [`brain-line-of-sight.md`](brain-line-of-sight.md) (**medium**; what the ray category blocks is still open, T01-362).
 2. **`CalculateSleepTime`** and the periods of the search and tracking loops, `en_lafLastAssignedFoe`, the hostility branch, the `FH_NEAR` interval: **answered by T01-156** in [`foe-manager-numbers.md`](foe-manager-numbers.md) (**medium**).
-3. **Which `.cb` member is which range** (declared order only), the range of `en_fRnd` and whether `ggp_fProjectileThreatDistance` is used (T01-244).
+3. **Which `.cb` member is which range** (by member offset: settled), the range of `en_fRnd` (uniform in [0, 1]) and whether `ggp_fProjectileThreatDistance` is used (no): **answered by T01-244 / T01-156** ([`foe-manager-numbers.md`](foe-manager-numbers.md) 2.2, 6 and 8; [`brain-line-of-sight.md`](brain-line-of-sight.md) 5).
 4. **Run-time check** of the search order and the sound reactions (T01-130, T01-038).
 
 ## Test vectors
