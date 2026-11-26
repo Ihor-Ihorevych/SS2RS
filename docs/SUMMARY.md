@@ -175,6 +175,7 @@
 - [AI behaviour and action classes](re/behavior-classes.md)
   - [Actions and validity terms](re/behavior-action-classes.md)
     - [How the brain chooses among actions](re/behavior-action-choice.md)
+    - [Validity terms and unused actions](re/behavior-validity-terms.md)
     - [Generic behaviours on the puppet side](re/behavior-generic-puppet.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
     - [The steering of the movers](re/behavior-mover-steering.md)
