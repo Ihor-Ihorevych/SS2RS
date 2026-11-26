@@ -573,7 +573,12 @@ fn store_candidates(env: &dyn Environment, out: &mut Vec<(CandidateSource, PathB
                     out.push((CandidateSource::Retail, base.join(sub)));
                 }
             }
-            for drive in [r"C:\", r"D:\"] {
+            // The forward slash (not `\`) matters here: on a real Windows build `Path` accepts either as a
+            // separator, but on a non-Windows host (this file's own tests simulate Windows candidates on every
+            // host) a bare `C:\` is one opaque component ending in `\`, and the next `.join` then adds its own
+            // separator right after it, producing a doubled separator (`C://...`) once displayed. `C:/` has no
+            // such trailing character for `.join` to double up against.
+            for drive in ["C:/", "D:/"] {
                 let drive = PathBuf::from(drive);
                 out.push((
                     CandidateSource::Gog,
