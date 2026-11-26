@@ -364,6 +364,12 @@ Puppet parameter file loading (docs/re/puppet-params-loading.md):
 python -I tools/re/puppet_params_verify.py "C:\path\to\Serious Sam 2" [--no-worlds] [LIMIT]    # the .ep files of the Puppets and EntityParams folders (counts, identifiers, duplicates, the _DM files) and the placed puppets' parameter pointers and en_idPuppet against the pointed file's stem (about 12 minutes with the worlds, 20 seconds with --no-worlds)
 ```
 
+The dummy foe (docs/re/puppet-dummy-foe.md):
+
+```
+python -I tools/re/dummy_foe_verify.py "C:\path\to\Serious Sam 2" [--grep-all]    # the files and editor palette entries that name the dummy foe, the Puppets/Objects folder (about 20 seconds, 70 seconds with --grep-all, which reads every file of the install for the text DummyFoe)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```

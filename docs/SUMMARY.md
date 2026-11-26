@@ -191,6 +191,7 @@
   - [Character tools: desired and attached tools, the tool state machine](re/puppet-tools.md)
   - [Carried objects, seats and rides](re/puppet-carry-rides.md)
   - [Puppet parameter files: the file tables and the `_DM` rule](re/puppet-params-loading.md)
+  - [The dummy foe puppet](re/puppet-dummy-foe.md)
 - [Projectile classes](re/projectile-classes.md)
 - [Item and pickup classes](re/item-classes.md)
   - [Health, armor, treasure, life, repair and power-ups](re/item-classes-vitals.md)
