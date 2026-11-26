@@ -28,7 +28,6 @@ DEFAULT_INITIAL_DELAY = 0.5  # ggp_fDefaultInitialDelay (docs/re/rsc-ctl-schema.
 DIFFICULTY_DELAY = {"Tourist": 1.5, "Easy": 1.25, "Normal": 1.0, "Hard": 0.5, "Serious": 0.25}
 AL = {0: "good", 1: "evil", 2: "neutral", 3: "semi-neutral"}
 TS = {1: "TS_DEADHORSE", 2: "TS_DAMAGEONLY", 3: "TS_DAMAGEANDSENSE", 4: "TS_SHORTSIGHTED", 5: "TS_STANDARD", 6: "TS_LONGSIGHTED", 7: "TS_HEARTHROUGHWALLS", 8: "TS_SEETHROUGHWALLS"}
-NULL = 0xFFFFFFFF
 
 
 def val(v):
