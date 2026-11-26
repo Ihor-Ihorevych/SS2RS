@@ -180,6 +180,8 @@
     - [Generic behaviours on the puppet side](re/behavior-generic-puppet.md)
   - [Movers and tactics](re/behavior-mover-classes.md)
     - [The steering of the movers](re/behavior-mover-steering.md)
+    - [The marker movers in full](re/behavior-marker-movers.md)
+    - [The navigation moving type](re/behavior-navigation-mover.md)
   - [Behaviour entities and the foe manager](re/behavior-entity-classes.md)
     - [The foe manager's numbers and periods](re/foe-manager-numbers.md)
 - [Puppet classes](re/puppet-classes.md)
