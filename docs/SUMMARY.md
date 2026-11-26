@@ -195,6 +195,7 @@
   - [Doors, movers, portals, bouncers, barrier fields, motors and joints](re/mechanism-classes-movers.md)
   - [Door, mover, platform and portal rules](re/door-mover-rules.md)
   - [Detectors, killers, secrets, objectives, beacons and cameras](re/mechanism-classes-triggers.md)
+  - [Detector, killer, freezing-zone and alarm rules](re/trigger-area-rules.md)
   - [Spawners, multi-spawners, delayers and markers](re/mechanism-classes-spawners.md)
   - [Spawner state machine and delays](re/spawner-state-machine.md)
   - [Spawner spawn side: placement, formations, effects, templates](re/spawner-spawn-side.md)
