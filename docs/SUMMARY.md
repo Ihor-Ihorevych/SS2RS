@@ -201,6 +201,7 @@
   - [Door, mover, platform and portal rules](re/door-mover-rules.md)
   - [Detectors, killers, secrets, objectives, beacons and cameras](re/mechanism-classes-triggers.md)
   - [Detector, killer, freezing-zone and alarm rules](re/trigger-area-rules.md)
+  - [Secret, mission objective and navigation beacon rules](re/secrets-objectives-beacons.md)
   - [Spawners, multi-spawners, delayers and markers](re/mechanism-classes-spawners.md)
   - [Spawner state machine and delays](re/spawner-state-machine.md)
   - [Spawner spawn side: placement, formations, effects, templates](re/spawner-spawn-side.md)
