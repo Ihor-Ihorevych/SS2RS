@@ -206,6 +206,7 @@
 - [Level mechanism, spawner and info classes](re/mechanism-classes.md)
   - [Doors, movers, portals, bouncers, barrier fields, motors and joints](re/mechanism-classes-movers.md)
   - [Door, mover, platform and portal rules](re/door-mover-rules.md)
+  - [Bouncer, motor, joint and diamond hand rules](re/bouncer-motor-joint-rules.md)
   - [Detectors, killers, secrets, objectives, beacons and cameras](re/mechanism-classes-triggers.md)
   - [Detector, killer, freezing-zone and alarm rules](re/trigger-area-rules.md)
   - [Secret, mission objective and navigation beacon rules](re/secrets-objectives-beacons.md)
