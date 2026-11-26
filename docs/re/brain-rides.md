@@ -51,7 +51,7 @@ The macro `EnterRide(ride, seat, way, a, b)` of a **legged** puppet (`CLeggedPup
 3. **Not fixed:** when the last argument `b` is non-zero the ride is told `AutoFixRide(this puppet)` (the ride stores the rider in `en_henFixer` and enters `PS_AUTO_FIXING_RIDE` 11, whose think routine `AutoFixingRideState` repairs it: T01-144); then `CantPosessRide`: the macro event **`CantPossesRide`** is sent to the puppet (the same name is also an AI moment the brain can raise; no `.cb` uses it, `brain-classes.md` 4.3). Nothing else happens; the state does not change.
 4. **Fixed:** store `en_henRideToPossess` := ride, `en_idSeatToPosess` := seat, `en_iWayToSeatToPosess` := way; call the puppet's **`RegisterForRide(ride, seat, way)`**; enter **`BS_ENTERING_RIDE`** (3). (The fourth argument `a` is **not used** by this function: the teleport decision is `ShouldTeleportToEnterRide`, 3.)
 
-**`RegisterForRide(ride, seat, way)`** (puppet): prints the warning `Rider tried to register twice onto same ride` when the puppet is already in the ride's rider list; sets `en_henRide` := ride, `en_idSeat` := seat, `en_iWayToSeat` := way; and when the puppet **cannot fire from its own weapons** (`CanFireFromOwnWeapons` false) calls one of its virtual hooks (identity not resolved, probably "put the weapons away", **low**). It does **not** add the puppet to the ride's rider list (that happens when the climb ends, 4).
+**`RegisterForRide(ride, seat, way)`** (puppet): prints the warning `Rider tried to register twice onto same ride` when the puppet is already in the ride's rider list; sets `en_henRide` := ride, `en_idSeat` := seat, `en_iWayToSeat` := way; and when the puppet **cannot fire from its own weapons** (`CanFireFromOwnWeapons` false) calls one of its virtual hooks (identity not resolved, probably "put the weapons away", **low**). It does **not** add the puppet to the ride's rider list itself: **corrected by T01-144** ([`puppet-carry-rides.md`](puppet-carry-rides.md) 3.1): the puppet's own `ProcessRideRiderRelations` adds it **in the next step**, as soon as `en_henRide` is set, whatever the riding state.
 
 ### 3. The possession behaviour (`CPossessRideEntity`; **medium-low**, see also `behavior-entity-classes.md` 4.3)
 
@@ -109,7 +109,7 @@ From `python -I tools/re/brain_rides_verify.py` (22 parameter files with seats, 
 
 ## Open questions
 
-1. **The animation sequences and the attach** (T01-245): `PlayEnteringIntoRideSequence` and `PlayExitingFromRideSequence` (durations, the attach and detach moments, the rider's placement lerp), the way-point chain (unused by the data), `AutoFixingRideState`.
+1. **The animation sequences and the attach** (T01-245): `PlayEnteringIntoRideSequence` and `PlayExitingFromRideSequence` (durations, the attach and detach moments, the rider's placement lerp), the way-point chain (unused by the data). (`AutoFixingRideState` and the rider list are now in [`puppet-carry-rides.md`](puppet-carry-rides.md), T01-144.)
 2. **Who starts an AI boarding in the shipped levels** (T01-246): the macro `EnterRide` calls in the level scripts (the world's macro blocks), whether a `.cb` or a spawner ever makes a puppet board by itself, who calls `GetAvailableSeat`.
 3. **The ride brain's behaviour with a rider** (T01-247): whether the ride's `.cb` loop runs while a rider sits (the abilities and `OnAllRidersClimbed` suggest it does), and who becomes the foe of whom.
 4. **Run-time check** (T01-130).
