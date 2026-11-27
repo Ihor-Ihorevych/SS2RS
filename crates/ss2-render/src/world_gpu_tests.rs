@@ -333,3 +333,195 @@ fn the_test_room_matches_its_golden_image() {
         panic!("{e}");
     }
 }
+
+// ---- the sky ----------------------------------------------------------------------------------------------------------
+
+use crate::SkyBatch;
+use ss2_core::math::{Mat4 as M4, Vec4};
+use ss2_render_api::Projection;
+use ss2_render_api::scene_data::CubeFace;
+use ss2_world::scene::{test_sky_colour, test_sky_face};
+
+/// Upload the test sky's six faces and set them as the renderer's sky.
+fn test_sky(r: &mut Renderer) {
+    let faces = CubeFace::ALL.map(|f| Some(r.create_texture(&test_sky_face(f)).unwrap()));
+    r.set_sky(Some(SkyBatch {
+        faces,
+        tint: [1.0; 4],
+    }))
+    .unwrap();
+}
+
+/// A camera at `position` looking at `face` with its up along the face image's top.
+fn facing(face: CubeFace, position: Vec3, fov_degrees: f32) -> Camera {
+    let b = face.basis();
+    let up = -b.down;
+    let m = M4::from_cols(
+        Vec4::from((b.right, 0.0)),
+        Vec4::from((up, 0.0)),
+        Vec4::from((-b.forward, 0.0)),
+        Vec4::W,
+    );
+    Camera {
+        position,
+        rotation: Quat::from_mat4(&m),
+        projection: Projection::Perspective {
+            fov_y: fov_degrees.to_radians(),
+            near: 0.1,
+        },
+    }
+}
+
+/// The pixel of a square image of `size` that shows the direction `forward + a right + b down` for a camera made by
+/// [`facing`] with a field of view of `fov_degrees`.
+fn pixel_towards(img: &ImageRgba8, a: f32, b: f32, fov_degrees: f32) -> [u8; 4] {
+    let t = (fov_degrees.to_radians() / 2.0).tan();
+    let (ndc_x, ndc_y) = (a / t, -b / t);
+    let x = ((ndc_x + 1.0) / 2.0 * img.width as f32) as u32;
+    let y = ((1.0 - ndc_y) / 2.0 * img.height as f32) as u32;
+    px(img, x.min(img.width - 1), y.min(img.height - 1))
+}
+
+#[test]
+fn every_sky_face_is_where_the_convention_puts_it_upright_and_not_mirrored() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((128, 128)) else {
+        return;
+    };
+    test_sky(&mut r);
+    let fov = 100.0;
+    for face in CubeFace::ALL {
+        let img = r
+            .render_world_to_image(&facing(face, Vec3::ZERO, fov), None, SKY)
+            .unwrap();
+        let at = |a, b| pixel_towards(&img, a, b, fov);
+        assert!(
+            close(at(0.0, 0.0), test_sky_colour(face), 3),
+            "{face:?} centre {:?}",
+            at(0.0, 0.0)
+        );
+        assert!(
+            close(at(0.0, -0.75), [255; 4], 3),
+            "{face:?} top band {:?}",
+            at(0.0, -0.75)
+        );
+        assert!(
+            close(at(-0.8, -0.8), [0, 0, 0, 255], 3),
+            "{face:?} top-left {:?}",
+            at(-0.8, -0.8)
+        );
+        assert!(
+            close(at(0.8, -0.8), [255; 4], 3),
+            "{face:?} top-right (mirrored?) {:?}",
+            at(0.8, -0.8)
+        );
+    }
+}
+
+#[test]
+fn the_sky_is_behind_the_world_and_never_comes_closer() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    let mesh = r.create_mesh(&square()).unwrap();
+    r.set_world(vec![batch(mesh, RED, -3.0)]).unwrap();
+    test_sky(&mut r);
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), [255, 0, 0, 255], 2),
+        "the world in front"
+    );
+    let left = px(&img, 1, 32);
+    assert!(
+        close(left, test_sky_colour(CubeFace::NegZ), 3),
+        "the sky around it: {left:?}"
+    );
+    // Far away, the sky looks the same: it moves with the camera.
+    let far = Camera {
+        position: Vec3::new(500.0, 80.0, -300.0),
+        ..camera()
+    };
+    r.set_world(Vec::new()).unwrap();
+    let img = r.render_world_to_image(&far, None, SKY).unwrap();
+    assert!(close(px(&img, 1, 32), left, 2));
+}
+
+#[test]
+fn a_face_without_a_texture_shows_the_tint_and_bad_skies_are_refused() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((32, 32)) else {
+        return;
+    };
+    r.set_sky(Some(SkyBatch {
+        faces: [None; 6],
+        tint: [0.2, 0.4, 0.6, 1.0],
+    }))
+    .unwrap();
+    let img = r
+        .render_world_to_image(&camera(), None, Color([0.0, 0.0, 0.0, 1.0]))
+        .unwrap();
+    assert!(
+        close(px(&img, 16, 16), [51, 102, 153, 255], 2),
+        "{:?}",
+        px(&img, 16, 16)
+    );
+    assert!(
+        r.set_sky(Some(SkyBatch {
+            faces: [None; 6],
+            tint: [f32::NAN, 0.0, 0.0, 1.0],
+        }))
+        .is_err()
+    );
+    let tex = r
+        .create_texture(&TextureData::solid([1, 2, 3, 255]))
+        .unwrap();
+    r.clear_world();
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert_eq!(px(&img, 16, 16), SKY_PX, "clear_world drops the sky");
+    assert!(
+        r.set_sky(Some(SkyBatch {
+            faces: [Some(tex), None, None, None, None, None],
+            tint: [1.0; 4],
+        }))
+        .is_err(),
+        "a texture from before clear_world"
+    );
+    r.set_sky(None).unwrap();
+}
+
+#[test]
+fn the_test_room_under_its_sky_matches_its_golden_image() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((640, 360)) else {
+        return;
+    };
+    let room = LevelScene::test_room();
+    let batches = upload(&mut r, &room);
+    r.set_world(batches).unwrap();
+    test_sky(&mut r);
+    let start = room.start();
+    // From the spawn, looking up over the back wall and a little to the left, so three sky faces show.
+    let cam = Camera {
+        position: start.position + Vec3::new(0.0, 1.65, 0.0),
+        rotation: Quat::from_rotation_y(0.5) * Quat::from_rotation_x(0.45),
+        ..Camera::default()
+    };
+    let img = r.render_world_to_image(&cam, None, SKY).unwrap();
+    assert!(
+        !img.pixels.chunks(4).any(|p| p == SKY_PX),
+        "the sky covers everything the room does not"
+    );
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/golden");
+    let failures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/golden-failures");
+    let mode = Mode::from_env(failures);
+    if let Err(e) = golden::check_golden(
+        &dir,
+        "world_test_room_sky.png",
+        &img,
+        &Tolerance::default(),
+        &mode,
+    ) {
+        panic!("{e}");
+    }
+}
