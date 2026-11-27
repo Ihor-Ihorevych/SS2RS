@@ -12,7 +12,8 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-003** · Loose-directory mount (dev, mods, cooked cache) with same API · `S` · `P1` · 🟢
 - [x] **T02-004** · `.mod`/`.nfo`/`DefaultMod.txt` descriptor parsing and mod mount ordering · `S` · `P1` · 🟢 · Deps: T01-040 — `ss2-vfs::mods` (`ModManifest`, `Nfo`, `selected_mod`, `discover_mods`, `mount_mod`)
 - [ ] **T02-005** · IO backends behind a file-provider trait: memory-mapped (desktop) + buffered/streaming fallback, read-ahead for 1 GB+ worlds. The trait is what lets Phase 2 add Android content URIs/SAF without touching loaders · `M` · `P0`
-- [~] **T02-005b** [INPRG @lxstyo/agent · branch `T02-005b-archive-scanning-caches-index` · 2026-11-23] · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
+- [x] **T02-005b** · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
+  Done: install and mod mounts reuse per-user archive indexes and rebuild missing or stale indexes from ZIP headers.
 
 ## CTSEMETA container — Wave 1 (needs T01-004/005)
 - [x] **T02-006** · `ss2-meta`: container reader (header, `$Version`, chunk iterator, string/ref tables) · `M` · `P0` · Deps: T01-004 — `ss2_meta::Container::parse` (versions 4–8; all 8,141 containers of the retail install parse)

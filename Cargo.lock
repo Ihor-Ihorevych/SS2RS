@@ -3067,12 +3067,17 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
+ "directories",
+ "flate2",
  "proptest",
  "serde",
+ "serde_json",
  "ss2-core",
  "ss2-testkit",
  "tempfile",
  "toml",
+ "windows-sys 0.61.2",
  "zip",
 ]
 
