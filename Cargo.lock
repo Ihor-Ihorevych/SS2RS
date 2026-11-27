@@ -2868,6 +2868,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-skl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-tex"
 version = "0.0.0"
 dependencies = [
@@ -3056,12 +3067,17 @@ dependencies = [
 name = "ss2-vfs"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
+ "directories",
+ "flate2",
  "proptest",
  "serde",
+ "serde_json",
  "ss2-core",
  "ss2-testkit",
  "tempfile",
  "toml",
+ "windows-sys 0.61.2",
  "zip",
 ]
 

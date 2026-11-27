@@ -17,6 +17,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `bindings_toml` | `BindingSet::from_toml_str` | parsed or refused; what parses can be written and read back identically |
 | `vfs_path` | `VfsPath::new`, `parent`, `join` | normalizing twice changes nothing; no empty, `.` or `..` segment, no upper case or backslash |
 | `gro_archive` | `ArchiveVfs::from_file` on any bytes, then list and read | opened or refused; what opens can be walked and read |
+| `skeleton_parse` | `Skeleton::parse` on any bytes | read or refused; valid LODs resolve bone IDs and parents and have unit local rotations |
 | `install_check` | `check_install` on a folder with one file of any bytes under a base, patch or foreign name | always a report |
 | `archive_names` | `archive_load_order`, `PatchLevel::from_file_name` | the order does not depend on the input order |
 | `session_message` | `ss2_net::session::decode` on any bytes, then a `SessionServer` fed the message from several peers | decoded or refused; what decodes round-trips; the server never holds more than its slots or failure records |

@@ -12,7 +12,8 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-003** · Loose-directory mount (dev, mods, cooked cache) with same API · `S` · `P1` · 🟢
 - [x] **T02-004** · `.mod`/`.nfo`/`DefaultMod.txt` descriptor parsing and mod mount ordering · `S` · `P1` · 🟢 · Deps: T01-040 — `ss2-vfs::mods` (`ModManifest`, `Nfo`, `selected_mod`, `discover_mods`, `mount_mod`)
 - [ ] **T02-005** · IO backends behind a file-provider trait: memory-mapped (desktop) + buffered/streaming fallback, read-ahead for 1 GB+ worlds. The trait is what lets Phase 2 add Android content URIs/SAF without touching loaders · `M` · `P0`
-- [~] **T02-005b** [INPRG @lxstyo/agent · branch `T02-005b-archive-scanning-caches-index` · 2026-11-23] · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
+- [x] **T02-005b** · Archive scanning caches (index cache to avoid re-reading ZIP directories on each launch) · `S` · `P2`
+  Done: install and mod mounts reuse per-user archive indexes and rebuild missing or stale indexes from ZIP headers.
 
 ## CTSEMETA container — Wave 1 (needs T01-004/005)
 - [x] **T02-006** · `ss2-meta`: container reader (header, `$Version`, chunk iterator, string/ref tables) · `M` · `P0` · Deps: T01-004 — `ss2_meta::Container::parse` (versions 4–8; all 8,141 containers of the retail install parse)
@@ -29,7 +30,8 @@ malformed input, borrowed/zero-copy where possible, every loader has a synthetic
 - [x] **T02-012** · `.tex` → CPU image + mip chain + metadata · `M` · `P0` · Deps: T01-006 — new crate `ss2-format-tex` (`Texture`, `TexLoader`): all 2,563 version-8 textures of the retail install load (31 cube maps); the 125 old-version ones need T01-083
 - [ ] **T02-013** · Texture transcoding: BCn upload path + software decode fallback, normal-map handling (ETC2/ASTC targets added in Phase 2) · `L` · `P1`
 - [x] **T02-014** · `.bmf` mesh loader (vertex streams, LODs, bounds) · `M` · `P0` · Deps: T01-007 — new crate `ss2-format-bmf` (`Mesh`, `BmfLoader`): all 76 meshes of the retail install load and match the spec's counts (125 LODs, 353 surfaces, 213,294 triangles, 216,784 vertices)
-- [~] **T02-015** [INPRG @lxstyo/agent · branch `T02-015-skl-skeleton-loader` · 2026-11-23] · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
+- [x] **T02-015** · `.skl` skeleton loader · `S` · `P0` · Deps: T01-009
+  `ss2-format-skl` registers a typed loader with the asset manager. Verified 31 skeletons, 42 LODs, and 564 bones in the local retail install.
 - [x] **T02-016** · `.ans` animation loader + sampling API (pose evaluation, events) · `L` · `P0` · Deps: T01-010 — new crate `ss2-format-ans` (`AnimSet`, `Animation`, `AnsLoader`, `Pose`, `LoopMode`; sampling, events between times, root-motion delta): all 88 `.ans` files load (852 animations, 709 at 30 fps, 14,810 translation + 14,810 rotation + 5,074 float tracks, 689 events); interpolation, looping and the root-motion track are documented choices, the format itself is open (T01-058)
 - [ ] **T02-017** · `.mdl` model loader (links mesh/skeleton/materials/LOD/collision) · `L` · `P0` · Deps: T01-008, T02-014/015
 - [x] **T02-018** · `.mtr` material preset loader → engine-neutral `MaterialDesc` · `M` · `P0` · Deps: T01-011 — new crate `ss2-format-mtr` (`MaterialFile`, `Material`, `ShaderConfig`, `Param`, `MtrLoader`; `Material::from_preset` also converts the presets embedded in `.bmf`/`.mdl`): all 7,482 presets and 8,009 configs of the retail install load

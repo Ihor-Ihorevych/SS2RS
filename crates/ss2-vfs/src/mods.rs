@@ -353,7 +353,8 @@ pub fn mod_archive_names(install_dir: impl AsRef<Path>, mod_id: &str) -> Result<
 ///
 /// Placeholder archives (a single `dummy.txt`, which only mark that an optional pack is
 /// installed) are skipped. The layer names are `<mod_id>/<archive>`. Like
-/// [`crate::mount_install`] this is strict: an unreadable archive fails the mount.
+/// [`crate::mount_install`], this reuses archive indexes when available and an unreadable
+/// archive fails the mount.
 ///
 /// # Errors
 /// As [`mod_archive_names`]; [`Error::Invalid`] naming the first archive that is not a valid ZIP.
@@ -365,8 +366,9 @@ pub fn mount_mod(
     let install_dir = install_dir.as_ref();
     let dir = mod_folder(install_dir, mod_id)?;
     let mut mounted = Vec::new();
+    let cache_dir = ArchiveVfs::cache_dir();
     for name in mod_archive_names(install_dir, mod_id)? {
-        let archive = ArchiveVfs::from_file(dir.join(&name))?;
+        let archive = ArchiveVfs::from_cached_file(&dir.join(&name), cache_dir.as_deref())?;
         let only_dummy = archive.file_count() == 1
             && archive.exists(&VfsPath::new("dummy.txt").expect("static path is valid"));
         if only_dummy || archive.file_count() == 0 {

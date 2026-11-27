@@ -75,6 +75,9 @@ pub fn archive_load_order(names: impl IntoIterator<Item = String>) -> Vec<String
 /// Mount every `*.gro` file directly inside `dir` (case-insensitive extension) as one
 /// [`LayeredVfs`], in [`archive_load_order`]. Sub-folders and other files are ignored.
 ///
+/// Archive indexes are reused from `SS2RS/archive-index` under the user's OS cache directory
+/// when available. Missing, stale or unreadable indexes are rebuilt from the archives.
+///
 /// Strict on purpose: if **any** archive is unreadable or corrupt the whole mount fails, because
 /// silently skipping a patch would serve the wrong version of files.
 ///
@@ -102,8 +105,9 @@ pub fn mount_install(dir: impl AsRef<Path>) -> Result<LayeredVfs> {
         )));
     }
     let mut vfs = LayeredVfs::new();
+    let cache_dir = ArchiveVfs::cache_dir();
     for name in archive_load_order(names) {
-        let archive = ArchiveVfs::from_file(dir.join(&name))?;
+        let archive = ArchiveVfs::from_cached_file(&dir.join(&name), cache_dir.as_deref())?;
         vfs.mount(name, archive);
     }
     Ok(vfs)
