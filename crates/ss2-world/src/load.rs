@@ -214,6 +214,8 @@ pub fn load_level(
                 scale: m.scale,
             },
             collidable: m.has_hull && models[model as usize].collision.is_some(),
+            // Lightmaps are read by T07-035.
+            lightmap: None,
         });
     }
 
