@@ -57,6 +57,7 @@ jobs:
           - format_mtr
           - format_mdl
           - format_rsc
+          - format_wld
           - audio_decode
           - audio_event
           - game_state_bytes

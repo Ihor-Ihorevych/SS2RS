@@ -161,6 +161,7 @@
 - [CTSEMETA type tables](re/ctsemeta-types.md)
 - [Textures (version 8)](re/tex.md)
 - [Legacy texture storage (versions 4–7)](re/tex-legacy.md)
+- [Skeletons and inverse bind transforms](re/skl.md)
 - [Main loop and time](re/main-loop.md)
 - [Save games and what must persist](re/save-game.md)
 - [Multiplayer replication: what state is sent](re/replication.md)

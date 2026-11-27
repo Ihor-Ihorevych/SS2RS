@@ -279,6 +279,10 @@ fn the_format_seeds_are_valid_files() {
         );
     }
     ok(
+        "wld",
+        ss2_format_wld::World::from_bytes(&seed("format_wld", "world")).map(drop),
+    );
+    ok(
         "rsc",
         ss2_format_rsc::ResourceDatabase::from_bytes(&seed("format_rsc", "menu")).map(drop),
     );
