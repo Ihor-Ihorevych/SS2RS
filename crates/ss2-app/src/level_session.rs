@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_physics::controller::WalkConfig;
-use ss2_render::{Renderer, TextureHandle, WorldBatch};
+use ss2_render::{Renderer, SkyBatch, TextureHandle, WorldBatch};
 use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{AlphaMode, TextureData};
 use ss2_ui::Color;
@@ -125,6 +125,8 @@ pub(crate) struct UploadReport {
     pub textures_replaced: usize,
     /// Instances placed, summed over all batches.
     pub instances: usize,
+    /// Whether the level's sky was set.
+    pub sky: bool,
 }
 
 /// Put `scene` on the GPU as the renderer's world, replacing what was there: one mesh and one batch per model part,
@@ -190,6 +192,13 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
         }
     }
     renderer.set_world(batches).map_err(|e| e.to_string())?;
+    // The sky's faces are textures of the scene like any other (stand-ins included).
+    let sky = scene.sky.map(|sky| SkyBatch {
+        faces: sky.faces.map(|f| f.map(|t| textures[t as usize])),
+        tint: sky.tint,
+    });
+    report.sky = sky.is_some();
+    renderer.set_sky(sky).map_err(|e| e.to_string())?;
     Ok(report)
 }
 
@@ -336,6 +345,28 @@ mod tests {
         // Uploading again replaces the world.
         let again = upload(&mut renderer, &room).unwrap();
         assert_eq!(again, report);
+        // Straight up from the start there is no roof: the sky's top face shows, unlit.
+        assert!(report.sky);
+        let up = Camera {
+            rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            ..start_camera(&room)
+        };
+        let image = renderer.render_world_to_image(&up, None, SKY).unwrap();
+        let centre = &image.pixels[((45 * 160 + 80) * 4)..][..4];
+        let top = ss2_world::scene::test_sky_colour(ss2_world::scene::CubeFace::PosY);
+        assert!(
+            centre.iter().zip(top).all(|(a, b)| a.abs_diff(b) <= 3),
+            "{centre:?} is the sky's top face {top:?}"
+        );
+        // A level without a sky clears to the sky colour.
+        let mut bare = LevelScene::test_room();
+        bare.sky = None;
+        assert!(!upload(&mut renderer, &bare).unwrap().sky);
+        let image = renderer.render_world_to_image(&up, None, SKY).unwrap();
+        assert_eq!(
+            &image.pixels[((45 * 160 + 80) * 4)..][..4],
+            &[102, 153, 204, 255]
+        );
     }
 
     #[test]
