@@ -351,6 +351,9 @@ fn test_sky(r: &mut Renderer) {
     r.set_sky(Some(SkyBatch {
         faces,
         tint: [1.0; 4],
+        rotation: Quat::IDENTITY,
+        size: 64.0,
+        viewer_height: 0.0,
     }))
     .unwrap();
 }
@@ -459,6 +462,9 @@ fn a_face_without_a_texture_shows_the_tint_and_bad_skies_are_refused() {
     r.set_sky(Some(SkyBatch {
         faces: [None; 6],
         tint: [0.2, 0.4, 0.6, 1.0],
+        rotation: Quat::IDENTITY,
+        size: 64.0,
+        viewer_height: 0.0,
     }))
     .unwrap();
     let img = r
@@ -473,6 +479,9 @@ fn a_face_without_a_texture_shows_the_tint_and_bad_skies_are_refused() {
         r.set_sky(Some(SkyBatch {
             faces: [None; 6],
             tint: [f32::NAN, 0.0, 0.0, 1.0],
+            rotation: Quat::IDENTITY,
+            size: 64.0,
+            viewer_height: 0.0,
         }))
         .is_err()
     );
@@ -486,6 +495,9 @@ fn a_face_without_a_texture_shows_the_tint_and_bad_skies_are_refused() {
         r.set_sky(Some(SkyBatch {
             faces: [Some(tex), None, None, None, None, None],
             tint: [1.0; 4],
+            rotation: Quat::IDENTITY,
+            size: 64.0,
+            viewer_height: 0.0,
         }))
         .is_err(),
         "a texture from before clear_world"
@@ -606,4 +618,78 @@ fn the_lightmapped_floor_matches_its_golden_image() {
     ) {
         panic!("{e}");
     }
+}
+
+/// The test sky placed with `rotation` and `viewer_height` (size 64).
+fn placed_test_sky(r: &mut Renderer, rotation: Quat, viewer_height: f32) {
+    let faces = CubeFace::ALL.map(|f| Some(r.create_texture(&test_sky_face(f)).unwrap()));
+    r.set_sky(Some(SkyBatch {
+        faces,
+        tint: [1.0; 4],
+        rotation,
+        size: 64.0,
+        viewer_height,
+    }))
+    .unwrap();
+}
+
+#[test]
+fn a_turned_sky_keeps_its_turn_in_the_world() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    // Turned a quarter to the left (+90 degrees around +Y), the cube's +X face now lies towards -Z.
+    placed_test_sky(
+        &mut r,
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+        0.0,
+    );
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    let centre = px(&img, 32, 40);
+    assert!(
+        close(centre, test_sky_colour(CubeFace::PosX), 3),
+        "looking down -Z: {centre:?}"
+    );
+    // Not turned: the -Z face.
+    placed_test_sky(&mut r, Quat::IDENTITY, 0.0);
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert!(close(px(&img, 32, 40), test_sky_colour(CubeFace::NegZ), 3));
+    // A placement that is not a rotation is refused.
+    let bad = SkyBatch {
+        faces: [None; 6],
+        tint: [1.0; 4],
+        rotation: Quat::from_xyzw(0.0, 0.0, 0.0, 2.0),
+        size: 64.0,
+        viewer_height: 0.0,
+    };
+    assert!(r.set_sky(Some(bad)).is_err());
+}
+
+#[test]
+fn a_viewer_high_in_the_cube_sees_the_ceiling_sooner() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    // Looking 20 degrees up from facing -Z: from the centre the ray meets the -Z face; from 80 % of the way to the
+    // ceiling (viewer height 0.4 x size 64 = 25.6) it meets the ceiling first.
+    let up = Camera {
+        rotation: Quat::from_rotation_x(20f32.to_radians()),
+        ..camera()
+    };
+    placed_test_sky(&mut r, Quat::IDENTITY, 0.0);
+    let img = r.render_world_to_image(&up, None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), test_sky_colour(CubeFace::NegZ), 3),
+        "{:?}",
+        px(&img, 32, 32)
+    );
+    placed_test_sky(&mut r, Quat::IDENTITY, 25.6);
+    let img = r.render_world_to_image(&up, None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), test_sky_colour(CubeFace::PosY), 3),
+        "{:?}",
+        px(&img, 32, 32)
+    );
 }
