@@ -96,6 +96,7 @@ World lighting evidence (docs/re/wld-lighting.md):
 
 ```
 python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
+python -I tools/re/wld_lightmap_uv_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-406: the lightmap UV map id is a per-world constant, never a mesh UV id (about 5 minutes)
 ```
 
 Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
