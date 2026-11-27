@@ -4,16 +4,44 @@ For every format-8 `.wld`: the sky cube (`CCubeBackgroundEntity`), haze volumes 
 (`CBloomEntity`), fluids (`CFluidEntity`), force fields, shakers and environment damagers: how many, their
 property values, and which renderable member equals which property member. Writes the per-level table.
 
+Also (T01-409): the sky cube's `en_qvPlacement` rotation (identity, pure yaw, or a general rotation) over
+all 58 skies, to tell whether the loader may ignore it or must apply it (`docs/re/environment.md`, sky).
+
 Usage: python -I tools/re/wld_env_verify.py [DATA_DIR] [LIMIT] [--table OUT.md]
        (DATA_DIR defaults to $SS2_DATA_DIR; LIMIT = only the LIMIT smallest worlds, default all, about 15 minutes)
 """
-import collections, os, sys
+import collections, math, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ctse_values import Blob, Enum, Obj, Ref, TreeDec, merged_files, parse  # noqa: E402
 from wld_root_verify import ids  # noqa: E402
 
 NULL = 0xFFFFFFFF
+
+
+def quat_matrix(x, y, z, w):
+    """Rotation matrix (3x3, rows) of the quaternion (x, y, z, w); same formula as skl_verify.quat_matrix
+    and wld_root_verify.matrix."""
+    return [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]]
+
+
+def placement_rotation(qv):
+    """Classifies a QuatVect's rotation: ('identity', 0.0), ('yaw', degrees) if it is a pure rotation
+    about +Y (heading, GEOMETRY.md convention: 0 along -Z, positive turns towards -X/West), or
+    ('general', None) if it also tilts the up axis (pitch and/or bank)."""
+    q = qv.get("QuatVect.1"); x, y, z, w = (q.get(f"Quaternion4f.{i}") for i in (1, 2, 3, 4))
+    r = quat_matrix(x, y, z, w)
+    off_axis = max(abs(r[0][1]), abs(r[1][0]), abs(r[1][2]), abs(r[2][1]), abs(r[1][1] - 1))
+    if off_axis > 1e-3: return "general", None
+    # pure rotation about Y: r = [[cos,0,sin],[0,1,0],[-sin,0,cos]]; heading (0 along -Z, + towards -X)
+    # is the angle from -Z to the rotated -Z axis, i.e. atan2(-r[0][2], -r[2][2]) negated to match the
+    # engine's heading sign (behavior-validity-terms.md: heading = atan2(-x, -z) of the forward vector).
+    fwd = (-r[0][2], -r[1][2], -r[2][2])
+    heading = math.degrees(math.atan2(-fwd[0], -fwd[2]))
+    if abs(heading) < 1e-2: return "identity", 0.0
+    return "yaw", heading
 
 
 def nums(o, skip=()):
@@ -48,6 +76,16 @@ def check_world(name, d, st, dist, pairs, rows):
         path = ex.get(tex.oid, "") if isinstance(tex, Ref) else ""
         faces = [ex.get(rend.get(f"CCubeRenderable.{k}").oid, "").rsplit("/", 1)[-1].lower() for k in (10, 11, 12, 13, 14, 15)]
         row["sky"] = (path.rsplit("/", 1)[-1].lower(), e.get("CCubeBackgroundEntity.en_fSize"), round(e.get("CCubeBackgroundEntity.en_fViewerY"), 2), hex(rec.get("CCubeBackgroundProperties.6")) if rec is not None else "", faces)
+        qv = e.get("CCubeBackgroundEntity.en_qvPlacement")
+        kind, heading = placement_rotation(qv)
+        pos = qv.get("QuatVect.2"); pos = (pos.get("Vector3f.1"), pos.get("Vector3f.2"), pos.get("Vector3f.3"))
+        row["sky_rotation"] = (kind, round(heading, 1) if heading is not None else None, tuple(round(c, 1) for c in pos))
+        st["sky cube: records with en_qvPlacement read"] += 1
+        dist["sky cube: en_qvPlacement rotation kind"][kind] += 1
+        st["sky cube: en_qvPlacement position is (0, 0, 0)"] += all(abs(c) < 1e-3 for c in pos)
+        if kind == "yaw":
+            dist["sky cube: yaw heading, rounded to the nearest 5 degrees"][round(heading / 5) * 5] += 1
+            st["sky cube: yaw is a multiple of 90 degrees (tolerance 0.5)"] += min(abs(heading % 90), 90 - abs(heading % 90)) < 0.5
         st["sky cube: record texture is an external .tex"] += path.lower().endswith(".tex")
         st["sky cube: six face textures on the renderable (.10-.15), distinct names"] += len({f for f in faces if f}) > 1
         dist["sky cube size (en_fSize)"][e.get("CCubeBackgroundEntity.en_fSize")] += 1
@@ -103,6 +141,10 @@ def main():
     for k, v in sorted(st.items()):
         if v: print(f"{v:9d}  {k}")
     for k, v in sorted(dist.items()): print(k, dict(v.most_common(12)))
+    rotated = [(r["world"], r["sky_rotation"]) for r in rows if r.get("sky_rotation") and r["sky_rotation"][0] != "identity"]
+    print(f"sky cube: {len(rotated)} of {sum(1 for r in rows if r.get('sky_rotation'))} skies have a non-identity en_qvPlacement rotation:", rotated)
+    nonzero_pos = [(r["world"], r["sky_rotation"][2]) for r in rows if r.get("sky_rotation") and any(abs(c) > 1e-3 for c in r["sky_rotation"][2])]
+    print(f"sky cube: {len(nonzero_pos)} skies with a non-(0,0,0) en_qvPlacement position:", nonzero_pos)
     for key in ("haze", "bloom"):
         tot = st[f"{key}: records matched with renderables"]
         print(f"{key}: renderable member = property member (count of {tot} matches):", [(f"{rk}={pk}", c) for (kk, rk, pk), c in sorted(pairs.items(), key=lambda t: -t[1]) if kk == key and c >= tot * 0.9][:20])
