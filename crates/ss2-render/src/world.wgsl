@@ -9,7 +9,7 @@ struct Camera {
 
 struct Material {
     tint: vec4<f32>,
-    // x: alpha cutoff (texels below it are not drawn; 0 keeps all).
+    // x: alpha cutoff (texels below it are not drawn; 0 keeps all); y: 1 = unlit (the sky), 0 = lit.
     params: vec4<f32>,
 };
 
@@ -51,6 +51,7 @@ fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
         discard;
     }
     let n = normalize(f.normal);
-    let shade = 0.55 + 0.45 * abs(dot(n, -camera.light_dir.xyz));
+    let lit = 0.55 + 0.45 * abs(dot(n, -camera.light_dir.xyz));
+    let shade = select(lit, 1.0, material.params.y > 0.5);
     return vec4<f32>(texel.rgb * shade, 1.0);
 }
