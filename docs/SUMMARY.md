@@ -159,6 +159,7 @@
 - [Install inventory](re/inventory.md)
 - [CTSEMETA container](re/ctsemeta-container.md)
 - [CTSEMETA type tables](re/ctsemeta-types.md)
+- [Binary meshes and collision trees](re/bmf.md)
 - [Textures (version 8)](re/tex.md)
 - [Legacy texture storage (versions 4–7)](re/tex-legacy.md)
 - [CTSEMETA object data](re/ctsemeta-objects.md)
