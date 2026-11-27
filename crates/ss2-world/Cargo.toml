@@ -15,3 +15,14 @@ workspace = true
 ss2-core = { path = "../ss2-core" }
 ss2-physics = { path = "../ss2-physics" }
 ss2-render-api = { path = "../ss2-render-api" }
+ss2-vfs = { path = "../ss2-vfs" }
+ss2-meta = { path = "../ss2-meta" }
+ss2-format-wld = { path = "../ss2-format-wld" }
+ss2-format-mdl = { path = "../ss2-format-mdl" }
+ss2-format-bmf = { path = "../ss2-format-bmf" }
+ss2-format-mtr = { path = "../ss2-format-mtr" }
+ss2-format-tex = { path = "../ss2-format-tex" }
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+flate2.workspace = true
