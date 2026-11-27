@@ -4,7 +4,8 @@
 //! texture holds its size, a format code, flags, wrap modes and **one zlib-compressed byte array
 //! with all pixel data**. [`Texture::from_bytes`] reads it into a [`Texture`]: the metadata and the
 //! raw, still block-compressed pixels with their mip chain laid out for direct access
-//! ([`Texture::level`]). Converting DXT blocks to RGBA or uploading them is the job of the
+//! ([`Texture::level`]); [`Texture::from_object`] does the same for a `CStaticTexture` stored
+//! inside another file (a world's baked lightmaps). Converting DXT blocks to RGBA or uploading them is the job of the
 //! transcoder (T02-013).
 //!
 //! Only format version 8 is read: the 155 development-build textures of versions 4 to 7 store
@@ -26,7 +27,7 @@ use std::io::Read;
 use flate2::read::ZlibDecoder;
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::{Error, Result};
-use ss2_meta::{Bytes, Container, MetaDeserialize};
+use ss2_meta::{Bytes, Container, MetaDeserialize, TypeSystem, Value};
 
 const WHAT: &str = ".tex texture";
 /// `TexFlags` bit: the pixel data is a cube map (six faces, each with its mip chain).
@@ -175,7 +176,20 @@ impl Texture {
             .iter()
             .find(|o| decoded.types.type_name(o.type_id) == Some("CStaticTexture"))
             .ok_or_else(|| bad("the file has no CStaticTexture object"))?;
-        let raw: RawTexture = ss2_meta::FromValue::from_value(&object.value, &decoded.types)?;
+        Self::from_object(&object.value, &decoded.types)
+    }
+
+    /// Read a `CStaticTexture` object that is already decoded, from any version-8 container:
+    /// a `.tex` file's own texture, or a texture stored inside another file (a world keeps its
+    /// baked lightmaps as `CStaticTexture` objects of its own, `wld-lighting.md`). `types` is the
+    /// type system of the container the value comes from.
+    ///
+    /// Applies the same checks as [`Texture::from_bytes`] to the texture's members.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if the value is not a texture or breaks a rule of `tex.md`.
+    pub fn from_object(value: &Value, types: &TypeSystem) -> Result<Self> {
+        let raw: RawTexture = ss2_meta::FromValue::from_value(value, types)?;
 
         let (width, height) = match (u32::try_from(raw.width), u32::try_from(raw.height)) {
             (Ok(w), Ok(h)) if (1..=MAX_SIDE).contains(&w) && (1..=MAX_SIDE).contains(&h) => (w, h),
@@ -540,6 +554,22 @@ mod tests {
         );
         // Not a container at all.
         assert!(Texture::from_bytes(b"hello").is_err());
+    }
+
+    #[test]
+    fn a_texture_object_decodes_like_its_file() {
+        // `Texture::from_object` reads a `CStaticTexture` already decoded from some container (a
+        // world keeps its lightmaps inside itself); the result is the same as reading the file.
+        let file = texture_file(4, 4, 0x71, 7, 0x51, 0x51, &pattern(24));
+        let container = Container::parse(&file).unwrap();
+        let decoded = container.decode_objects().unwrap();
+        let object = decoded.object(1).unwrap();
+        let t = Texture::from_object(&object.value, &decoded.types).unwrap();
+        assert_eq!(t, Texture::from_bytes(&file).unwrap());
+        assert_eq!((t.flags, t.wrap_u, t.mip_levels), (0x71, WRAP_CLAMP, 3));
+        // An object that is not a texture is refused, not a panic.
+        let resource = decoded.object(0).unwrap();
+        assert!(Texture::from_object(&resource.value, &decoded.types).is_err());
     }
 
     #[test]
