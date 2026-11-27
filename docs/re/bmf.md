@@ -96,7 +96,7 @@ Eligibility and the LOD selected for a particular draw are separate.
 | `.9` | element path of the **tangent** stream (present in 120 surfaces, absent otherwise) |
 | `.10` | element path of the **bone weights** (present in 333 surfaces, absent otherwise) |
 | `.11` | element path of the **bone indices** (present exactly when `.10` is) |
-| `.12` | 8 words: for each UV slot the UV map id (for example 3, 4, 5, 6, or 2); 0 for unused slots |
+| `.12` | 8 words: for each UV slot the UV map id (for example 3, 4, 5, 6, or 2); 0 for unused slots. In a lit world instance, slot 0 is, in the large majority of cases, the mesh's **lightmap unwrap channel** -- entirely inside [0, 1], non-overlapping, and usually not one of the ids the surface's own material uses (`wld-lighting.md`, "Baked lightmaps", T01-407); this is a data-driven finding, not a documented field role |
 | `.13` | Eight color-map identifiers, one per `.15` slot. All are 0 in these meshes, which have zero color streams (`.5`) |
 | `.14` | 8 element paths: the **UV streams** (slot order as in `.12`); unused slots have buffer 255 |
 | `.15` | 8 element paths: always all absent |

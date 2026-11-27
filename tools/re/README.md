@@ -97,6 +97,7 @@ World lighting evidence (docs/re/wld-lighting.md):
 ```
 python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
 python -I tools/re/wld_lightmap_uv_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-406: the lightmap UV map id is a per-world constant, never a mesh UV id (about 5 minutes)
+python -I tools/re/wld_lightmap_stream_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-407: which UV stream a lightmapped instance actually uses (min/max, [0,1] + non-overlap rasterized test, shared across surfaces, cross-checked against the surface's own material) over all 59 worlds (about 5 minutes); --texels [--out DIR] rasterizes a few instances' candidate stream into their lightmap's own texel grid and reports coverage of the lit texels
 ```
 
 Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
