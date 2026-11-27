@@ -3053,6 +3053,7 @@ name = "ss2-world"
 version = "0.0.0"
 dependencies = [
  "ss2-core",
+ "ss2-physics",
  "ss2-render-api",
 ]
 
