@@ -86,6 +86,19 @@ pub struct SkyData {
     pub faces: [Option<u32>; 6],
     /// Linear RGBA multiplier on every face.
     pub tint: [f32; 4],
+    /// How the cube is turned in the world (the sky entity's placement rotation, applied in full; its position is
+    /// never used: the cube is centred on the viewer). `docs/re/environment.md`, T01-409.
+    pub rotation: Quat,
+    /// The cube's edge length in world units (64 in most levels).
+    pub size: f32,
+    /// The viewer's height inside the cube, relative to its centre, in the same units as `size` (the sign is the
+    /// spec's open question: positive puts the viewer above the centre, so the horizon drops).
+    pub viewer_height: f32,
+}
+
+impl SkyData {
+    /// The placement of a sky without one: not turned, size 64, the viewer at the centre.
+    pub const UNPLACED_SIZE: f32 = 64.0;
 }
 
 /// A whole level, ready to draw and collide with.
@@ -212,6 +225,15 @@ impl LevelScene {
         if let Some(sky) = &self.sky {
             if !sky.tint.iter().all(|c| c.is_finite()) {
                 return bad(format!("sky tint {:?}", sky.tint));
+            }
+            if !sky.rotation.is_finite() || (sky.rotation.length_squared() - 1.0).abs() > 1e-3 {
+                return bad(format!("sky rotation {:?}", sky.rotation));
+            }
+            if !(sky.size.is_finite() && sky.size > 0.0) || !sky.viewer_height.is_finite() {
+                return bad(format!(
+                    "sky size {} and viewer height {}",
+                    sky.size, sky.viewer_height
+                ));
             }
             if let Some(t) = sky
                 .faces
@@ -350,6 +372,10 @@ impl LevelScene {
             sky: Some(SkyData {
                 faces: [1, 2, 3, 4, 5, 6].map(Some),
                 tint: [1.0, 1.0, 1.0, 1.0],
+                // A quarter turn to the left, so a renderer that ignores the rotation shows the wrong colour ahead.
+                rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+                size: SkyData::UNPLACED_SIZE,
+                viewer_height: 0.0,
             }),
         }
     }
@@ -622,6 +648,10 @@ mod tests {
         };
         assert!(check(&|s| s.faces[2] = Some(99)));
         assert!(check(&|s| s.tint[1] = f32::NAN));
+        assert!(check(&|s| s.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 3.0)));
+        assert!(check(&|s| s.size = 0.0));
+        assert!(check(&|s| s.size = f32::INFINITY));
+        assert!(check(&|s| s.viewer_height = f32::NAN));
         let mut s = LevelScene::test_room();
         s.sky.as_mut().unwrap().faces[3] = None;
         s.validate().unwrap();

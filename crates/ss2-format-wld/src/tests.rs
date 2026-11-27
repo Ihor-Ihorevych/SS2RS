@@ -21,6 +21,29 @@ struct Variant {
     entity_override: Option<u32>,
     /// Whether and how the world has a sky entity.
     sky: SkyKind,
+    /// The baked lightmap of the first static model.
+    lightmap: LightmapKind,
+}
+
+/// The oven modifiers of the first static model's instance (object 13). Besides it, a model
+/// instance that no static model uses (object 104, as a door's or a prop's would be) always has
+/// one oven modifier, so that the world-wide counts see more than the static models.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LightmapKind {
+    /// Modifier list 100: an oven modifier (101, texture 110) and a constant modifier (102).
+    One,
+    /// List 100 with a second oven modifier (103, texture 111) after the constant one.
+    Two,
+    /// The instance has no modifier list (`.4` null).
+    NoList,
+    /// The list has only the constant modifier.
+    NoOven,
+    /// The oven modifier's texture argument names object 999, which is not in the file.
+    DanglingTexture,
+    /// The texture's pixel blob is not zlib.
+    BadPixels,
+    /// The modifier list names object 998, which is not in the file.
+    DanglingList,
 }
 
 /// The sky entity of the synthetic world.
@@ -41,7 +64,22 @@ const NORMAL: Variant = Variant {
     model_file: "Content/Test/Box.mdl",
     entity_override: None,
     sky: SkyKind::Absent,
+    lightmap: LightmapKind::One,
 };
+
+/// The lightmap pixels: 4 x 4 BGR (format code 0), so a test can check each texel.
+fn lightmap_pixels(seed: u8) -> Vec<u8> {
+    (0..48u8)
+        .map(|i| i.wrapping_mul(5).wrapping_add(seed))
+        .collect()
+}
+
+fn zlib(bytes: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    z.write_all(bytes).unwrap();
+    z.finish().unwrap()
+}
 
 const NORTH_TEX: &str = "Content/Test/Sky/Night_0000.tex";
 const WEST_TEX: &str = "Content/Test/Sky/Night_0003.tex";
@@ -172,7 +210,7 @@ fn world_file(v: Variant) -> Vec<u8> {
         5,
         5,
         None,
-        &[("1", 4), ("3", 17)],
+        &[("1", 4), ("3", 17), ("4", 54)],
     ));
     b.type_block(TypeBlock::pointer(18, "CModelInstance*", 16));
     b.type_block(TypeBlock::class(
@@ -317,6 +355,112 @@ fn world_file(v: Variant) -> Vec<u8> {
             ("ep_bActive", 41),
         ],
     ));
+    // The shader modifier and texture classes of a lightmap (`wld-lighting.md`, "Baked
+    // lightmaps"; the texture as in `tex.md`).
+    b.type_block(TypeBlock::primitive(49, "IDENT", 4, 4));
+    b.type_block(TypeBlock::enumeration(50, "EPlatform", 4));
+    b.type_block(TypeBlock::class(
+        51,
+        "CShaderModifier",
+        2,
+        5,
+        Some(3),
+        &[("1", 50)],
+    ));
+    b.type_block(TypeBlock::dynamic_container(
+        52,
+        "CDynamicContainer<CShaderModifier>",
+        51,
+    ));
+    b.type_block(TypeBlock::class(
+        53,
+        "CShaderModifierList",
+        2,
+        5,
+        None,
+        &[("1", 52)],
+    ));
+    b.type_block(TypeBlock::pointer(54, "CShaderModifierList*", 53));
+    b.type_block(TypeBlock::class(
+        55,
+        "CShaderArgumentValue",
+        1,
+        5,
+        Some(3),
+        &[],
+    ));
+    b.type_block(TypeBlock::pointer(72, "Ptr<CTexture>", 71));
+    b.type_block(TypeBlock::class(
+        56,
+        "CShaderArgValTexture",
+        1,
+        5,
+        Some(55),
+        &[("1", 72)],
+    ));
+    b.type_block(TypeBlock::class(
+        57,
+        "CShaderArgValUVMap",
+        1,
+        5,
+        Some(55),
+        &[("1", 49)],
+    ));
+    b.type_block(TypeBlock::class(58, "CTextureBaker", 1, 5, Some(3), &[]));
+    b.type_block(TypeBlock::pointer(59, "CTextureBaker*", 58));
+    b.type_block(TypeBlock::class(
+        60,
+        "CTextureOvenShaderModifier",
+        3,
+        5,
+        Some(51),
+        &[("4", 56), ("1", 49), ("3", 57), ("2", 49), ("6", 59)],
+    ));
+    b.type_block(TypeBlock::class(
+        61,
+        "CConstantShaderModifier",
+        1,
+        5,
+        Some(51),
+        &[("1", 49), ("2", 49)],
+    ));
+    b.type_block(TypeBlock::primitive(62, "SLONG", 4, 4));
+    b.type_block(TypeBlock::primitive(63, "UBYTE", 1, 1));
+    b.type_block(TypeBlock::enumeration(64, "TexFlags", 4));
+    b.type_block(TypeBlock::enumeration(65, "TexFormat", 4));
+    b.type_block(TypeBlock::enumeration(66, "GfxTexWrap", 4));
+    b.type_block(TypeBlock::short(67, "CStaticArray<UBYTE>", 0, 6, 63));
+    b.type_block(TypeBlock::class(
+        68,
+        "CResource",
+        4,
+        5,
+        Some(3),
+        &[("1", 62)],
+    ));
+    b.type_block(TypeBlock::class(
+        69,
+        "CBaseTexture",
+        9,
+        5,
+        Some(68),
+        &[
+            ("1", 62),
+            ("2", 62),
+            ("4", 64),
+            ("6", 65),
+            ("18", 67),
+            ("9", 66),
+            ("10", 66),
+            ("14", 40),
+        ],
+    ));
+    b.type_block(TypeBlock::class(70, "CTexture", 1, 5, Some(69), &[]));
+    b.type_block(TypeBlock::class(71, "CStaticTexture", 1, 5, Some(70), &[]));
+    let texture_ident = b.identifier("3 texture");
+    let uv_ident = b.identifier("3 uvmap");
+    let shadow_ident = b.identifier("Shadow");
+    let bright_ident = b.identifier("full bright");
     b.external_object(50, module, 10, 100);
     b.external_object(51, mdl, 1, 101);
     for (id, path) in [
@@ -422,6 +566,11 @@ fn world_file(v: Variant) -> Vec<u8> {
             .f32(2.0)
             .f32(-1.0)
             .object_ref(Some(51))
+            .object_ref(match v.lightmap {
+                LightmapKind::NoList => None,
+                LightmapKind::DanglingList => Some(998),
+                _ => Some(100),
+            })
             .finish(),
     );
     b.object(
@@ -445,6 +594,7 @@ fn world_file(v: Variant) -> Vec<u8> {
             .f32(1.0)
             .f32(1.0)
             .object_ref(Some(15))
+            .object_ref(None)
             .finish(),
     );
     // The marker's renderables: 17 the top, 18 its child.
@@ -481,6 +631,85 @@ fn world_file(v: Variant) -> Vec<u8> {
         )
         .finish(),
     );
+
+    // The lightmap chain of instance 13 (list 100) and of the lone instance 104 (list 105).
+    let oven = |texture: u32| {
+        ObjectBytes::new()
+            .u32(0xFFFF_FFFF)
+            .object_ref(Some(texture))
+            .u32(texture_ident)
+            .u32(shadow_ident)
+            .u32(uv_ident)
+            .object_ref(None)
+            .finish()
+    };
+    let mut list = match v.lightmap {
+        LightmapKind::NoOven => vec![102],
+        _ => vec![101, 102],
+    };
+    if v.lightmap == LightmapKind::Two {
+        list.push(103);
+    }
+    b.object(
+        100,
+        53,
+        ObjectBytes::new().dynamic_container(&list).finish(),
+    );
+    let first_texture = if v.lightmap == LightmapKind::DanglingTexture {
+        999
+    } else {
+        110
+    };
+    b.object(101, 60, oven(first_texture));
+    b.object(
+        102,
+        61,
+        ObjectBytes::new()
+            .u32(0xFFFF_FFFF)
+            .u32(0)
+            .u32(bright_ident)
+            .finish(),
+    );
+    b.object(103, 60, oven(111));
+    b.object(
+        104,
+        16,
+        ObjectBytes::new()
+            .f32(1.0)
+            .f32(1.0)
+            .f32(1.0)
+            .object_ref(Some(51))
+            .object_ref(Some(105))
+            .finish(),
+    );
+    b.object(
+        105,
+        53,
+        ObjectBytes::new().dynamic_container(&[106]).finish(),
+    );
+    b.object(106, 60, oven(112));
+    let texture = |blob: &[u8]| {
+        ObjectBytes::new()
+            .i32(-1)
+            .i32(4)
+            .i32(4)
+            .u32(0x71)
+            .u32(0)
+            .array_header(b"STAR", blob.len() as u32)
+            .raw(blob)
+            .u32(0x51)
+            .u32(0x51)
+            .u32(0)
+            .finish()
+    };
+    let first_blob = if v.lightmap == LightmapKind::BadPixels {
+        b"not zlib".to_vec()
+    } else {
+        zlib(&lightmap_pixels(1))
+    };
+    b.object(110, 71, texture(&first_blob));
+    b.object(111, 71, texture(&zlib(&lightmap_pixels(2))));
+    b.object(112, 71, texture(&zlib(&lightmap_pixels(3))));
 
     // Entity 7: the sky, its cube renderable 20 and viewer renderable 21.
     if v.sky != SkyKind::Absent {
@@ -710,6 +939,88 @@ fn sky_faces_name_their_members_in_order() {
     }
 }
 
+fn with_lightmap(lightmap: LightmapKind) -> World {
+    World::from_bytes(&world_file(Variant { lightmap, ..NORMAL })).unwrap()
+}
+
+#[test]
+fn a_static_model_reads_the_lightmap_of_its_oven_modifier() {
+    let world = with_lightmap(LightmapKind::One);
+    let lm = world.static_models[0]
+        .lightmap
+        .as_ref()
+        .expect("model 0 is lightmapped");
+    assert_eq!(lm.modifier, 101);
+    assert_eq!(lm.texture_object, Some(110));
+    assert_eq!(
+        (lm.texture_param.name.as_str(), lm.uv_param.name.as_str()),
+        ("3 texture", "3 uvmap")
+    );
+    assert_eq!(lm.uv_map.name, "Shadow");
+    assert_eq!(lm.other_oven_modifiers, 0);
+    // The texture is decoded from the world's own `CStaticTexture` object.
+    let t = lm.texture.as_ref().expect("the lightmap decodes");
+    assert_eq!((t.width, t.height, t.flags), (4, 4, 0x71));
+    assert_eq!(t.format, ss2_format_tex::PixelFormat::Bgr8);
+    assert_eq!(t.data, lightmap_pixels(1));
+    // The other static model has no modifier list.
+    assert!(world.static_models[1].lightmap.is_none());
+    // The counts cover every model instance, also the one no static model uses.
+    assert_eq!(
+        world.lightmap_counts,
+        LightmapCounts {
+            lit_instances: 2,
+            oven_modifiers: 2,
+            several: 0,
+        }
+    );
+}
+
+#[test]
+fn of_several_oven_modifiers_the_first_is_taken_and_the_rest_counted() {
+    let world = with_lightmap(LightmapKind::Two);
+    let lm = world.static_models[0].lightmap.as_ref().unwrap();
+    assert_eq!((lm.modifier, lm.texture_object), (101, Some(110)));
+    assert_eq!(lm.other_oven_modifiers, 1);
+    assert_eq!(
+        world.lightmap_counts,
+        LightmapCounts {
+            lit_instances: 2,
+            oven_modifiers: 3,
+            several: 1,
+        }
+    );
+}
+
+#[test]
+fn a_missing_or_broken_chain_is_no_lightmap() {
+    for kind in [
+        LightmapKind::NoList,
+        LightmapKind::NoOven,
+        LightmapKind::DanglingList,
+    ] {
+        let world = with_lightmap(kind);
+        assert!(world.static_models[0].lightmap.is_none());
+        // Only the lone instance is lit.
+        assert_eq!(world.lightmap_counts.lit_instances, 1);
+    }
+}
+
+#[test]
+fn a_lightmap_whose_texture_cannot_be_read_says_why() {
+    let world = with_lightmap(LightmapKind::DanglingTexture);
+    let lm = world.static_models[0].lightmap.as_ref().unwrap();
+    assert_eq!(lm.texture_object, None);
+    let err = lm.texture.as_ref().unwrap_err();
+    assert!(err.contains("999"), "{err}");
+
+    let world = with_lightmap(LightmapKind::BadPixels);
+    let lm = world.static_models[0].lightmap.as_ref().unwrap();
+    assert_eq!(lm.texture_object, Some(110));
+    let err = lm.texture.as_ref().unwrap_err();
+    assert!(err.contains("zlib"), "{err}");
+}
+
 #[test]
 fn a_world_needs_exactly_one_root() {
     for worlds in [0, 2] {
@@ -743,6 +1054,7 @@ fn a_dangling_entity_or_a_model_that_is_not_an_mdl_is_an_error() {
 fn nothing_panics_on_damaged_files() {
     let good = world_file(Variant {
         sky: SkyKind::WithRecord,
+        lightmap: LightmapKind::Two,
         ..NORMAL
     });
     for len in (0..good.len()).step_by(7) {
