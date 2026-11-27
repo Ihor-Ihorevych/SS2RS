@@ -321,7 +321,11 @@ mod tests {
         let room = LevelScene::test_room();
         let report = upload(&mut renderer, &room).unwrap();
         assert_eq!(report.meshes, 1);
-        assert_eq!(report.textures, 1);
+        assert_eq!(
+            report.textures,
+            room.textures.len(),
+            "every texture, sky faces included"
+        );
         assert_eq!(report.instances, room.instances.len());
         let image = renderer
             .render_world_to_image(&start_camera(&room), None, SKY)
