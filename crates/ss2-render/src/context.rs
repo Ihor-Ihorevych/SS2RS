@@ -3,6 +3,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use ss2_render_api::Camera;
+use ss2_render_api::scene_data::{MeshData, TexelFormat, TextureData};
 use ss2_ui::{Canvas, Color, DrawList, Vec2};
 use wgpu::util::DeviceExt;
 
@@ -12,6 +14,7 @@ use crate::images::{GpuImage, ImageStore, Recipe, Source};
 use crate::plan::{BatchKind, Plan};
 use crate::text::TextPainter;
 use crate::ui_frame::{ImageHandle, UiFrame, UiScene, replay_order, would_loop};
+use crate::world::{MeshHandle, TextureHandle, WorldBatch, WorldGpu};
 
 /// Why the renderer could not be created or could not draw.
 #[derive(Debug, thiserror::Error)]
@@ -32,6 +35,10 @@ pub enum RenderError {
     /// would be drawn into itself.
     #[error("image error: {0}")]
     Image(String),
+    /// World data could not be uploaded or used: bad mesh or texture data, an unsupported texture format, or a
+    /// handle from before the world was dropped.
+    #[error("world error: {0}")]
+    World(String),
 }
 
 /// What recovery has done so far (for a log line, an overlay or a test).
@@ -90,6 +97,7 @@ pub struct Renderer {
     vertices: wgpu::Buffer,
     vertex_capacity: u64,
     text: TextPainter,
+    world: WorldGpu,
     instance: wgpu::Instance,
     config: GpuConfig,
     lost: LostSignal,
@@ -312,6 +320,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let text = TextPainter::new(&device, &queue, format);
+        let world = WorldGpu::new(&device, &queue, format, 0);
         Renderer {
             device,
             queue,
@@ -329,6 +338,7 @@ impl Renderer {
             vertices,
             vertex_capacity,
             text,
+            world,
             instance,
             config,
             lost,
@@ -428,6 +438,13 @@ impl Renderer {
         fresh.stats = self.stats;
         fresh.stats.device_rebuilds += 1;
         fresh.started = self.started;
+        // The world is not kept on the CPU: it is dropped, and its owner uploads it again.
+        fresh.world = WorldGpu::new(
+            &fresh.device,
+            &fresh.queue,
+            fresh.format,
+            self.world.generation() + 1,
+        );
         *self = fresh;
         Ok(())
     }
@@ -481,16 +498,32 @@ impl Renderer {
     /// Draw `list` into the window. Does nothing (returns `Ok`) while the window is 0x0 or
     /// occluded; reconfigures and skips the frame when the surface is outdated or lost.
     pub fn render(&mut self, list: &DrawList, clear: Color) -> Result<(), RenderError> {
-        self.render_scene(list, clear)
+        self.render_scene(list, clear, None)
+    }
+
+    /// Like [`Renderer::render`], with the world (see [`Renderer::set_world`]) drawn first as `camera` sees it
+    /// and `overlay` on top.
+    pub fn render_world(
+        &mut self,
+        camera: &Camera,
+        overlay: &DrawList,
+        clear: Color,
+    ) -> Result<(), RenderError> {
+        self.render_scene(overlay, clear, Some(camera))
     }
 
     /// Like [`Renderer::render`] for a [`UiFrame`] (images, 9-slice, clip rectangles and everything else a
     /// frame can hold).
     pub fn render_frame(&mut self, frame: &UiFrame, clear: Color) -> Result<(), RenderError> {
-        self.render_scene(frame, clear)
+        self.render_scene(frame, clear, None)
     }
 
-    fn render_scene(&mut self, scene: &dyn UiScene, clear: Color) -> Result<(), RenderError> {
+    fn render_scene(
+        &mut self,
+        scene: &dyn UiScene,
+        clear: Color,
+        world: Option<&Camera>,
+    ) -> Result<(), RenderError> {
         self.check_device()?;
         if self.size.0 == 0 || self.size.1 == 0 {
             return Ok(());
@@ -526,15 +559,8 @@ impl Renderer {
             });
         let size = (self.size.0.max(1), self.size.1.max(1));
         let canvas = Canvas::fit(size.0, size.1).expect("size is non-zero");
-        self.draw(
-            &view,
-            &mut encoder,
-            scene,
-            to_wgpu_color(clear),
-            size,
-            &canvas,
-            true,
-        )?;
+        let ui_clear = self.encode_world(&mut encoder, &view, size, world, clear);
+        self.draw(&view, &mut encoder, scene, ui_clear, size, &canvas, true)?;
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
         self.text.trim();
@@ -570,7 +596,33 @@ impl Renderer {
                 "render_to_image() needs an offscreen renderer".into(),
             ));
         }
-        self.capture_image(Some(scene), clear, (self.size.0.max(1), self.size.1.max(1)))
+        self.capture_image(
+            Some(scene),
+            clear,
+            (self.size.0.max(1), self.size.1.max(1)),
+            None,
+        )
+    }
+
+    /// Draw the world as `camera` sees it, with `overlay` on top, and read it back as RGBA8 (offscreen or
+    /// windowed, at the current size). Needs an 8-bit colour target.
+    pub fn render_world_to_image(
+        &mut self,
+        camera: &Camera,
+        overlay: Option<&DrawList>,
+        clear: Color,
+    ) -> Result<ImageRgba8, RenderError> {
+        if self.size.0 == 0 || self.size.1 == 0 {
+            return Err(RenderError::Device(
+                "cannot capture a zero-size framebuffer".into(),
+            ));
+        }
+        self.capture_image(
+            overlay.map(|l| l as &dyn UiScene),
+            clear,
+            self.size,
+            Some(camera),
+        )
     }
 
     /// Render a capture with the current framebuffer size and return tightly packed RGBA8 pixels.
@@ -604,7 +656,7 @@ impl Renderer {
                 "cannot capture a zero-size framebuffer".into(),
             ));
         }
-        self.capture_image(overlay, clear, self.size)
+        self.capture_image(overlay, clear, self.size, None)
     }
 
     fn capture_image(
@@ -612,6 +664,7 @@ impl Renderer {
         overlay: Option<&dyn UiScene>,
         clear: Color,
         size: (u32, u32),
+        world: Option<&Camera>,
     ) -> Result<ImageRgba8, RenderError> {
         self.check_device()?;
         let format = match &self.target {
@@ -625,7 +678,12 @@ impl Renderer {
             wgpu::TextureFormat::Rgba8Unorm
             | wgpu::TextureFormat::Rgba8UnormSrgb
             | wgpu::TextureFormat::Bgra8Unorm
-            | wgpu::TextureFormat::Bgra8UnormSrgb => self.read_frame(overlay, clear, size, format),
+            | wgpu::TextureFormat::Bgra8UnormSrgb => {
+                self.read_frame(overlay, clear, size, format, world)
+            }
+            _ if world.is_some() => Err(RenderError::World(format!(
+                "capturing the world needs an 8-bit target, not {format:?}"
+            ))),
             _ => {
                 let format = wgpu::TextureFormat::Rgba8Unorm;
                 let texture = capture_texture(&self.device, format, size)?;
@@ -643,7 +701,7 @@ impl Renderer {
                 // The images are made again in the temporary renderer's own format.
                 temporary.images = self.images.clone_cpu();
                 temporary.restore_images()?;
-                temporary.read_frame(overlay, clear, size, format)
+                temporary.read_frame(overlay, clear, size, format, None)
             }
         }
     }
@@ -654,6 +712,7 @@ impl Renderer {
         clear: Color,
         (w, h): (u32, u32),
         format: wgpu::TextureFormat,
+        world: Option<&Camera>,
     ) -> Result<ImageRgba8, RenderError> {
         let swap_red_blue = matches!(
             format,
@@ -673,11 +732,12 @@ impl Renderer {
             });
         let size = (self.size.0.max(1), self.size.1.max(1));
         let canvas = Canvas::fit(size.0, size.1).expect("size is non-zero");
+        let ui_clear = self.encode_world(&mut encoder, &view, (w, h), world, clear);
         self.draw(
             &view,
             &mut encoder,
             overlay.unwrap_or(&DrawList::default()),
-            to_wgpu_color(clear),
+            ui_clear,
             size,
             &canvas,
             true,
@@ -762,8 +822,35 @@ impl Renderer {
         Ok(pixels)
     }
 
+    /// With a camera, clear `view` and draw the world into it, then return `None` so the 2D pass draws on top;
+    /// without one, return the clear colour for the 2D pass.
+    fn encode_world(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: Option<&Camera>,
+        clear: Color,
+    ) -> Option<wgpu::Color> {
+        let clear = to_wgpu_color(clear);
+        let Some(camera) = camera else {
+            return Some(clear);
+        };
+        self.world.encode(
+            &self.device,
+            &self.queue,
+            encoder,
+            view,
+            size,
+            camera,
+            clear,
+        );
+        None
+    }
+
     /// Draw `scene` into `view` (a texture of `size` pixels): plan the batches, upload the vertices and prepare
-    /// the text, then one render pass that draws the batches in order, each with its own scissor rectangle.
+    /// the text, then one render pass that draws the batches in order, each with its own scissor rectangle. The
+    /// pass clears to `clear`, or keeps what `view` holds when it is `None` (the world is under the 2D pass).
     /// With `strict` an image the scene names that is not registered is an error; without it the command is
     /// skipped (used to draw a render target again, whose images may have been destroyed since).
     #[allow(clippy::too_many_arguments)]
@@ -772,7 +859,7 @@ impl Renderer {
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
         scene: &dyn UiScene,
-        clear: wgpu::Color,
+        clear: Option<wgpu::Color>,
         size: (u32, u32),
         canvas: &Canvas,
         strict: bool,
@@ -834,7 +921,7 @@ impl Renderer {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear),
+                    load: clear.map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -883,6 +970,42 @@ impl Renderer {
             }
         }
         Ok(())
+    }
+
+    /// Whether textures in `format` can be uploaded ([`TexelFormat::Rgba8`] always; the BC formats when the
+    /// GPU supports them).
+    pub fn supports(&self, format: TexelFormat) -> bool {
+        self.world.supports(format)
+    }
+
+    /// Upload a mesh for the world. The handle lasts until the world is dropped (see
+    /// [`Renderer::world_generation`]).
+    pub fn create_mesh(&mut self, mesh: &MeshData) -> Result<MeshHandle, RenderError> {
+        self.world.create_mesh(&self.device, mesh)
+    }
+
+    /// Upload a texture for the world. Bytes are used as they are: on an sRGB target the texture is sampled as
+    /// sRGB, so a texel drawn at full light shows its own bytes either way.
+    pub fn create_texture(&mut self, texture: &TextureData) -> Result<TextureHandle, RenderError> {
+        self.world
+            .create_texture(&self.device, &self.queue, texture)
+    }
+
+    /// Replace what the world draws. Nothing changes if it returns an error (a stale or unknown handle, a
+    /// non-finite matrix, tint or cutoff).
+    pub fn set_world(&mut self, batches: Vec<WorldBatch>) -> Result<(), RenderError> {
+        self.world.set_world(&self.device, batches)
+    }
+
+    /// Drop every mesh, texture and batch of the world.
+    pub fn clear_world(&mut self) {
+        self.world.clear();
+    }
+
+    /// Changes whenever the world is dropped: by [`Renderer::clear_world`], or by a GPU device rebuild after
+    /// which the owner of the level must upload it again. Handles from another generation are refused.
+    pub fn world_generation(&self) -> u64 {
+        self.world.generation()
     }
 
     /// Make an image the renderer can draw: `image` is uploaded and a copy of its pixels is kept, so that it
@@ -1059,7 +1182,7 @@ impl Renderer {
             &view,
             &mut encoder,
             frame,
-            premultiplied,
+            Some(premultiplied),
             size,
             &canvas,
             strict,
