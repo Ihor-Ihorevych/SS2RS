@@ -5,6 +5,7 @@
 - [Architecture overview](architecture.md)
 - [Design](superpowers/specs/2026-11-21-ss2rs-design.md)
 - [Playable MVP design](superpowers/specs/2026-11-27-playable-mvp-design.md)
+- [Playing a level](PLAYING.md)
 
 # User guide
 
