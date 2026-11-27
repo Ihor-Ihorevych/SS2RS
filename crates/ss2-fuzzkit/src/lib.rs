@@ -108,6 +108,12 @@ pub const TARGETS: &[Target] = &[
         seeds: seeds::format_rsc,
     },
     Target {
+        name: "format_wld",
+        parsers: "ss2_format_wld::World::from_bytes",
+        run: format_wld,
+        seeds: seeds::format_wld,
+    },
+    Target {
         name: "audio_decode",
         parsers: "ss2_audio::decode::{sniff, probe, decode, decode_wav, decode_vorbis, VorbisStream, last_granule}, ss2_audio::wav::decode",
         run: audio_decode,
