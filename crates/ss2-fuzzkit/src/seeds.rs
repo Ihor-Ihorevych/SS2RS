@@ -148,6 +148,29 @@ pub fn format_mtr() -> Vec<Seed> {
     ]
 }
 
+/// The seeds of `format_wld`: a world with static models, a spawn marker and a chapter, and the same world with a
+/// second root and with a dangling entity (both refused).
+pub fn format_wld() -> Vec<Seed> {
+    use builders::wld::{NORMAL, Variant, world_file};
+    vec![
+        seed("world", world_file(NORMAL)),
+        seed(
+            "two_roots",
+            world_file(Variant {
+                worlds: 2,
+                ..NORMAL
+            }),
+        ),
+        seed(
+            "dangling_entity",
+            world_file(Variant {
+                entity_override: Some(77),
+                ..NORMAL
+            }),
+        ),
+    ]
+}
+
 /// The seeds of `format_mdl`: a model with an embedded quad mesh and its preset, one with an
 /// external mesh and a null instance, and one with a helper configuration next to the main one.
 pub fn format_mdl() -> Vec<Seed> {

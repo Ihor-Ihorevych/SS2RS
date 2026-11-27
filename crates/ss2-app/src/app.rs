@@ -1,23 +1,21 @@
-//! The interactive window: winit event loop, input routing, rendering and settings effects.
+//! The interactive window (T03-033): the platform loop (`ss2_platform::window::run`) drives the app through
+//! `PlatformEvent`s; the app routes input to the menu, renders and applies settings effects.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Instant;
+use std::time::Duration;
 
-use gilrs::{Axis, EventType, Gilrs};
 use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
-use ss2_platform::nav::{StickNavigator, map_gamepad_button, map_key};
-use ss2_platform_api::PlatformPaths;
+use ss2_platform::nav::StickNavigator;
+use ss2_platform::window::{PlatformApp, PlatformWindow, WindowConfig};
+use ss2_platform_api::{
+    AppControl, AppHandler, FrameInfo, GamepadAxis, InputEvent, KeyCode, LifecycleEvent,
+    MouseButton, PlatformEvent, PlatformPaths,
+};
 use ss2_render::Renderer;
 use ss2_ui::{Canvas, Color, DrawList, Menu, UiInput, Vec2, theme};
-use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::{Fullscreen, Window, WindowId};
 
+use crate::input::{nav_for_button, nav_for_key};
 use crate::state::{AppState, Effects, Scene};
 use crate::{profiling, screenshot};
 
@@ -32,13 +30,16 @@ struct App {
     settings_path: Option<PathBuf>,
     screenshot_dir: Option<PathBuf>,
     capture_pending: bool,
-    window: Option<Arc<Window>>,
+    window: Option<PlatformWindow>,
     renderer: Option<Renderer>,
-    gilrs: Option<Gilrs>,
+    /// The left stick, for menu navigation with key-repeat.
     stick: StickNavigator,
+    stick_xy: (f32, f32),
+    /// Time since start, summed from frame deltas (for the stick's repeat).
+    clock: Duration,
     cursor: Vec2,
-    started: Instant,
     frames_left: Option<u32>,
+    exit: bool,
     failure: Option<String>,
 }
 
@@ -72,34 +73,17 @@ pub fn run(
         .map(PlatformPaths::settings_file)
         .or_else(Settings::default_path);
     let settings = effective_settings(settings_path.as_deref(), overrides)?;
-    let gilrs = match Gilrs::new() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            tracing::warn!("gamepad support unavailable: {e}");
-            None
-        }
+    let config = WindowConfig {
+        fullscreen: settings.fullscreen,
+        ..WindowConfig::default()
     };
-    let mut app = App {
-        state: AppState::new(settings.clone()),
-        menu: Menu::new(settings),
-        draw_list: DrawList::default(),
+    let mut app = App::new(
+        settings,
         settings_path,
-        screenshot_dir: paths.map(|paths| paths.save_dir.join("screenshots")),
-        capture_pending: false,
-        window: None,
-        renderer: None,
-        gilrs,
-        stick: StickNavigator::new(),
-        cursor: Vec2::default(),
-        started: Instant::now(),
-        frames_left: smoke_frames,
-        failure: None,
-    };
-    let event_loop = EventLoop::new().map_err(|e| format!("cannot create the event loop: {e}"))?;
-    event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop
-        .run_app(&mut app)
-        .map_err(|e| format!("event loop error: {e}"))?;
+        paths.map(|paths| paths.save_dir.join("screenshots")),
+        smoke_frames,
+    );
+    ss2_platform::window::run(&config, &mut app).map_err(|e| e.to_string())?;
     match app.failure {
         Some(message) => Err(message),
         None => Ok(()),
@@ -107,19 +91,52 @@ pub fn run(
 }
 
 impl App {
-    fn canvas(&self) -> Option<Canvas> {
-        let size = self.window.as_ref()?.inner_size();
-        Canvas::fit(size.width, size.height)
-    }
-
-    fn pointer(&mut self, event_loop: &ActiveEventLoop, make: fn(Vec2) -> UiInput) {
-        if let Some(canvas) = self.canvas() {
-            let p = canvas.to_canvas(self.cursor);
-            self.dispatch(event_loop, make(p));
+    fn new(
+        settings: Settings,
+        settings_path: Option<PathBuf>,
+        screenshot_dir: Option<PathBuf>,
+        frames_left: Option<u32>,
+    ) -> Self {
+        Self {
+            state: AppState::new(settings.clone()),
+            menu: Menu::new(settings),
+            draw_list: DrawList::default(),
+            settings_path,
+            screenshot_dir,
+            capture_pending: false,
+            window: None,
+            renderer: None,
+            stick: StickNavigator::new(),
+            stick_xy: (0.0, 0.0),
+            clock: Duration::ZERO,
+            cursor: Vec2::default(),
+            frames_left,
+            exit: false,
+            failure: None,
         }
     }
 
-    fn dispatch(&mut self, event_loop: &ActiveEventLoop, input: UiInput) {
+    fn control(&self) -> AppControl {
+        if self.exit {
+            AppControl::Exit
+        } else {
+            AppControl::Continue
+        }
+    }
+
+    fn canvas(&self) -> Option<Canvas> {
+        let (w, h) = self.window.as_ref()?.size();
+        Canvas::fit(w, h)
+    }
+
+    fn pointer(&mut self, make: fn(Vec2) -> UiInput) {
+        if let Some(canvas) = self.canvas() {
+            let p = canvas.to_canvas(self.cursor);
+            self.dispatch(make(p));
+        }
+    }
+
+    fn dispatch(&mut self, input: UiInput) {
         match self.state.scene {
             Scene::Playing => {
                 if input == UiInput::Nav(NavInput::Back) {
@@ -130,21 +147,21 @@ impl App {
             Scene::Menu => {
                 for cmd in self.menu.handle(input) {
                     let effects = self.state.apply(cmd);
-                    self.run_effects(event_loop, effects);
+                    self.run_effects(effects);
                 }
             }
         }
     }
 
-    fn run_effects(&mut self, event_loop: &ActiveEventLoop, fx: Effects) {
+    fn run_effects(&mut self, fx: Effects) {
         if fx.exit {
-            event_loop.exit();
+            self.exit = true;
         }
         if let (Some(vsync), Some(r)) = (fx.set_vsync, self.renderer.as_mut()) {
             r.set_vsync(vsync);
         }
         if let (Some(full), Some(w)) = (fx.set_fullscreen, self.window.as_ref()) {
-            w.set_fullscreen(full.then_some(Fullscreen::Borderless(None)));
+            w.set_fullscreen(full);
         }
         if fx.save_settings
             && let Some(path) = &self.settings_path
@@ -154,29 +171,20 @@ impl App {
         }
     }
 
-    fn poll_gamepad(&mut self) -> Vec<UiInput> {
-        let mut inputs = Vec::new();
-        let Some(gilrs) = self.gilrs.as_mut() else {
-            return inputs;
-        };
-        while let Some(event) = gilrs.next_event() {
-            if let EventType::ButtonPressed(button, _) = event.event
-                && let Some(nav) = map_gamepad_button(button)
-            {
-                inputs.push(UiInput::Nav(nav));
+    fn key_pressed(&mut self, key: KeyCode, repeat: bool) {
+        if key == KeyCode::F12 {
+            if !repeat {
+                self.capture_pending = self.screenshot_dir.is_some();
+                if !self.capture_pending && self.frames_left.is_none() {
+                    tracing::warn!("no screenshot folder is available");
+                }
             }
+        } else if let Some(nav) = nav_for_key(key) {
+            self.dispatch(UiInput::Nav(nav));
         }
-        if let Some((_, pad)) = gilrs.gamepads().next() {
-            let now_ms = self.started.elapsed().as_millis() as u64;
-            let (x, y) = (pad.value(Axis::LeftStickX), pad.value(Axis::LeftStickY));
-            if let Some(nav) = self.stick.update(x, y, now_ms) {
-                inputs.push(UiInput::Nav(nav));
-            }
-        }
-        inputs
     }
 
-    fn redraw(&mut self, event_loop: &ActiveEventLoop) {
+    fn redraw(&mut self) {
         profiling::frame();
         profiling::profile_scope!("redraw");
         let clear = match self.state.scene {
@@ -197,7 +205,7 @@ impl App {
         };
         if let Some(Err(e)) = rendered {
             self.failure = Some(format!("rendering failed: {e}"));
-            event_loop.exit();
+            self.exit = true;
             return;
         }
         if self.capture_pending && self.canvas().is_some() {
@@ -213,113 +221,106 @@ impl App {
                 }
             }
         }
-        if let Some(left) = self.frames_left.as_mut() {
-            *left = left.saturating_sub(1);
-            if *left == 0 {
-                event_loop.exit();
-            }
-        }
     }
 }
 
-impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
-            return;
-        }
-        let attributes = Window::default_attributes()
-            .with_title("SS2RS")
-            .with_inner_size(LogicalSize::new(1280.0, 720.0))
-            .with_fullscreen(
-                self.state
-                    .settings
-                    .fullscreen
-                    .then_some(Fullscreen::Borderless(None)),
-            );
-        let window = match event_loop.create_window(attributes) {
-            Ok(w) => Arc::new(w),
-            Err(e) => {
-                self.failure = Some(format!("cannot create the window: {e}"));
-                event_loop.exit();
-                return;
-            }
-        };
-        let size = window.inner_size();
-        match Renderer::new_windowed(
-            Box::new(event_loop.owned_display_handle()),
-            window.clone(),
-            (size.width, size.height),
-            self.state.settings.vsync,
-        ) {
-            Ok(renderer) => self.renderer = Some(renderer),
-            Err(e) => {
-                self.failure = Some(format!("cannot start the renderer: {e}"));
-                event_loop.exit();
-                return;
-            }
-        }
-        window.request_redraw();
-        self.window = Some(window);
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+impl AppHandler for App {
+    fn event(&mut self, event: PlatformEvent) -> AppControl {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => {
+            PlatformEvent::Lifecycle(LifecycleEvent::CloseRequested) => self.exit = true,
+            PlatformEvent::Lifecycle(
+                LifecycleEvent::Resized { width, height }
+                | LifecycleEvent::SurfaceReady(ss2_platform_api::SurfaceInfo {
+                    width, height, ..
+                }),
+            ) => {
                 if let Some(r) = self.renderer.as_mut() {
-                    r.resize(size.width, size.height);
+                    r.resize(width, height);
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
-                self.cursor = Vec2 {
-                    x: position.x as f32,
-                    y: position.y as f32,
-                };
-                self.pointer(event_loop, UiInput::PointerMoved);
+            PlatformEvent::Input(InputEvent::Key {
+                key,
+                pressed: true,
+                repeat,
+            }) => self.key_pressed(key, repeat),
+            PlatformEvent::Input(InputEvent::CursorMoved { x, y }) => {
+                self.cursor = Vec2 { x, y };
+                self.pointer(UiInput::PointerMoved);
             }
-            WindowEvent::MouseInput {
-                state,
+            PlatformEvent::Input(InputEvent::MouseButton {
                 button: MouseButton::Left,
-                ..
-            } => {
-                let make: fn(Vec2) -> UiInput = match state {
-                    ElementState::Pressed => UiInput::PointerPressed,
-                    ElementState::Released => UiInput::PointerReleased,
+                pressed,
+            }) => {
+                let make: fn(Vec2) -> UiInput = if pressed {
+                    UiInput::PointerPressed
+                } else {
+                    UiInput::PointerReleased
                 };
-                self.pointer(event_loop, make);
+                self.pointer(make);
             }
-            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let PhysicalKey::Code(code) = event.physical_key {
-                    if code == KeyCode::F12 {
-                        if !event.repeat {
-                            self.capture_pending = self.screenshot_dir.is_some();
-                            if !self.capture_pending && self.frames_left.is_none() {
-                                tracing::warn!("no screenshot folder is available");
-                            }
-                        }
-                    } else if let Some(nav) = map_key(code) {
-                        self.dispatch(event_loop, UiInput::Nav(nav));
-                    }
+            PlatformEvent::Input(InputEvent::GamepadButton {
+                button,
+                pressed: true,
+                ..
+            }) => {
+                if let Some(nav) = nav_for_button(button) {
+                    self.dispatch(UiInput::Nav(nav));
                 }
             }
-            WindowEvent::RedrawRequested => self.redraw(event_loop),
+            PlatformEvent::Input(InputEvent::GamepadAxis { axis, value, .. }) => match axis {
+                GamepadAxis::LeftStickX => self.stick_xy.0 = value,
+                GamepadAxis::LeftStickY => self.stick_xy.1 = value,
+                _ => {}
+            },
             _ => {}
         }
+        self.control()
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        for input in self.poll_gamepad() {
-            self.dispatch(event_loop, input);
+    fn frame(&mut self, frame: &FrameInfo) -> AppControl {
+        self.clock += frame.delta;
+        let now_ms = u64::try_from(self.clock.as_millis()).unwrap_or(u64::MAX);
+        if let Some(nav) = self.stick.update(self.stick_xy.0, self.stick_xy.1, now_ms) {
+            self.dispatch(UiInput::Nav(nav));
         }
-        if let Some(window) = &self.window {
-            window.request_redraw();
+        self.redraw();
+        if let Some(left) = self.frames_left.as_mut() {
+            *left = left.saturating_sub(1);
+            if *left == 0 {
+                self.exit = true;
+            }
         }
+        self.control()
+    }
+}
+
+impl PlatformApp for App {
+    fn window_ready(&mut self, window: &PlatformWindow) -> Result<(), String> {
+        if self.renderer.is_none() {
+            let renderer = Renderer::new_windowed(
+                Box::new(window.display_handle()),
+                window.window().clone(),
+                window.size(),
+                self.state.settings.vsync,
+            )
+            .map_err(|e| format!("cannot start the renderer: {e}"))?;
+            self.renderer = Some(renderer);
+        }
+        self.window = Some(window.clone());
+        Ok(())
+    }
+
+    fn window_lost(&mut self) {
+        self.renderer = None;
+        self.window = None;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ss2_platform_api::{GamepadButton, GamepadId, ScriptStep, run_script};
+    use ss2_ui::ScreenId;
 
     #[test]
     fn without_a_file_or_overrides_the_platform_defaults_apply() {
@@ -346,5 +347,142 @@ mod tests {
     fn a_bad_override_is_an_error_naming_it() {
         let message = effective_settings(None, &["brightness=1".to_owned()]).unwrap_err();
         assert!(message.contains("brightness"), "{message}");
+    }
+
+    fn app() -> App {
+        App::new(
+            Settings::for_platform(ss2_core::settings::PlatformClass::current()),
+            None,
+            None,
+            None,
+        )
+    }
+
+    fn key(key: KeyCode) -> ScriptStep {
+        InputEvent::Key {
+            key,
+            pressed: true,
+            repeat: false,
+        }
+        .into()
+    }
+
+    #[test]
+    fn closing_the_window_exits() {
+        let mut a = app();
+        let report = run_script(
+            &mut a,
+            [
+                ScriptStep::Frame,
+                LifecycleEvent::CloseRequested.into(),
+                ScriptStep::Frame,
+            ],
+        );
+        assert!(report.exited);
+        assert_eq!(report.frames, 1);
+    }
+
+    #[test]
+    fn enter_starts_the_game_and_escape_pauses_it() {
+        let mut a = app();
+        run_script(&mut a, [key(KeyCode::Enter), ScriptStep::Frame]);
+        assert_eq!(a.state.scene, Scene::Playing);
+        run_script(&mut a, [key(KeyCode::Escape), ScriptStep::Frame]);
+        assert_eq!(a.state.scene, Scene::Menu);
+        assert_eq!(a.menu.screen(), ScreenId::Pause);
+    }
+
+    #[test]
+    fn quit_from_the_main_menu_exits() {
+        let mut a = app();
+        let report = run_script(
+            &mut a,
+            [
+                key(KeyCode::ArrowDown),
+                key(KeyCode::ArrowDown),
+                key(KeyCode::ArrowDown),
+                key(KeyCode::Enter),
+                ScriptStep::Frame,
+            ],
+        );
+        assert!(report.exited);
+    }
+
+    #[test]
+    fn released_and_repeated_keys_do_not_navigate_twice() {
+        let mut a = app();
+        run_script(
+            &mut a,
+            [InputEvent::Key {
+                key: KeyCode::Enter,
+                pressed: false,
+                repeat: false,
+            }
+            .into()],
+        );
+        assert_eq!(a.state.scene, Scene::Menu, "a release does nothing");
+    }
+
+    #[test]
+    fn the_gamepad_navigates_with_buttons_and_the_held_stick_repeats() {
+        let mut a = app();
+        let start = a.menu.focused();
+        let pad = GamepadId(0);
+        let mut steps: Vec<ScriptStep> = vec![
+            InputEvent::GamepadAxis {
+                pad,
+                axis: GamepadAxis::LeftStickY,
+                value: -1.0,
+            }
+            .into(),
+        ];
+        steps.push(ScriptStep::Frame);
+        run_script(&mut a, steps);
+        assert_ne!(a.menu.focused(), start, "the stick moved the focus down");
+        let after_one = a.menu.focused();
+        // Held for half a second: it repeats.
+        run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 30));
+        assert_ne!(a.menu.focused(), after_one, "held, it repeats");
+        // Released, then South activates whatever is focused (here: not New Game, so still the menu).
+        run_script(
+            &mut a,
+            [InputEvent::GamepadAxis {
+                pad,
+                axis: GamepadAxis::LeftStickY,
+                value: 0.0,
+            }
+            .into()],
+        );
+        let mut b = app();
+        run_script(
+            &mut b,
+            [InputEvent::GamepadButton {
+                pad,
+                button: GamepadButton::South,
+                pressed: true,
+            }
+            .into()],
+        );
+        assert_eq!(b.state.scene, Scene::Playing, "South activates New Game");
+    }
+
+    #[test]
+    fn smoke_frames_exit_after_the_count() {
+        let mut a = App::new(
+            Settings::for_platform(ss2_core::settings::PlatformClass::current()),
+            None,
+            None,
+            Some(3),
+        );
+        let report = run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 10));
+        assert_eq!((report.frames, report.exited), (3, true));
+    }
+
+    #[test]
+    fn f12_without_a_screenshot_folder_does_nothing() {
+        let mut a = app();
+        run_script(&mut a, [key(KeyCode::F12), ScriptStep::Frame]);
+        assert!(!a.capture_pending);
+        assert_eq!(a.state.scene, Scene::Menu);
     }
 }
