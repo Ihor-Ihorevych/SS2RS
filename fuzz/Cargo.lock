@@ -599,6 +599,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-skl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
 name = "ss2-format-tex"
 version = "0.0.0"
 dependencies = [
@@ -623,6 +632,7 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "ss2-core",
+ "ss2-format-skl",
  "ss2-fuzzkit",
  "ss2-game",
  "ss2-net",

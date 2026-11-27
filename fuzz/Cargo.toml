@@ -12,6 +12,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 ss2-core = { path = "../crates/ss2-core" }
+ss2-format-skl = { path = "../crates/ss2-format-skl" }
 ss2-fuzzkit = { path = "../crates/ss2-fuzzkit" }
 ss2-vfs = { path = "../crates/ss2-vfs" }
 ss2-game = { path = "../crates/ss2-game" }
@@ -236,6 +237,13 @@ bench = false
 [[bin]]
 name = "net_chunks"
 path = "fuzz_targets/net_chunks.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "skeleton_parse"
+path = "fuzz_targets/skeleton_parse.rs"
 test = false
 doc = false
 bench = false
