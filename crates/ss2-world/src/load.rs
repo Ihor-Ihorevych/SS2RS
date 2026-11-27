@@ -258,6 +258,8 @@ pub fn load_level(
         instances,
         spawns,
         skipped: loader.skipped,
+        // The sky is read by T07-033.
+        sky: None,
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
     Ok(scene)

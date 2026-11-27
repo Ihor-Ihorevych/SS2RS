@@ -219,6 +219,69 @@ impl MaterialData {
     }
 }
 
+/// A face of a sky cube (RFC 0013 amendment 1), in the order sky data lists them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CubeFace {
+    /// Towards +X.
+    PosX,
+    /// Towards -X.
+    NegX,
+    /// Towards +Y, the sky above.
+    PosY,
+    /// Towards -Y, below.
+    NegY,
+    /// Towards +Z.
+    PosZ,
+    /// Towards -Z.
+    NegZ,
+}
+
+impl CubeFace {
+    /// Every face, in index order.
+    pub const ALL: [Self; 6] = [
+        Self::PosX,
+        Self::NegX,
+        Self::PosY,
+        Self::NegY,
+        Self::PosZ,
+        Self::NegZ,
+    ];
+
+    /// The face's position in [`CubeFace::ALL`].
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The orientation convention, seen from inside the cube: the direction the face looks towards, and the world
+    /// directions of its image's right and down (texel (0, 0) is the image's top-left corner).
+    pub fn basis(self) -> FaceBasis {
+        let (forward, right, down) = match self {
+            Self::PosX => (Vec3::X, Vec3::Z, Vec3::NEG_Y),
+            Self::NegX => (Vec3::NEG_X, Vec3::NEG_Z, Vec3::NEG_Y),
+            Self::PosY => (Vec3::Y, Vec3::X, Vec3::NEG_Z),
+            Self::NegY => (Vec3::NEG_Y, Vec3::X, Vec3::Z),
+            Self::PosZ => (Vec3::Z, Vec3::NEG_X, Vec3::NEG_Y),
+            Self::NegZ => (Vec3::NEG_Z, Vec3::X, Vec3::NEG_Y),
+        };
+        FaceBasis {
+            forward,
+            right,
+            down,
+        }
+    }
+}
+
+/// See [`CubeFace::basis`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FaceBasis {
+    /// Where the face is, seen from the cube's centre.
+    pub forward: Vec3,
+    /// The world direction of the image's +u (right).
+    pub right: Vec3,
+    /// The world direction of the image's +v (down).
+    pub down: Vec3,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +299,31 @@ mod tests {
             vertices: vec![v(0.0, 0.0, 0.0), v(2.0, 0.0, 0.0), v(0.0, -1.0, 3.0)],
             indices: vec![0, 1, 2],
         }
+    }
+
+    #[test]
+    fn every_cube_face_is_upright_and_seen_from_inside() {
+        for (i, face) in CubeFace::ALL.into_iter().enumerate() {
+            assert_eq!(face.index(), i);
+            let b = face.basis();
+            // Right, down and forward are unit and at right angles.
+            for v in [b.forward, b.right, b.down] {
+                assert!((v.length() - 1.0).abs() < 1e-6);
+            }
+            assert!(b.right.dot(b.down).abs() < 1e-6 && b.right.dot(b.forward).abs() < 1e-6);
+            // Seen from inside, right = forward x up (up is -down), as for a camera looking at the face: not mirrored.
+            assert!(
+                (b.forward.cross(-b.down) - b.right).length() < 1e-6,
+                "{face:?}"
+            );
+            // The side faces stand upright.
+            if b.forward.y == 0.0 {
+                assert_eq!(b.down, Vec3::NEG_Y, "{face:?}");
+            }
+        }
+        // Looking up from facing -Z, the image's top is behind (+Z); looking down, it is ahead (-Z).
+        assert_eq!(CubeFace::PosY.basis().down, Vec3::NEG_Z);
+        assert_eq!(CubeFace::NegY.basis().down, Vec3::Z);
     }
 
     #[test]
