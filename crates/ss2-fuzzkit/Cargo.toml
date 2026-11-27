@@ -1,0 +1,35 @@
+[package]
+name = "ss2-fuzzkit"
+description = "the properties and synthetic seeds behind the cargo-fuzz targets of fuzz/, also run on stable by the test suite (T02-030)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-vfs = { path = "../ss2-vfs" }
+ss2-meta = { path = "../ss2-meta" }
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-format-ans = { path = "../ss2-format-ans" }
+ss2-format-bmf = { path = "../ss2-format-bmf" }
+ss2-format-ep = { path = "../ss2-format-ep" }
+ss2-format-fnt = { path = "../ss2-format-fnt" }
+ss2-format-fx = { path = "../ss2-format-fx" }
+ss2-format-mat = { path = "../ss2-format-mat" }
+ss2-format-mdl = { path = "../ss2-format-mdl" }
+ss2-format-mtr = { path = "../ss2-format-mtr" }
+ss2-format-rsc = { path = "../ss2-format-rsc" }
+ss2-format-tex = { path = "../ss2-format-tex" }
+ss2-audio = { path = "../ss2-audio" }
+ss2-audio-api = { path = "../ss2-audio-api" }
+ss2-game = { path = "../ss2-game" }
+ss2-ui = { path = "../ss2-ui" }
+ss2-net = { path = "../ss2-net" }
+arbitrary = "1"
+flate2.workspace = true

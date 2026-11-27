@@ -20,3 +20,4 @@ zip.workspace = true
 [dev-dependencies]
 ss2-testkit = { path = "../ss2-testkit" }
 tempfile.workspace = true
+proptest.workspace = true

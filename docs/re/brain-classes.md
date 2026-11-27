@@ -84,9 +84,9 @@ When a puppet is created or booted and has no brain yet:
 1. If the puppet **has a character behavior** (its `.cb`, which the brain calls `StartCharacterAction` on), the brain is the **plain `CBrainEntity`**: a brain properties object of the base class is built in memory, given the puppet's placement, and spawned.
 2. If the puppet has **no** character behavior, the puppet's **class name** is taken, the text `PuppetEntity` in it is replaced by `BrainProperties`, and a class of that name is looked up (`CKleerPuppetEntity` -> `CKleerBrainProperties`, `CPlayerPuppetEntity` -> `CPlayerBrainProperties`, `CPuppetEntity` -> `CBrainProperties`). If it exists and derives from the brain properties class, **it is spawned** (and its entity is the brain). The pairing exists for 18 of the 19 kinds (all but `CCharacterBrain` and `CAIBrain`) and for the player.
 3. If nothing was created, the plain `CBrainProperties` is built and spawned: the brain is the base class. This is what a `CLeggedPuppetEntity` and a `CRollingBallPuppetEntity` without a behavior get (their names have no partner class).
-4. The puppet then stores the brain in both its brain and default-brain links, copies one of its own members (an initial sight or perception mode, **name unknown**) into another (the member that `GetSeeDistance` reads), and calls the brain's `OnCreatedByPuppet`.
+4. The puppet then stores the brain in both its brain and default-brain links, copies `en_tsDefaultThreatSensitivity` into `en_tsCurrentThreatSensitivity` (the member that `GetSeeDistance` reads; T01-125), connects the brain and calls its `OnCreatedByPuppet`. **When and where this runs** (host only, from the puppet's `OnBoot`, spawner link empty), the data side and the corrections are in [`brain-assignment.md`](brain-assignment.md) (T01-125).
 
-Consequences: the player gets `CPlayerBrainEntity` (`players-session-classes.md`); **every puppet of the shipped data that has a `.cb` behavior gets `CBrainEntity`** (the puppet classes the data uses are the six of section 6); a puppet without a behavior and of a kind with an obsolete brain would print the obsolete-class error (either this does not happen in the shipped data or the rule is wrong; **not verified**, T01-125).
+Consequences: the player gets `CPlayerBrainEntity` (`players-session-classes.md`); **every puppet of the shipped data that has a `.cb` behavior gets `CBrainEntity`** (the puppet classes the data uses are the six of section 6); a puppet without a behavior and of a kind with an obsolete brain would print the obsolete-class error: this does not happen in the shipped data, because no placed puppet has a class name with `PuppetEntity` in it (`brain-assignment.md` section 3, T01-125).
 
 ### 3. `CBrainEntity`: the 127 named methods
 
@@ -100,7 +100,7 @@ Grouped by role. "(name)" = only the name was used. Parameter lists are not reco
 | `OnBoot` | Clears the "foe assigned before" and "immediate think" flags; unless the brain is patrolling markers, calls `ReconsiderBehavior`. |
 | `OnShutDown` | Sets the state to default without running hooks, cancels pending thinking and sets all execution abilities. |
 | `OnDelete` | Deletes the foe manager entity and the current behavior entity, drops the current mover, and tells the world info entity to forget the brain (when the puppet was on its list). |
-| `OnCreatedByPuppet` | When `HasFoeManager` is true, spawns a foe manager (`CFoeManagerProperties` with this brain as its brain) and stores it (a spawned entity that is not a foe manager is discarded); makes the puppet the brain's default puppet; for a puppet that answers a certain question (not resolved), adds the brain to the world info entity's list of brains (the member `en_eaBrainsWithoutFoe` of `CWorldInfoEntity`: the name says "brains without foe"); enters the `.cb` state that the puppet stores as its initial state (`SetNewState`); raises one more moment whose name was not resolved (the data's `Born`, 6 lists, is the likely one; section 4.3). |
+| `OnCreatedByPuppet` | When `HasFoeManager` is true, spawns a foe manager (`CFoeManagerProperties` with this brain as its brain) and stores it (a spawned entity that is not a foe manager is discarded); makes the puppet the brain's default puppet; for a puppet that has seats (`IsRidable`), registers the **puppet** with the world info entity as a ride (`RegisterRide`, list `en_eaRidesInExisting`; corrected by T01-125, `brain-assignment.md` section 6); enters the `.cb` state that the puppet stores as its initial state (`SetNewState`); raises one more moment whose name was not resolved (the data's `Born`, 6 lists, is the likely one; section 4.3). |
 | `OnConnectedToPuppet`, `OnDisconnectFromPuppet` | Empty hooks (5 bytes each) for subclasses (name). |
 | `SwitchToDefaultPuppet` | Gives the controlled puppet back (tells it to release its operator) and makes the default puppet use this brain again. |
 | `PostReceiveUpdate` | After a network update, writes this brain into the puppet it points at, so that the puppet's brain link follows the replicated link. |
@@ -146,7 +146,7 @@ Grouped by role. "(name)" = only the name was used. Parameter lists are not reco
 | `CelebrateIKillSomeFoe`, `CelebrateIKillMyFoe`, `CelebrateFoeDied`, `CelebrateAllFoesDied` | Raise the moments `IKilledSomeFoe`, `IKilledMyFoe`, `MyFoeDied`, `AllFoesDied`. |
 | `GetSeeDistance` | The sight distance in world units: the global standard see distance (**100**, `rsc-ctl.md`); a puppet that carries a special sight setting can replace it by its own value or by the global short-sighted distance (**40**) and in one setting uses a fixed larger constant (which setting and which constant: T01-126). |
 | `GetFoeSeekingFOVDeg` | The field of view in degrees for seeking a foe: the puppet's own value when it is at least a small threshold, otherwise the global character field of view (**360**); a fixed value while examining a sound. |
-| `ExamineSoundSource` | A sound was heard at a position: unless a puppet setting (not resolved) says to ignore it, tells the puppet to look toward the position and enters `BS_EXAMINE_THREAT_SOUND`. |
+| `ExamineSoundSource` | A sound was heard at a position: unless the puppet's `en_fAllowedMovingRange` is 0 or more, orders the puppet to **walk to the position** (a go-to-point behaviour) and enters `BS_EXAMINE_THREAT_SOUND` (corrected by T01-129, `brain-senses.md` 5.3). |
 | `OnToolPicked` | Raises the moment `ToolPicked`. |
 | `OnStartRiding`, `OnStopRiding`, `OnTurnedOn`, `OnTurnedOff` | Raise the moments `StartRiding`, `StopRiding`, `TurnedOn`, `TurnedOff` (queued when moments cannot be handled right now). |
 
@@ -192,7 +192,7 @@ Grouped by role. "(name)" = only the name was used. Parameter lists are not reco
 
 | Method | What it does |
 |---|---|
-| `GetAvailableSeat` | Chooses a free seat among the ride's seats (name; it walks the ride's seat array). |
+| `GetAvailableSeat` | Chooses the first free seat of the ride: skips way-point seats, puppets-can't-seat seats, seats with a rider and seats reserved by instance mounts (`brain-rides.md` 1; no caller in the DLL). |
 | `CantPosessRide` | Raises the moment `CantPossesRide` and a macro event. |
 | `PossesRide`, `PossesCharacter` | Take control of a ride (a seat and the way to it are stored in the members of section 5) / of a character puppet. |
 | `ShouldTeleportToEnterRide` | Whether to teleport instead of walking to the seat (name; the player brain overrides it). |
@@ -304,11 +304,11 @@ After construction (**medium**): state `BS_DEFAULT`, `.cb` state `Default`, acti
 
 ## Open questions
 
-1. **Which brain class each shipped puppet kind really gets, and when `CreateBrain` runs** (T01-125): the rule in section 2.3 is read from one function; confirm on the running original that placed enemies run `CBrainEntity`, what a puppet without a `.cb` (rideable vehicles, `SRollingBallPuppetEntity`) gets, whether a client creates brains, and why `Aircraft`, `Hovercraft`, `Turret` and `WheeledVehicle` have an obsolete brain while their puppets are live; and how a puppet gets its behavior from its character name.
+1. **Which brain class each shipped puppet kind really gets, and when `CreateBrain` runs**: **answered by T01-125** in [`brain-assignment.md`](brain-assignment.md) (second reading of the rule, the one caller and its conditions, no brain on a client, the behaviorless brain, how a puppet gets its `.cb`, why the four kinds are dead, the two shells; **medium**, nothing run). Only the run-time confirmation stays open (T01-130, T01-240, T01-241).
 2. **The decision loop in full** (T01-126): the think period and its graph, the order inside `ThinkPoint`, the exact use of `GetMovePeriod`, the sight setting behind `GetSeeDistance`, the moments `Idle`, `Born` and the empty one, the meaning and names of the execution ability flags, the think routine of each state. Ties to T01-076 (enemy run time) and T01-038.
-3. **Mover choice, patrol and tactics** (T01-127): the full `MoveCharacter` selection (band lookup, tactic copy, navigation fallback, speed multipliers), patrol start and resume rules, goal points and the macro events; with T01-105 for the mover and behavior entities themselves.
-4. **Rides** (T01-128): seat choice, the way to a seat, teleport to enter, possession and exit; ties to `vehicles.md` and to the player's own ride rules (T01-114).
-5. **Foe and sense rules** (T01-129): what `OnCreatedByPuppet` registers in the world info's list of brains, how the foe manager and the brain split the work (the foe manager is T01-105), the sound examination, the hearing thresholds.
+3. **Mover choice, patrol and tactics**: **answered by T01-127** in [`brain-movement.md`](brain-movement.md) (band lookup, mover choice and keep rule, results and periods, tactic taking, patrol start, resume and stop, goal points, the macro events; **medium**, nothing run). Corrections there: the movement record holds the foe's last seen position, not a distance; ability bit 2 is the "may move" ability. Still open: T01-242, T01-243, T01-126.
+4. **Rides**: **answered by T01-128** in [`brain-rides.md`](brain-rides.md) (seat choice, `PossesRide` and its refusals, the possession and exit behaviours, teleport, abilities while entering, unregistering; **medium**, nothing run). Still open: T01-245 to T01-247.
+5. **Foe and sense rules**: **answered by T01-129** in [`brain-senses.md`](brain-senses.md) (registration, the split of work, the eight threat sensitivities, see distance, field of view, the foe search, the sound rules and thresholds, the alignment rule; **medium**, nothing run). Still open: T01-244, T01-156, T01-130.
 6. **Run-time checks on the original** (T01-130): which brain classes exist in a running level, the state sequence of one enemy (`Kleer`, `Albino`), the moment order, the see distance and field-of-view numbers, whether the obsolete-class error ever appears; numbers only (T01-038, T01-039).
 
 ## Test vectors

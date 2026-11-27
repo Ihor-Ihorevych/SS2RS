@@ -88,6 +88,6 @@ In-engine cutscenes use **camera entities** that play a camera animation with po
 
 ## Open questions
 
-- **Run-time rules** (task T01-073): the actual projection set-up (is 80° horizontal or vertical, how the weapon field of view is applied and whether the weapon uses its own near plane), how the spring and banking act, **head bob, sway, recoil and idle motion** (absent from the data), the death camera, and the zoom interpolation: measurement (T01-038/039) and the game module.
-- The units and roles of `SBaseWeaponRenderingParams.4` and `.5` and whether `.3` is in radians (the range suggests it).
+- **Run-time rules** (task T01-073): the actual projection set-up (is 80° horizontal or vertical, how the weapon field of view is applied and whether the weapon uses its own near plane), how the spring and banking act, **head bob, sway, recoil and idle motion** (absent from the data; the weapon bob, charge displacement and view springs are in `weapon-view.md`), the death camera, and the zoom interpolation: measurement (T01-038/039) and the game module.
+- The units and roles of `SBaseWeaponRenderingParams.4` and `.5` and whether `.3` is in radians: **answered in `weapon-view.md`** (`.4` is the near plane 0.1, `.5` the bobbing multiplier, `.3` radians; the main view's 80 degrees are horizontal at 4:3, widened for wider screens, with the sniper zoom as a multiplier).
 - Which code or script selects the seven cameras that no `.ep` file names (listed above).

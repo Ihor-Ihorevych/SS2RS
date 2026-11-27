@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-012a (part a of the world spec T01-012)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for how a static model is placed (every relation below was checked on all 25,383 static model entities of the 59 worlds), for the hull and collision-grid cell relation (all 30,085 hulls) and for which entity classes carry which geometry; **medium** for the primitive shape parameters; **low** for several integer members listed under "Open questions". The world contains **no brushes or terrain meshes**: the level architecture is placed models.
+- **Confidence:** **high** for how a static model is placed (every relation below was checked on all 25,383 static model entities of the 59 worlds), for the hull and collision-grid cell relation (all 30,085 hulls) and for which entity classes carry which geometry, and, as of T01-060 (`Core.dll`'s `CPrimitiveDesc::{GetVolume,GetBoundingBox,GetInnerRadius}` and `Engine.dll`'s `CEditorPrimitiveRenderable::AddToRendering`, read in full), for the names of the four collision `PrimitiveType` shapes and for editor renderables being conditionally drawn, not unconditionally skipped; **medium** for `CStaticModelProperties.5`/`.6` (now named, not just guessed, via their setters' own names) and for `PrimitiveType` 4's identity; **low** for the remaining integer members listed under "Open questions". The world contains **no brushes or terrain meshes**: the level architecture is placed models.
 
 Prerequisites: `wld-root.md` (root, entities, aspects, grids), `mdl.md` (models), `ctsemeta-objects.md`.
 
@@ -12,7 +12,7 @@ Almost all visible geometry is a **`CStaticModelEntity`**: an entity that places
 
 ## Evidence
 
-`tools/re/wld_geometry_verify.py` (read-only, `SS2_DATA_DIR`; about 20 minutes for all worlds) over the retail install with all patches. All counts are over **all 59 worlds**:
+`tools/re/wld_geometry_verify.py` (read-only, `SS2_DATA_DIR`; about 20 minutes for all worlds) over the retail install with all patches; **T01-060** additionally decompiled and read, in full: `Core.dll`'s `CPrimitiveDesc::{GetVolume,GetBoundingBox,GetInnerRadius,mdPostChange}`, `Engine.dll`'s `CEditorPrimitiveRenderable::AddToRendering`, `Engine.dll`'s `CModelRenderable::{SetCullDistance,SetFadeLength}` and their caller in `Sam2Game.dll`'s `CStaticModelEntity` construction. All counts are over **all 59 worlds**:
 
 - **25,383 static model entities.** Every renderable is owned by its entity (25,383); the entity's model (`CStaticModelEntity.6`) equals the model named by its renderable's instance (25,383) and by its property record (`CStaticModelProperties.1`, 25,383); **all 25,274 external model references resolve to an existing `.mdl`** (2,258 distinct models); 109 entities embed a `CModelConfiguration` instead.
 - **Hulls.** Of the entities, 21,420 have a mechanism and **exactly those have at least one hull** (21,420 both ways; the other 3,963 have none); the mechanism's renderable is the entity's renderable (21,420). For **all 30,085 hulls**: the cell rectangle is well-formed, the number of used collision-grid links that point at the hull **equals the number of cells of the rectangle**, and the level never exceeds the grid depth.
@@ -63,7 +63,18 @@ A **hull** (`CHull`, an aspect) is a collision shape:
 
 `CHull.9` points to the owning entity's mechanism (checked for all 22,094 hulls of entities with a mechanism: no exception). A primitive hull with a **body** is a physics object (pickups, props, doors); a model hull without a body is static level geometry.
 
-**Primitive descriptors.** `PrimitiveType` values over all primitive hulls: 1 (4,534), 0 (1,410), 3 (959), 2 (901). Type 0 has only its first parameter set in 1,272 of 1,410 (a one-parameter shape: most likely a **sphere** of that radius; the pickups of the three smallest worlds all use 2.0), the other types use three parameters. The names of the types are **not confirmed**; the editor primitive renderables use the same descriptor class (types 1: 24,091, 4: 18,403, 0: 14,940, 3: 1,098, 2: 8).
+**Primitive descriptors.** `PrimitiveType` values over all primitive hulls: 1 (4,534), 0 (1,410), 3 (959), 2 (901). Type 0 has only its first parameter set in 1,272 of 1,410 (a one-parameter shape: most likely a **sphere** of that radius; the pickups of the three smallest worlds all use 2.0), the other types use three parameters. The editor primitive renderables use the same descriptor class (types 1: 24,091, 4: 18,403, 0: 14,940, 3: 1,098, 2: 8).
+
+**The shapes are now confirmed** (T01-060: `Core.dll`'s `CPrimitiveDesc::GetVolume`, `::GetBoundingBox` and `::GetInnerRadius`, read in full — all three switch on the type and their arithmetic names the shape). Calling the three floats (in member order, presumably `CPrimitiveDesc.2`/`.3`/`.4` after the type at `.1`) first/second/third:
+
+| `PrimitiveType` | Shape | Parameters | Evidence |
+|---|---|---|---|
+| 0 | **sphere** | first = radius | `GetVolume`: `r³ × 4⁄3π` from the first float alone; `GetBoundingBox`: a cube of side `2r` built from it alone; `GetInnerRadius`: the first float itself |
+| 1 | **box** | first, second, third = three independent half-extents | `GetVolume`: `first × second × third` (plain volume, no `π`); `GetBoundingBox` uses all three as three different axis extents; `GetInnerRadius`: the smallest of the three |
+| 2 | **capsule** (cylinder with hemispherical caps) | first = radius, second = half-length of the cylindrical part | `GetVolume`: `r² × (r × 4⁄3π + second × π)` — exactly a hemisphere-plus-cylinder sum rewritten; `GetBoundingBox` uses the first float for the two radial axes and the second for the long axis |
+| 3 | **cylinder** (flat caps) | first = radius, second = half-height | `GetVolume`: `r² × second × π` (plain cylinder volume, no sphere-cap term); same bounding-box shape as the capsule |
+
+`PrimitiveType` 4 (editor-only: it never appears in an actual `CPrimitiveHull`, only in editor primitive renderables) shares the capsule/cylinder's radial bounding-box shape in `GetBoundingBox`, but has **no case in `GetVolume`** (it falls to a fixed default volume) — consistent with it being a shape the game never needs to integrate physically, most likely a **cone**. Not confirmed further.
 
 ### The hull in the collision grid
 
@@ -91,7 +102,9 @@ Owner classes of the geometry-bearing aspect classes (counts over all 59 worlds;
 | `CEditorPrimitiveRenderable` (58,540) | `SPathMarkerEntity` 21,278; `CPointLightEntity` 11,349; `CFormationMarkerEntity` 5,264; `SLeggedCharacterEntity` 2,923; `SFlareEntity` 2,501; `CEffectEntity` 2,352; `STacticEntity` 1,986; `SStaticSoundEntity` 1,220 |
 | `CEditorModelRenderable` (4,632) | `SLeggedCharacterEntity` 1,805; `SBarrierFieldEntity` 825; `SAircraftCharacterEntity` 254; `STurretCharacterEntity` 135; items |
 
-The **editor renderables** (`CEditor…`) show markers (path points, lights, formations) and proxy models of characters in the editor: a box, sphere or similar (`CPrimitiveRenderable.1` = a `CPrimitiveDesc`, `.2` a colour such as `0xFFFF0000`, `.3` 0 or 1). They are 63,000 of the 217,000 aspects. Whether the game build draws them is **not determined**; by their class names they are not game geometry, and a reader can skip them.
+The **editor renderables** (`CEditor…`) show markers (path points, lights, formations) and proxy models of characters in the editor: a box, sphere or similar (`CPrimitiveRenderable.1` = a `CPrimitiveDesc`, `.2` a colour such as `0xFFFF0000`, `.3` 0 or 1). They are 63,000 of the 217,000 aspects.
+
+**Whether the game draws them is now confirmed** (T01-060: `Engine.dll`'s `CEditorPrimitiveRenderable::AddToRendering`, read in full): it is **conditionally** drawn, gated by one bit of a global render-state flag (checked first, before anything else) — so there genuinely is a runtime switch, consistent with these being editor/debug visualisation that a normal play session turns off; a reader that always skips `CEditor…` renderables therefore matches the common case, but is not representing something the engine itself always suppresses unconditionally. Incidentally, the same function shows the colour's alpha byte (`CPrimitiveRenderable.2`) choosing between two different draw-command types when it is not exactly `0xFF` (a "see-through"-style mode versus the normal one) — a confirmed, if narrow, meaning for that alpha byte.
 
 ## Reader invariants
 
@@ -108,9 +121,9 @@ The **editor renderables** (`CEditor…`) show markers (path points, lights, for
 
 ## Open questions
 
-- The meaning of `CHull.2`, `CHull.8`, `CHull.10` (values 0, 1, −1 and small numbers), `CPrimitiveHull.3` (0.0 mostly; 1.0 and small fractions) and `.4` (0), and of `CMechanism.10`/`.12`/`.8`.
-- Names and shapes of the `PrimitiveType` values and the meaning of the three parameters per type.
-- `CStaticModelEntity.12` (values 0 to 9, 0 in 9,082) and `.20` (0, 1, 104 …), `CStaticModelProperties.5`/`.6` (−1 or distances such as 170/20: probably view and fade distances), `.9` (`EntityShadowType` 0 in 24,167, 2 in 1,161, 1 in 55), `.14` (0 or 1).
-- How the 154 entities with several separate hull roots are laid out, and the 82 mechanisms whose part count differs from the hull count.
-- The embedded `CModelConfiguration` cases (109) and the world's use of `CModelConfiguration` objects in `rf_crsShared`.
-- Whether the game draws the editor renderables.
+- The meaning of `CHull.2`, `CHull.8`, `CHull.10` (values 0, 1, −1 and small numbers), `CPrimitiveHull.3` (0.0 mostly; 1.0 and small fractions) and `.4` (0), and of `CMechanism.10`/`.12`/`.8`: **not resolved by T01-060**; no reader of these specific members was found in this reading.
+- ~~Names and shapes of the `PrimitiveType` values and the meaning of the three parameters per type.~~ **Answered by T01-060** (see "Primitive descriptors" above): 0 = sphere, 1 = box, 2 = capsule, 3 = cylinder; type 4 is editor-only and most likely a cone, not confirmed further.
+- `CStaticModelEntity.12` (values 0 to 9, 0 in 9,082) and `.20` (0, 1, 104 …): not resolved. `CStaticModelProperties.5`/`.6` (−1 or distances such as 170/20): **confirmed** to be the model renderable's cull distance and fade length (T01-060: the property record's two floats at this position are passed straight into `CModelRenderable::SetCullDistance`/`SetFadeLength` during entity setup, in that member order). `.9` (`EntityShadowType` 0 in 24,167, 2 in 1,161, 1 in 55) is the same member `lighting.md` (T01-045) already covers from the data side; no additional code reading was done on it here. `.14` (0 or 1) stays open.
+- How the 154 entities with several separate hull roots are laid out, and the 82 mechanisms whose part count differs from the hull count: not attempted (data-only, not revisited this task).
+- The embedded `CModelConfiguration` cases (109) and the world's use of `CModelConfiguration` objects in `rf_crsShared`: not attempted.
+- ~~Whether the game draws the editor renderables.~~ **Answered by T01-060**: yes, conditionally, gated by a render-state flag bit (see "Who carries geometry" above).
