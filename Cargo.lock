@@ -2692,7 +2692,6 @@ name = "ss2-app"
 version = "0.0.0"
 dependencies = [
  "embed-manifest",
- "gilrs",
  "png",
  "puffin",
  "puffin_http",
@@ -2705,7 +2704,6 @@ dependencies = [
  "ss2-vfs",
  "tempfile",
  "tracing",
- "winit",
 ]
 
 [[package]]
