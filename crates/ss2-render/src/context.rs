@@ -14,7 +14,7 @@ use crate::images::{GpuImage, ImageStore, Recipe, Source};
 use crate::plan::{BatchKind, Plan};
 use crate::text::TextPainter;
 use crate::ui_frame::{ImageHandle, UiFrame, UiScene, replay_order, would_loop};
-use crate::world::{MeshHandle, TextureHandle, WorldBatch, WorldGpu};
+use crate::world::{MeshHandle, SkyBatch, TextureHandle, WorldBatch, WorldGpu};
 
 /// Why the renderer could not be created or could not draw.
 #[derive(Debug, thiserror::Error)]
@@ -997,7 +997,13 @@ impl Renderer {
         self.world.set_world(&self.device, batches)
     }
 
-    /// Drop every mesh, texture and batch of the world.
+    /// Replace the sky drawn behind the world (`None`: no sky, the clear colour shows); it is dropped with the world.
+    /// Nothing changes if it returns an error (a stale or unknown texture, a non-finite tint).
+    pub fn set_sky(&mut self, sky: Option<SkyBatch>) -> Result<(), RenderError> {
+        self.world.set_sky(&self.device, sky)
+    }
+
+    /// Drop every mesh, texture and batch of the world, and the sky.
     pub fn clear_world(&mut self) {
         self.world.clear();
     }

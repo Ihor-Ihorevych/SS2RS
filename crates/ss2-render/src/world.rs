@@ -7,9 +7,9 @@
 
 use std::ops::Range;
 
-use ss2_core::math::Mat4;
+use ss2_core::math::{Mat4, Vec3};
 use ss2_render_api::Camera;
-use ss2_render_api::scene_data::{MeshData, MeshVertex, TexelFormat, TextureData};
+use ss2_render_api::scene_data::{CubeFace, MeshData, MeshVertex, TexelFormat, TextureData};
 use wgpu::util::DeviceExt;
 
 use crate::context::RenderError;
@@ -46,6 +46,25 @@ pub struct WorldBatch {
     pub instances: Vec<Mat4>,
 }
 
+/// The level's sky (RFC 0013 amendment 1): one texture per [`CubeFace`] in its order, each image in the face's
+/// orientation convention ([`CubeFace::basis`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkyBatch {
+    /// The face textures in [`CubeFace::ALL`] order; `None` draws the face in `tint` alone.
+    pub faces: [Option<TextureHandle>; 6],
+    /// Linear RGBA multiplier on every face.
+    pub tint: [f32; 4],
+}
+
+/// Half the size of the sky cube drawn around the camera (it never writes depth, so its size only has to clear the
+/// near plane).
+const SKY_HALF_SIZE: f32 = 10.0;
+
+struct GpuSky {
+    /// One material per face, in [`CubeFace::ALL`] order.
+    faces: Vec<wgpu::BindGroup>,
+}
+
 struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
@@ -67,6 +86,13 @@ struct GpuBatch {
 /// Everything the world pass owns on one device.
 pub(crate) struct WorldGpu {
     pipeline: wgpu::RenderPipeline,
+    /// The world shader without depth: the sky.
+    sky_pipeline: wgpu::RenderPipeline,
+    /// The sky cube: six quads, one per face in [`CubeFace::ALL`] order (6 indices each).
+    sky_mesh: GpuMesh,
+    /// The sky cube's matrix, written every frame (it follows the camera).
+    sky_instance: wgpu::Buffer,
+    sky: Option<GpuSky>,
     camera: wgpu::Buffer,
     camera_group: wgpu::BindGroup,
     material_layout: wgpu::BindGroupLayout,
@@ -158,8 +184,9 @@ impl WorldGpu {
             bind_group_layouts: &[Some(&camera_layout), Some(&material_layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("world"),
+        let make_pipeline = |label: &str, depth_write: bool, compare: wgpu::CompareFunction| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -193,14 +220,25 @@ impl WorldGpu {
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Greater),
+                depth_write_enabled: Some(depth_write),
+                depth_compare: Some(compare),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
             cache: None,
+            })
+        };
+        let pipeline = make_pipeline("world", true, wgpu::CompareFunction::Greater);
+        // The sky is drawn first, behind everything, and leaves the depth buffer to the world.
+        let sky_pipeline = make_pipeline("sky", false, wgpu::CompareFunction::Always);
+        let sky_mesh = sky_cube(device);
+        let sky_instance = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("sky instance"),
+            size: 64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
         let sampler = |repeat_u: bool, repeat_v: bool| {
             let mode = |repeat| {
@@ -251,6 +289,10 @@ impl WorldGpu {
             .create_view(&wgpu::TextureViewDescriptor::default());
         Self {
             pipeline,
+            sky_pipeline,
+            sky_mesh,
+            sky_instance,
+            sky: None,
             camera,
             camera_group,
             material_layout,
@@ -286,6 +328,7 @@ impl WorldGpu {
         self.textures.clear();
         self.batches.clear();
         self.instances = None;
+        self.sky = None;
         self.generation += 1;
     }
 
@@ -460,32 +503,7 @@ impl WorldGpu {
                 ),
                 None => (&self.white, &self.samplers[3]),
             };
-            let mut uniform = [0f32; 8];
-            uniform[..4].copy_from_slice(&b.tint);
-            uniform[4] = cutoff;
-            let params = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("world material"),
-                contents: bytemuck::cast_slice(&uniform),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
-            let material = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("world material"),
-                layout: &self.material_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: params.as_entire_binding(),
-                    },
-                ],
-            });
+            let material = self.material(device, view, sampler, b.tint, cutoff, false);
             planned.push(GpuBatch {
                 mesh,
                 material,
@@ -500,6 +518,71 @@ impl WorldGpu {
             })
         });
         self.batches = planned;
+        Ok(())
+    }
+
+    /// A material bind group: `view` sampled with `sampler`, times `tint`, texels below `cutoff` discarded, lit or not.
+    fn material(
+        &self,
+        device: &wgpu::Device,
+        view: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+        tint: [f32; 4],
+        cutoff: f32,
+        unlit: bool,
+    ) -> wgpu::BindGroup {
+        let mut uniform = [0f32; 8];
+        uniform[..4].copy_from_slice(&tint);
+        uniform[4] = cutoff;
+        uniform[5] = if unlit { 1.0 } else { 0.0 };
+        let params = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("world material"),
+            contents: bytemuck::cast_slice(&uniform),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("world material"),
+            layout: &self.material_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params.as_entire_binding(),
+                },
+            ],
+        })
+    }
+
+    /// Replace the sky (`None`: no sky, the clear colour shows). Nothing changes if it returns an error.
+    pub(crate) fn set_sky(
+        &mut self,
+        device: &wgpu::Device,
+        sky: Option<SkyBatch>,
+    ) -> Result<(), RenderError> {
+        let Some(sky) = sky else {
+            self.sky = None;
+            return Ok(());
+        };
+        if !sky.tint.iter().all(|c| c.is_finite()) {
+            return Err(RenderError::World(format!("sky tint {:?}", sky.tint)));
+        }
+        let mut faces = Vec::with_capacity(6);
+        for face in sky.faces {
+            // Clamped, so a face's edge does not pick up the opposite edge.
+            let view = match face {
+                Some(t) => &self.texture(t)?.view,
+                None => &self.white,
+            };
+            faces.push(self.material(device, view, &self.samplers[0], sky.tint, 0.0, true));
+        }
+        self.sky = Some(GpuSky { faces });
         Ok(())
     }
 
@@ -540,6 +623,18 @@ impl WorldGpu {
         uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
         uniform[16..19].copy_from_slice(&camera.forward().to_array());
         queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&uniform));
+        if self.sky.is_some() {
+            let around_camera = Mat4::from_scale_rotation_translation(
+                Vec3::splat(2.0 * SKY_HALF_SIZE),
+                ss2_core::math::Quat::IDENTITY,
+                camera.position,
+            );
+            queue.write_buffer(
+                &self.sky_instance,
+                0,
+                bytemuck::cast_slice(&around_camera.to_cols_array()),
+            );
+        }
         let Some((depth, _)) = &self.depth else {
             return;
         };
@@ -567,6 +662,17 @@ impl WorldGpu {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some(sky) = &self.sky {
+            pass.set_pipeline(&self.sky_pipeline);
+            pass.set_bind_group(0, &self.camera_group, &[]);
+            pass.set_vertex_buffer(0, self.sky_mesh.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.sky_instance.slice(..));
+            pass.set_index_buffer(self.sky_mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+            for (i, material) in (0u32..).zip(&sky.faces) {
+                pass.set_bind_group(1, material, &[]);
+                pass.draw_indexed(i * 6..i * 6 + 6, 0, 0..1);
+            }
+        }
         let Some(instances) = &self.instances else {
             return;
         };
@@ -580,5 +686,38 @@ impl WorldGpu {
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.index_count, 0, b.instances.clone());
         }
+    }
+}
+
+/// A unit cube (from -0.5 to 0.5) seen from inside: one quad per [`CubeFace`] in [`CubeFace::ALL`] order, its UVs
+/// following the face's orientation convention (texel (0, 0) top-left, u along `right`, v along `down`).
+fn sky_cube(device: &wgpu::Device) -> GpuMesh {
+    let mut vertices = Vec::with_capacity(24);
+    let mut indices: Vec<u32> = Vec::with_capacity(36);
+    for face in CubeFace::ALL {
+        let b = face.basis();
+        let base = u32::try_from(vertices.len()).unwrap_or(0);
+        for (u, v) in [(0.0f32, 0.0f32), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
+            let p = b.forward * 0.5 + b.right * (u - 0.5) + b.down * (v - 0.5);
+            vertices.push(MeshVertex {
+                position: p.to_array(),
+                normal: (-b.forward).to_array(),
+                uv: [u, v],
+            });
+        }
+        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+    GpuMesh {
+        vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sky cube vertices"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        }),
+        indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sky cube indices"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        }),
+        index_count: 36,
     }
 }

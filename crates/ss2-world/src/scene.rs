@@ -19,6 +19,7 @@ use ss2_core::{Error, Result};
 use ss2_render_api::scene_data::{
     AlphaMode, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
+pub use ss2_render_api::scene_data::{CubeFace, FaceBasis};
 use ss2_render_api::{Aabb, Transform};
 
 /// One drawable piece of a model: a mesh with one material.
@@ -72,6 +73,18 @@ pub struct SpawnPoint {
     pub yaw: f32,
 }
 
+/// The level's sky: up to six face images drawn around the viewer behind everything (RFC 0013 amendment 1).
+///
+/// Each face image follows the orientation convention of [`CubeFace::basis`]: seen from inside the cube, texel
+/// (0, 0) is the top-left corner and the image's right and down point along `right` and `down`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkyData {
+    /// Texture index (into [`LevelScene::textures`]) per face in [`CubeFace::ALL`] order; `None` shows `tint` alone.
+    pub faces: [Option<u32>; 6],
+    /// Linear RGBA multiplier on every face.
+    pub tint: [f32; 4],
+}
+
 /// A whole level, ready to draw and collide with.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LevelScene {
@@ -91,6 +104,8 @@ pub struct LevelScene {
     pub spawns: Vec<SpawnPoint>,
     /// What the loader left out or replaced, one line each.
     pub skipped: Vec<String>,
+    /// The sky, if the level has one.
+    pub sky: Option<SkyData>,
 }
 
 /// What a level load is busy with.
@@ -183,6 +198,22 @@ impl LevelScene {
                 return bad(format!("instance {i} has a bad transform {t:?}"));
             }
         }
+        if let Some(sky) = &self.sky {
+            if !sky.tint.iter().all(|c| c.is_finite()) {
+                return bad(format!("sky tint {:?}", sky.tint));
+            }
+            if let Some(t) = sky
+                .faces
+                .iter()
+                .flatten()
+                .find(|t| **t as usize >= self.textures.len())
+            {
+                return bad(format!(
+                    "the sky names texture {t} of {}",
+                    self.textures.len()
+                ));
+            }
+        }
         if let Some(i) = self
             .spawns
             .iter()
@@ -228,7 +259,8 @@ impl LevelScene {
     /// A small procedural level for tests and as a stand-in without game data: a 20 m square
     /// floor (top at y = 0) inside 3 m walls, a 0.4 m and a 1.0 m step, a 20 degree ramp and a
     /// mirrored pillar, all placements of one unit cube (see [`TEST_ROOM_LABELS`]); a checkered
-    /// texture; gravity (0, -30, 0); one spawn looking down -Z at the steps.
+    /// texture; gravity (0, -30, 0); one spawn looking down -Z at the steps; a sky whose faces show which way they
+    /// face (see [`test_sky_face`]).
     pub fn test_room() -> Self {
         let place = |translation: Vec3, rotation: Quat, scale: Vec3| Instance {
             model: 0,
@@ -283,14 +315,60 @@ impl LevelScene {
                 alpha: AlphaMode::Opaque,
                 double_sided: false,
             }],
-            textures: vec![checker_texture()],
+            textures: std::iter::once(checker_texture())
+                .chain(CubeFace::ALL.map(test_sky_face))
+                .collect(),
             instances,
             spawns: vec![SpawnPoint {
                 position: Vec3::new(0.0, 0.0, 6.0),
                 yaw: 0.0,
             }],
             skipped: Vec::new(),
+            sky: Some(SkyData {
+                faces: [1, 2, 3, 4, 5, 6].map(Some),
+                tint: [1.0, 1.0, 1.0, 1.0],
+            }),
         }
+    }
+}
+
+/// The colour of `face` in the test room's sky: each face has its own, so a face drawn in the wrong place shows.
+pub fn test_sky_colour(face: CubeFace) -> [u8; 4] {
+    match face {
+        CubeFace::PosX => [200, 60, 60, 255],
+        CubeFace::NegX => [60, 200, 200, 255],
+        CubeFace::PosY => [70, 110, 230, 255],
+        CubeFace::NegY => [120, 90, 50, 255],
+        CubeFace::PosZ => [60, 190, 70, 255],
+        CubeFace::NegZ => [220, 200, 60, 255],
+    }
+}
+
+/// A 16 x 16 face image of the test room's sky in the convention of [`CubeFace::basis`]: the face's colour, a white
+/// band over its top 4 rows and a black 4 x 4 square in its top-left corner, so a face that is upside down, turned or
+/// mirrored shows it.
+pub fn test_sky_face(face: CubeFace) -> TextureData {
+    let colour = test_sky_colour(face);
+    let mut texels = Vec::with_capacity(16 * 16 * 4);
+    for y in 0..16 {
+        for x in 0..16 {
+            let texel = if x < 4 && y < 4 {
+                [0, 0, 0, 255]
+            } else if y < 4 {
+                [255, 255, 255, 255]
+            } else {
+                colour
+            };
+            texels.extend(texel);
+        }
+    }
+    TextureData {
+        width: 16,
+        height: 16,
+        format: TexelFormat::Rgba8,
+        mips: vec![texels],
+        repeat_u: false,
+        repeat_v: false,
     }
 }
 
@@ -437,6 +515,43 @@ mod tests {
                 "the face is on the side its normal points to"
             );
         }
+    }
+
+    #[test]
+    fn the_test_room_has_a_sky_with_six_distinct_faces() {
+        let room = LevelScene::test_room();
+        let sky = room.sky.unwrap();
+        let mut colours = Vec::new();
+        for (face, index) in CubeFace::ALL.into_iter().zip(sky.faces) {
+            let t = &room.textures[index.unwrap() as usize];
+            assert_eq!((t.width, t.height), (16, 16));
+            let texel = |x: usize, y: usize| -> [u8; 4] {
+                t.mips[0][(y * 16 + x) * 4..][..4].try_into().unwrap()
+            };
+            assert_eq!(texel(0, 0), [0, 0, 0, 255], "the corner mark is top-left");
+            assert_eq!(texel(8, 1), [255, 255, 255, 255], "the band is at the top");
+            assert_eq!(texel(8, 12), test_sky_colour(face));
+            colours.push(test_sky_colour(face));
+        }
+        colours.sort_unstable();
+        colours.dedup();
+        assert_eq!(colours.len(), 6);
+    }
+
+    #[test]
+    fn a_bad_sky_is_rejected() {
+        let check = |f: &dyn Fn(&mut SkyData)| {
+            let mut s = LevelScene::test_room();
+            f(s.sky.as_mut().unwrap());
+            s.validate().is_err()
+        };
+        assert!(check(&|s| s.faces[2] = Some(99)));
+        assert!(check(&|s| s.tint[1] = f32::NAN));
+        let mut s = LevelScene::test_room();
+        s.sky.as_mut().unwrap().faces[3] = None;
+        s.validate().unwrap();
+        s.sky = None;
+        s.validate().unwrap();
     }
 
     #[test]

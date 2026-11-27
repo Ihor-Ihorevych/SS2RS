@@ -54,3 +54,4 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [x] **T00-032** · CI cost: docs-only pushes to `main` skip CI (`paths-ignore` on the push trigger; pull requests unfiltered) and claim commits end with `[skip ci]` · `S` · `P1` · 🟢
 - [x] **T00-034** · Standing rule: an agent merges its own PR as soon as all checks are green (merge commit, never squash; never red/pending/conflicting; never others' PRs) · `S` · `P1` · 🟢
 - [x] **T00-035** · Playable MVP plan: design doc, RFC 0013 (level scene boundary between format readers, world assembly, the 3D pass and the app) and the roadmap slices that implement it (T02-035..038, T03-036/037, T04-037/038, T07-027..030, T10-034) · `S` · `P0`
+- [x] **T00-036** · Sky and lightmap plan: design doc, RFC 0013 amendment (`SkyData` in `LevelScene`, the face orientation convention) and the roadmap slices (T07-032, T04-039, T02-039, T07-033, T03-038) · `S` · `P0`

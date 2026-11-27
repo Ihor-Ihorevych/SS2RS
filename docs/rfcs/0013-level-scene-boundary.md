@@ -198,6 +198,35 @@ walker.step(&physics, &WalkConfig::PROVISIONAL, scene.gravity, &input, dt);
 renderer.render_world(&camera_at(walker.eye(&WalkConfig::PROVISIONAL)), &ui, clear)?;
 ```
 
+### Amendment 1: sky (T00-036)
+
+`ss2_world::scene::LevelScene` gains `pub sky: Option<SkyData>` (`None`: the level has no sky; the renderer shows its
+clear colour):
+
+```rust
+pub enum CubeFace { PosX, NegX, PosY, NegY, PosZ, NegZ }          // index 0..6, `CubeFace::ALL` in this order
+pub struct SkyData {
+    pub faces: [Option<u32>; 6],   // texture index per face in CubeFace order; None: that face shows `tint` alone
+    pub tint: [f32; 4],            // linear RGBA multiplier on every face
+}
+```
+
+**Orientation convention**, seen from inside the cube in engine space (right-handed, Y up): a face image's texel
+(0, 0) is its top-left corner, and the image's right and down point in these world directions:
+
+| Face | Image right | Image down |
+|---|---|---|
+| `PosX` | +Z | −Y |
+| `NegX` | −Z | −Y |
+| `PosY` | +X | −Z |
+| `NegY` | +X | +Z |
+| `PosZ` | −X | −Y |
+| `NegZ` | +X | −Y |
+
+The loader rotates or mirrors the game's face images into this convention (`docs/re/environment.md`, T01-405); the
+renderer (`Renderer::set_sky(Option<SkyBatch>)`, T04-039) draws the faces unlit around the camera behind everything
+and drops them with the world.
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
