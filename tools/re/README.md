@@ -15,6 +15,7 @@ Texture evidence (docs/re/tex.md):
 
 ```
 python -I tools/re/tex_verify.py "C:\path\to\Serious Sam 2"       # size checks for every .tex, flag/wrap/dimension statistics
+python -I tools/re/tex_legacy_verify.py "C:\path\to\Serious Sam 2"  # T01-083: legacy payload layouts and effective path counts
 ```
 
 `ctse_values.py` is the value decoder these scripts share (objects -> Python values).

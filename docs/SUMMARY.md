@@ -159,6 +159,8 @@
 - [Install inventory](re/inventory.md)
 - [CTSEMETA container](re/ctsemeta-container.md)
 - [CTSEMETA type tables](re/ctsemeta-types.md)
+- [Textures (version 8)](re/tex.md)
+- [Legacy texture storage (versions 4–7)](re/tex-legacy.md)
 - [CTSEMETA object data](re/ctsemeta-objects.md)
 - [Skeletons and inverse bind transforms](re/skl.md)
 - [Main loop and time](re/main-loop.md)
