@@ -39,6 +39,24 @@
 //!   is halved (RGBA8) until both sides fit [`LoadOptions::max_texture_size`]. Wrap code `0x51`
 //!   clamps, every other code repeats.
 //!
+//! ## Lightmaps
+//!
+//! A static model whose model instance carries an oven modifier (`wld-lighting.md`, "Baked
+//! lightmaps", read by [`ss2_format_wld::Lightmap`]) is lit by its own baked texture
+//! (T07-035). The modifier's UV map id names none of the mesh's streams, so the lightmap's UVs
+//! are chosen from the mesh data by the spec's rule (T01-407): of the UV streams of the drawn
+//! level of detail, the one whose coordinates all lie in [0, 1] and whose triangles, over all
+//! surfaces together, do not overlap (at most 2 % of the rasterized area covered twice). With
+//! exactly one such stream every part of the model gets [`MeshData::lightmap_uvs`] from it;
+//! with none or several the model gets none, its lit placements stay unlit and one skipped line
+//! says why (the spec has no confirmed rule for these). This is done only for models that some
+//! lit placement uses. A placement then gets [`Instance::lightmap`]: its texture, converted by
+//! the same texture path as the others (the size limit, BC kept, RGBA8 from BGR/BGRA, appended
+//! after the file textures); a lightmap that cannot be read or converted leaves the placement
+//! unlit with a skipped line. Of several oven modifiers only the first is used (the spec does
+//! not say how they combine). The UVs are kept as authored, like the base UVs.
+//! [`load_level_with_report`] also returns how often each case happened ([`LightmapReport`]).
+//!
 //! ## Sky
 //!
 //! The world's sky entity (`environment.md`, "Sky", read by [`ss2_format_wld::Sky`]) becomes
@@ -116,6 +134,33 @@ impl Default for LoadOptions {
 /// Blend type that disables blending (`mtr.md`, "The blend mechanism").
 const BLEND_NONE: u32 = 0x1F4;
 
+/// How the lightmaps of one load went: how many placements and models were lit, and why the
+/// others were not (module docs, "Lightmaps").
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LightmapReport {
+    /// Static models of the world with an oven modifier (lit placements).
+    pub lit_placements: usize,
+    /// Placements that got a lightmap ([`Instance::lightmap`]).
+    pub lightmapped: usize,
+    /// Lit placements left unlit because their model has no lightmap UVs (no or several
+    /// candidate streams).
+    pub unlit_no_uvs: usize,
+    /// Lit placements left unlit because their lightmap could not be read or converted.
+    pub unlit_texture: usize,
+    /// Lit placements that are not in the scene at all (their model is missing, broken or
+    /// embedded, or the placement is unusable).
+    pub dropped: usize,
+    /// Distinct loaded models that some lit placement uses.
+    pub lit_models: usize,
+    /// Of those, models with exactly one candidate stream, by the stream's position in the
+    /// surfaces' UV streams (slot order).
+    pub one_candidate: BTreeMap<usize, usize>,
+    /// Lit models without any candidate stream.
+    pub no_candidate: usize,
+    /// Lit models with several candidate streams.
+    pub several_candidates: usize,
+}
+
 /// Load the level whose world is `wld`, reporting progress through `progress`.
 ///
 /// # Errors
@@ -127,6 +172,19 @@ pub fn load_level(
     options: &LoadOptions,
     progress: &mut dyn FnMut(LoadProgress),
 ) -> Result<LevelScene> {
+    load_level_with_report(vfs, wld, options, progress).map(|(scene, _)| scene)
+}
+
+/// [`load_level`], also saying how the lightmaps went.
+///
+/// # Errors
+/// As [`load_level`].
+pub fn load_level_with_report(
+    vfs: &dyn Vfs,
+    wld: &VfsPath,
+    options: &LoadOptions,
+    progress: &mut dyn FnMut(LoadProgress),
+) -> Result<(LevelScene, LightmapReport)> {
     let report = |progress: &mut dyn FnMut(LoadProgress), stage, done: usize, total: usize| {
         let n = |x: usize| u32::try_from(x).unwrap_or(u32::MAX);
         progress(LoadProgress {
@@ -147,12 +205,13 @@ pub fn load_level(
         texture_paths: Vec::new(),
         texture_ids: BTreeMap::new(),
         mtr_cache: BTreeMap::new(),
+        report: LightmapReport::default(),
     };
 
-    // The distinct external models in order of first use, with how many placements use each
-    // and whether any of them has a hull.
+    // The distinct external models in order of first use, with how many placements use each,
+    // whether any of them has a hull and how many of them are lit.
     let mut model_order: Vec<VfsPath> = Vec::new();
-    let mut model_use: BTreeMap<VfsPath, (usize, bool)> = BTreeMap::new();
+    let mut model_use: BTreeMap<VfsPath, (usize, bool, usize)> = BTreeMap::new();
     let mut placement_model: Vec<Option<VfsPath>> = Vec::with_capacity(world.static_models.len());
     for m in &world.static_models {
         let path = match &m.model {
@@ -177,10 +236,11 @@ pub fn load_level(
         if let Some(p) = &path {
             let entry = model_use.entry(p.clone()).or_insert_with(|| {
                 model_order.push(p.clone());
-                (0, false)
+                (0, false, 0)
             });
             entry.0 += 1;
             entry.1 |= m.has_hull;
+            entry.2 += usize::from(m.lightmap.is_some());
         }
         placement_model.push(path);
     }
@@ -189,8 +249,8 @@ pub fn load_level(
     let mut model_index: BTreeMap<VfsPath, u32> = BTreeMap::new();
     report(progress, LoadStage::Models, 0, model_order.len());
     for (i, path) in model_order.iter().enumerate() {
-        let (uses, collide) = model_use[path];
-        match loader.model(path, collide) {
+        let (uses, collide, lit) = model_use[path];
+        match loader.model(path, collide, lit) {
             Ok(model) => {
                 model_index.insert(path.clone(), index_u32(models.len()));
                 models.push(model);
@@ -204,7 +264,14 @@ pub fn load_level(
         report(progress, LoadStage::Models, i + 1, model_order.len());
     }
 
+    loader.report.lit_placements = world
+        .static_models
+        .iter()
+        .filter(|m| m.lightmap.is_some())
+        .count();
     let mut instances = Vec::new();
+    // The static model of each instance, for its lightmap.
+    let mut instance_source = Vec::new();
     for (m, path) in world.static_models.iter().zip(&placement_model) {
         let Some(&model) = path.as_ref().and_then(|p| model_index.get(p)) else {
             continue;
@@ -229,9 +296,10 @@ pub fn load_level(
                 scale: m.scale,
             },
             collidable: m.has_hull && models[model as usize].collision.is_some(),
-            // Lightmaps are read by T07-035.
+            // Set after the textures, below.
             lightmap: None,
         });
+        instance_source.push(m);
     }
 
     // The sky's faces are read with the other textures; a face whose image needs turning gets
@@ -264,6 +332,38 @@ pub fn load_level(
         textures.push(loader.texture(path, options.max_texture_size));
         report(progress, LoadStage::Textures, i + 1, total);
     }
+
+    // Each lit placement's own lightmap, after the file textures.
+    for (instance, m) in instances.iter_mut().zip(&instance_source) {
+        let Some(lm) = &m.lightmap else { continue };
+        let model = &models[instance.model as usize];
+        if model.parts.iter().any(|p| p.mesh.lightmap_uvs.is_none()) {
+            loader.report.unlit_no_uvs += 1;
+            continue;
+        }
+        match lm
+            .texture
+            .as_ref()
+            .map_err(String::clone)
+            .and_then(|t| texture_data(t, options.max_texture_size))
+        {
+            Ok(t) => {
+                textures.push(t);
+                instance.lightmap = Some(index_u32(textures.len() - 1));
+                loader.report.lightmapped += 1;
+            }
+            Err(why) => {
+                loader.report.unlit_texture += 1;
+                loader.skip(format!(
+                    "static model {} ({}): lightmap (oven modifier {}): {why} (drawn unlit)",
+                    m.serial, m.name, lm.modifier
+                ));
+            }
+        }
+    }
+    let report = &mut loader.report;
+    report.dropped =
+        report.lit_placements - report.lightmapped - report.unlit_no_uvs - report.unlit_texture;
 
     let sky = world.sky.as_ref().map(|s| {
         let mut faces = [None; 6];
@@ -316,7 +416,7 @@ pub fn load_level(
         sky,
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
-    Ok(scene)
+    Ok((scene, loader.report))
 }
 
 /// The heading of a rotation: the angle about +Y of its rotated -Z, 0 when it looks down -Z and
@@ -363,6 +463,7 @@ struct Loader<'a> {
     texture_ids: BTreeMap<VfsPath, u32>,
     /// External `.mtr` files by path (`None`: could not be read, already recorded).
     mtr_cache: BTreeMap<VfsPath, Option<Material>>,
+    report: LightmapReport,
 }
 
 impl Loader<'_> {
@@ -370,12 +471,20 @@ impl Loader<'_> {
         self.skipped.push(line);
     }
 
-    /// Read one model and build its drawable parts (and collision when `collide`).
-    fn model(&mut self, path: &VfsPath, collide: bool) -> std::result::Result<ModelData, String> {
+    /// Read one model and build its drawable parts (and collision when `collide`; lightmap UVs
+    /// when `lit` placements use it).
+    fn model(
+        &mut self,
+        path: &VfsPath,
+        collide: bool,
+        lit: usize,
+    ) -> std::result::Result<ModelData, String> {
         let bytes = self.vfs.read(path).map_err(|e| e.to_string())?;
         let model = Model::from_bytes(&bytes).map_err(|e| e.to_string())?;
         match model.mesh() {
-            MeshSource::Embedded(mesh) => self.build(path, mesh, collide, &|id| model.material(id)),
+            MeshSource::Embedded(mesh) => {
+                self.build(path, mesh, collide, lit, &|id| model.material(id))
+            }
             MeshSource::External(raw) => {
                 let bmf = VfsPath::new(raw).map_err(|e| format!("mesh path `{raw}`: {e}"))?;
                 let bytes = self
@@ -396,18 +505,20 @@ impl Loader<'_> {
                         .ok()
                         .map(|i| &materials[i])
                 };
-                self.build(path, &mesh, collide, &lookup)
+                self.build(path, &mesh, collide, lit, &lookup)
             }
             MeshSource::None => Err("the model has no mesh".to_string()),
         }
     }
 
     /// The parts (and collision) of `mesh`; `embedded` finds the presets stored with the mesh.
+    /// With `lit` placements, the parts get lightmap UVs if the mesh has one candidate stream.
     fn build<'m>(
         &mut self,
         path: &VfsPath,
         mesh: &Mesh,
         collide: bool,
+        lit: usize,
         embedded: &dyn Fn(u32) -> Option<&'m Material>,
     ) -> std::result::Result<ModelData, String> {
         let lod = mesh
@@ -415,6 +526,11 @@ impl Loader<'_> {
             .iter()
             .find(|l| l.is_for_pc())
             .ok_or("no level of detail is for the PC")?;
+        let lightmap_stream = if lit > 0 {
+            self.lightmap_stream(path, lod, lit)
+        } else {
+            None
+        };
         let mut parts: Vec<ModelPart> = Vec::new();
         let mut part_of: BTreeMap<u32, usize> = BTreeMap::new();
         for surface in &lod.surfaces {
@@ -431,7 +547,7 @@ impl Loader<'_> {
                 });
                 parts.len() - 1
             });
-            append_surface(&mut parts[i].mesh, surface, uv_map);
+            append_surface(&mut parts[i].mesh, surface, uv_map, lightmap_stream);
         }
         let mut kept = Vec::with_capacity(parts.len());
         for part in parts {
@@ -446,6 +562,12 @@ impl Loader<'_> {
         }
         if kept.is_empty() {
             return Err("nothing to draw".to_string());
+        }
+        if lit > 0 {
+            self.report.lit_models += 1;
+            if let Some(k) = lightmap_stream {
+                *self.report.one_candidate.entry(k).or_default() += 1;
+            }
         }
         let collision = if collide {
             let coarsest = mesh
@@ -472,6 +594,34 @@ impl Loader<'_> {
             parts: kept,
             collision,
         })
+    }
+
+    /// The lightmap stream of `lod` by the spec's rule (`lightmap::choose`); `None` with a
+    /// skipped line when there is no single candidate. Counts the case.
+    fn lightmap_stream(&mut self, path: &VfsPath, lod: &Lod, lit: usize) -> Option<usize> {
+        let placements = if lit == 1 { "placement" } else { "placements" };
+        match lightmap::choose(&lod.surfaces) {
+            lightmap::StreamChoice::One(k) => Some(k),
+            lightmap::StreamChoice::None => {
+                self.report.no_candidate += 1;
+                self.skip(format!(
+                    "model `{}`: no UV stream lies in [0, 1] without overlap, so no lightmap UVs \
+                     ({lit} lit {placements} drawn unlit)",
+                    path.as_str()
+                ));
+                None
+            }
+            lightmap::StreamChoice::Several(ks) => {
+                self.report.several_candidates += 1;
+                self.skip(format!(
+                    "model `{}`: {} UV streams (positions {ks:?}) lie in [0, 1] without overlap, \
+                     so no lightmap UVs ({lit} lit {placements} drawn unlit)",
+                    path.as_str(),
+                    ks.len()
+                ));
+                None
+            }
+        }
     }
 
     /// The preset of an external `.mtr` file (read once per load).
@@ -626,10 +776,28 @@ fn alpha_of(config: &ShaderConfig) -> AlphaMode {
 }
 
 /// Append one surface's triangles to `mesh`, taking the UV stream with map id `uv_map` (else the
-/// first). Non-finite normals and UVs are replaced (up, zero); positions are left for
-/// validation.
-fn append_surface(mesh: &mut MeshData, surface: &Surface, uv_map: Option<u32>) {
+/// first) and, with `lightmap_stream`, the lightmap UVs from the stream at that position.
+/// Non-finite normals and UVs are replaced (up, zero); positions are left for validation.
+fn append_surface(
+    mesh: &mut MeshData,
+    surface: &Surface,
+    uv_map: Option<u32>,
+    lightmap_stream: Option<usize>,
+) {
     let base = index_u32(mesh.vertices.len());
+    if let Some(k) = lightmap_stream {
+        let lightmap = surface.uv_sets.get(k);
+        let uvs = mesh
+            .lightmap_uvs
+            .get_or_insert_with(|| vec![[0.0, 0.0]; mesh.vertices.len()]);
+        uvs.extend((0..surface.positions.len()).map(|i| {
+            lightmap
+                .and_then(|u| u.get(i))
+                .copied()
+                .filter(|u| u.iter().all(|c| c.is_finite()))
+                .unwrap_or([0.0, 0.0])
+        }));
+    }
     let stream = uv_map
         .and_then(|id| surface.uv_map_ids.iter().position(|m| *m == id))
         .filter(|i| *i < surface.uv_sets.len())
@@ -805,6 +973,7 @@ fn halve(rgba: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
     (out, nw, nh)
 }
 
+mod lightmap;
 mod sky;
 
 #[cfg(test)]
