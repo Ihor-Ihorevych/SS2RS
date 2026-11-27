@@ -59,3 +59,4 @@ Touch/mobile layout is Phase 2; the framework just must not bake in "mouse alway
 - [x] **T10-031** · Menu model (Main/Options/Pause), focus navigation, settings toggles/sliders, command output · `M` · `P1` · Deps: T10-030
 - [x] **T10-032** · Placeholder-skin layout, draw list and pointer input (hover/press/release rules) · `M` · `P1` · Deps: T10-031
 - [ ] **T10-033** · Menu skin and flow from original `.rsc`/`.tex`/`.fnt` data, replacing the placeholder skin · `L` · `P1` · Deps: T02-006, T02-007, T02-012, T02-023, T02-025, T01-036
+- [ ] **T10-034** · Level picker `ss2_ui::level_select::LevelPicker` (slice of T10-004 for the playable MVP): a scrolling, grouped list of levels with focus navigation, pointer input and a placeholder-skin draw list; returns the chosen level or back · `S` · `P0` · Deps: T10-030, T10-031, T00-035
