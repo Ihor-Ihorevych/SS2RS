@@ -8,7 +8,7 @@
 //!
 //! let v = |x: f32, z: f32| MeshVertex { position: [x, 0.0, z], normal: [0.0, 1.0, 0.0], uv: [x, z] };
 //! let quad = MeshData { vertices: vec![v(0.0, 0.0), v(1.0, 0.0), v(1.0, 1.0), v(0.0, 1.0)],
-//!                       indices: vec![0, 1, 2, 0, 2, 3] };
+//!                       indices: vec![0, 1, 2, 0, 2, 3], lightmap_uvs: None };
 //! quad.validate().unwrap();
 //! assert_eq!(quad.bounds().unwrap().max.x, 1.0);
 //! ```
@@ -37,6 +37,9 @@ pub struct MeshData {
     pub vertices: Vec<MeshVertex>,
     /// Three indices per triangle, into `vertices`.
     pub indices: Vec<u32>,
+    /// The lightmap UV of each vertex (as many as `vertices`), for meshes that are lightmapped (RFC 0013
+    /// amendment 2); `None` for the others.
+    pub lightmap_uvs: Option<Vec<[f32; 2]>>,
 }
 
 impl MeshData {
@@ -65,6 +68,18 @@ impl MeshData {
             .position(|v| !(v.position.iter().chain(&v.normal).chain(&v.uv)).all(|c| c.is_finite()))
         {
             return bad(format!("vertex {i} is not finite"));
+        }
+        if let Some(uvs) = &self.lightmap_uvs {
+            if uvs.len() != self.vertices.len() {
+                return bad(format!(
+                    "{} lightmap UVs for {} vertices",
+                    uvs.len(),
+                    self.vertices.len()
+                ));
+            }
+            if let Some(i) = uvs.iter().position(|uv| !uv.iter().all(|c| c.is_finite())) {
+                return bad(format!("lightmap UV {i} is not finite"));
+            }
         }
         Ok(())
     }
@@ -298,6 +313,7 @@ mod tests {
         MeshData {
             vertices: vec![v(0.0, 0.0, 0.0), v(2.0, 0.0, 0.0), v(0.0, -1.0, 3.0)],
             indices: vec![0, 1, 2],
+            lightmap_uvs: None,
         }
     }
 
@@ -359,6 +375,13 @@ mod tests {
         let mut m = triangle();
         m.vertices[1].normal[2] = f32::NAN;
         assert!(m.validate().is_err(), "NaN normal");
+        let mut m = triangle();
+        m.lightmap_uvs = Some(vec![[0.0, 0.0]; 2]);
+        assert!(m.validate().is_err(), "a lightmap UV missing");
+        m.lightmap_uvs = Some(vec![[0.0, 0.0], [1.0, f32::NAN], [0.5, 0.5]]);
+        assert!(m.validate().is_err(), "a NaN lightmap UV");
+        m.lightmap_uvs = Some(vec![[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]]);
+        m.validate().unwrap();
     }
 
     #[test]
