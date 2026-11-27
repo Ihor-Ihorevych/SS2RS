@@ -26,6 +26,11 @@ const BOX_MDL: &str = "Content/Test/Models/Box.mdl";
 const MISSING_MDL: &str = "Content/Test/Models/Missing.mdl";
 const BOX_MTR: &str = "Content/Test/Models/Box.mtr";
 const BODY_TEX: &str = "Content/Test/Textures/body.tex";
+const SKY_NORTH_TEX: &str = "Content/Test/Sky/north.tex";
+const SKY_UP_TEX: &str = "Content/Test/Sky/up.tex";
+const SKY_MISSING_TEX: &str = "Content/Test/Sky/missing.tex";
+/// The sky colour of the synthetic world (ARGB, alpha 0 as in most retail skies).
+const SKY_COLOR: u32 = 0x00D9_E1F0;
 
 /// 90 degrees about +y, as stored (x, y, z, w).
 const ROT_Y90: [f32; 4] = [0.0, FRAC_1_SQRT_2, 0.0, FRAC_1_SQRT_2];
@@ -57,6 +62,13 @@ fn aspect(parent: Option<u32>, world: ([f32; 4], [f32; 3]), owner: u32) -> Objec
 /// - entity 5: a spawn marker at (10, 0, 10) turned 90 degrees about +y;
 /// - entity 6: a chapter info entity at (1, 2, 3).
 fn world_file(with_spawn: bool) -> Vec<u8> {
+    world_file_with(with_spawn, false)
+}
+
+/// [`world_file`], with `with_sky` also entity 9: a sky (no property record) whose faces are North
+/// `north.tex`, West `body.tex` (the material's texture too), South a missing file, no East and
+/// no Floor, Ceiling `up.tex`; colour [`SKY_COLOR`].
+fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
     let mut b = MetaBuilder::new();
     let module = b.file_ref("Bin/Sam2Game.module", 0);
     let mdl = b.file_ref(BOX_MDL, 0);
@@ -205,10 +217,72 @@ fn world_file(with_spawn: bool) -> Vec<u8> {
     b.external_object(50, module, 10, 100);
     b.external_object(51, mdl, 1, 101);
     b.external_object(52, missing, 1, 101);
+    // The sky classes (`environment-schema.md`).
+    b.external_type(102, "CStaticTexture");
+    b.type_block(TypeBlock::alias(40, "COLOR", 0));
+    b.type_block(TypeBlock::alias(41, "BOOL", 0));
+    b.type_block(TypeBlock::pointer(42, "Ptr<CTexture>", 102));
+    let faces: Vec<(&str, u32)> = ["10", "11", "12", "13", "14", "15"]
+        .into_iter()
+        .map(|m| (m, 42))
+        .collect();
+    let cube_members: Vec<(&str, u32)> = [("1", 1), ("2", 1), ("3", 40)]
+        .into_iter()
+        .chain(faces)
+        .collect();
+    b.type_block(TypeBlock::class(
+        43,
+        "CCubeRenderable",
+        3,
+        5,
+        Some(14),
+        &cube_members,
+    ));
+    b.type_block(TypeBlock::pointer(44, "CCubeRenderable*", 43));
+    b.type_block(TypeBlock::class(
+        45,
+        "CSimpleBackgroundViewerRenderable",
+        1,
+        5,
+        Some(14),
+        &[("1", 1)],
+    ));
+    b.type_block(TypeBlock::pointer(
+        46,
+        "CSimpleBackgroundViewerRenderable*",
+        45,
+    ));
+    b.type_block(TypeBlock::class(
+        47,
+        "CCubeBackgroundEntity",
+        5,
+        5,
+        Some(7),
+        &[
+            ("1", 44),
+            ("3", 46),
+            ("en_qvPlacement", 6),
+            ("en_fSize", 1),
+            ("en_fViewerY", 1),
+            ("en_bActive", 41),
+        ],
+    ));
+    for (id, path) in [
+        (70, SKY_NORTH_TEX),
+        (71, BODY_TEX),
+        (72, SKY_MISSING_TEX),
+        (74, SKY_UP_TEX),
+    ] {
+        let file = b.file_ref(path, 0);
+        b.external_object(id, file, 1, 102);
+    }
 
     let mut entities = vec![3, 4, 7, 8, 6];
     if with_spawn {
         entities.insert(4, 5);
+    }
+    if with_sky {
+        entities.push(9);
     }
     b.object(
         1,
@@ -320,6 +394,29 @@ fn world_file(with_spawn: bool) -> Vec<u8> {
         20,
         aspect(None, (IDENTITY, [1.0, 2.0, 3.0]), 6).finish(),
     );
+    if with_sky {
+        b.object(
+            9,
+            47,
+            quat_vect(
+                entity(7).object_ref(Some(40)).object_ref(None),
+                IDENTITY,
+                [0.0; 3],
+            )
+            .f32(64.0)
+            .f32(0.0)
+            .u32(1)
+            .finish(),
+        );
+        let mut cube = aspect(None, (IDENTITY, [0.0; 3]), 9)
+            .f32(64.0)
+            .f32(1.0)
+            .u32(SKY_COLOR);
+        for face in [Some(70), Some(71), Some(72), None, None, Some(74)] {
+            cube = cube.object_ref(face);
+        }
+        b.object(40, 43, cube.finish());
+    }
 
     // One property record, in the extra section.
     let r = ObjectBytes::new().u32(60).u32(29).object_ref(Some(3));
@@ -969,6 +1066,28 @@ fn all_files() -> Vec<(&'static str, Vec<u8>)> {
     ]
 }
 
+/// A 4 x 2 BGRA texture (`TexFormat` 1): blue, a red texel in its top-left corner.
+fn marked_tex() -> Vec<u8> {
+    let mut pixels = Vec::new();
+    for i in 0..8 {
+        // Stored B, G, R, A.
+        pixels.extend(if i == 0 {
+            [0, 0, 255, 255]
+        } else {
+            [255, 0, 0, 255]
+        });
+    }
+    texture_file(4, 2, 1, &pixels)
+}
+
+fn sky_files() -> Vec<(&'static str, Vec<u8>)> {
+    let mut files = without(WLD);
+    files.push((WLD, world_file_with(true, true)));
+    files.push((SKY_NORTH_TEX, marked_tex()));
+    files.push((SKY_UP_TEX, dxt1_8x8()));
+    files
+}
+
 fn load(vfs: &dyn Vfs) -> (LevelScene, Vec<LoadProgress>) {
     let mut events = Vec::new();
     let scene = load_level(vfs, &VfsPath::new(WLD).unwrap(), &OPTIONS, &mut |p| {
@@ -1251,4 +1370,60 @@ fn uncompressed_textures_are_swizzled_to_rgba_and_halved_above_the_limit() {
     assert_eq!((t.width, t.height), (2, 1));
     assert_eq!(t.mips, [vec![50, 50, 50, 255, 120, 120, 120, 255]]);
     t.validate().unwrap();
+}
+
+#[test]
+fn a_world_without_a_sky_loads_none() {
+    let vfs = CountingVfs::new(&all_files());
+    assert_eq!(load(&vfs).0.sky, None);
+}
+
+#[test]
+fn the_sky_faces_go_to_their_cube_faces_through_the_texture_path() {
+    let vfs = CountingVfs::new(&sky_files());
+    let (scene, _) = load(&vfs);
+    let sky = scene.sky.expect("a sky");
+    let face = |f: CubeFace| sky.faces[f.index()].map(|i| &scene.textures[i as usize]);
+    // North is -Z: the marked 4 x 2 image, converted to RGBA like any other texture.
+    let north = face(CubeFace::NegZ).expect("north");
+    assert_eq!(
+        (north.width, north.height, north.format),
+        (4, 2, TexelFormat::Rgba8)
+    );
+    assert_eq!(&north.mips[0][..4], &[255, 0, 0, 255]);
+    assert_eq!(&north.mips[0][4..8], &[0, 0, 255, 255]);
+    // West is -X and shares the material's texture: one texture, read once.
+    let material_texture = scene.materials.iter().find_map(|m| m.base_texture);
+    assert_eq!(sky.faces[CubeFace::NegX.index()], material_texture);
+    assert_eq!(vfs.reads(BODY_TEX), 1);
+    // South (+Z) is missing: a white stand-in and one line.
+    assert_eq!(face(CubeFace::PosZ), Some(&TextureData::solid([255; 4])));
+    assert_eq!(skipped_mentions(&scene, "missing.tex"), 1);
+    // No East (+X) and no Floor (-Y) face: those show the tint alone.
+    assert_eq!(face(CubeFace::PosX), None);
+    assert_eq!(face(CubeFace::NegY), None);
+    // The ceiling (+Y) keeps its block format.
+    assert_eq!(
+        face(CubeFace::PosY).map(|t| t.format),
+        Some(TexelFormat::Bc1)
+    );
+    assert_eq!(sky.tint, sky::tint(SKY_COLOR));
+}
+
+#[test]
+fn the_marked_corner_of_a_game_face_lands_where_the_convention_puts_it() {
+    // The game's North image is upright seen from inside, so its top-left texel is the
+    // north-west corner at the top: (-X, +Y, -Z). In the convention, texel (0, 0) of the face is
+    // at forward - right - down.
+    let vfs = CountingVfs::new(&sky_files());
+    let (scene, _) = load(&vfs);
+    let sky = scene.sky.unwrap();
+    let b = CubeFace::NegZ.basis();
+    assert_eq!(b.forward - b.right - b.down, Vec3::new(-1.0, 1.0, -1.0));
+    let north = &scene.textures[sky.faces[CubeFace::NegZ.index()].unwrap() as usize];
+    assert_eq!(
+        &north.mips[0][..4],
+        &[255, 0, 0, 255],
+        "the mark stays at texel (0, 0)"
+    );
 }

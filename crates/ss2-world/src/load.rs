@@ -39,6 +39,20 @@
 //!   is halved (RGBA8) until both sides fit [`LoadOptions::max_texture_size`]. Wrap code `0x51`
 //!   clamps, every other code repeats.
 //!
+//! ## Sky
+//!
+//! The world's sky entity (`environment.md`, "Sky", read by [`ss2_format_wld::Sky`]) becomes
+//! [`LevelScene::sky`] (T07-033). Each face texture goes through the same texture path as the
+//! materials' textures (read once, the size limit, BC kept or RGBA8, a white stand-in and a skipped
+//! line when it cannot be read) and lands on its cube face: North `.10` on -Z, West `.11` on -X,
+//! South `.12` on +Z, East `.13` on +X, Floor `.14` on -Y, Ceiling `.15` on +Y. The spec's seams
+//! put every game face image already in the RFC 0013 orientation convention
+//! ([`CubeFace::basis`]), so none is turned; the derivation and the machinery that would turn one
+//! are in the private `sky` module. A face the world does not name is `None` and shows the tint.
+//! The tint is the stored colour read as `0xAARRGGBB` with the alpha byte ignored (it is 0 in
+//! most skies), the red, green and blue bytes taken as sRGB and made linear. The cube's size, the
+//! viewer height and the entity's placement are not part of the boundary and are not used.
+//!
 //! ## Coordinates
 //!
 //! The game's data is already in the engine's convention (right-handed, Y up, -Z forward), so
@@ -70,15 +84,16 @@ use ss2_format_bmf::{Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
-use ss2_format_wld::{Marker, ModelRef, World};
+use ss2_format_wld::{Marker, ModelRef, SkyFace, World};
 use ss2_render_api::Transform;
 use ss2_render_api::scene_data::{
-    AlphaMode, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
+    AlphaMode, CubeFace, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
 use ss2_vfs::{Vfs, VfsPath};
 
 use crate::scene::{
-    CollisionData, Instance, LevelScene, LoadProgress, LoadStage, ModelData, ModelPart, SpawnPoint,
+    CollisionData, Instance, LevelScene, LoadProgress, LoadStage, ModelData, ModelPart, SkyData,
+    SpawnPoint,
 };
 
 /// How to load a level.
@@ -219,6 +234,28 @@ pub fn load_level(
         });
     }
 
+    // The sky's faces are read with the other textures; a face whose image needs turning gets
+    // its own turned copy after them.
+    let mut sky_faces: Vec<(CubeFace, u32, sky::Turn)> = Vec::new();
+    if let Some(s) = &world.sky {
+        for face in SkyFace::ALL {
+            let Some(raw) = s.face(face) else { continue };
+            let path = match VfsPath::new(raw) {
+                Ok(p) => p,
+                Err(e) => {
+                    loader.skip(format!("sky {face:?} face: texture path `{raw}`: {e}"));
+                    continue;
+                }
+            };
+            let (cube, right, down) = sky::game_face(face);
+            let Some(turn) = sky::turn(right, down, cube.basis()) else {
+                loader.skip(format!("sky {face:?} face: no turn into {cube:?}"));
+                continue;
+            };
+            sky_faces.push((cube, loader.texture_id(path), turn));
+        }
+    }
+
     let total = loader.texture_paths.len();
     report(progress, LoadStage::Textures, 0, total);
     let paths = std::mem::take(&mut loader.texture_paths);
@@ -227,6 +264,22 @@ pub fn load_level(
         textures.push(loader.texture(path, options.max_texture_size));
         report(progress, LoadStage::Textures, i + 1, total);
     }
+
+    let sky = world.sky.as_ref().map(|s| {
+        let mut faces = [None; 6];
+        for (cube, id, turn) in sky_faces {
+            faces[cube.index()] = Some(if turn == sky::Turn::NONE {
+                id
+            } else {
+                textures.push(sky::orient(textures[id as usize].clone(), turn));
+                index_u32(textures.len() - 1)
+            });
+        }
+        SkyData {
+            faces,
+            tint: sky::tint(s.color),
+        }
+    });
 
     let markers = if world.spawn_markers.is_empty() {
         &world.chapters
@@ -260,8 +313,7 @@ pub fn load_level(
         instances,
         spawns,
         skipped: loader.skipped,
-        // The sky is read by T07-033.
-        sky: None,
+        sky,
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
     Ok(scene)
@@ -752,6 +804,8 @@ fn halve(rgba: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
     }
     (out, nw, nh)
 }
+
+mod sky;
 
 #[cfg(test)]
 mod tests;
