@@ -1,8 +1,8 @@
 # `.skl` skeletons
 
-- **Roadmap task:** T01-009
+- **Roadmap tasks:** T01-009 (format), T01-056 (bone lengths, IK and skinning)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the object layout, bone ids and parents, the local transform and the inverse bind matrix (checked numerically on 563 of 564 bones), and the LOD structure; **medium** for the quaternion/matrix conventions as a whole (they follow from that check); **low** for the IK flags, the angle limits, bone member 3, and how mesh bone palettes map to bones. Scope: all **31** distinct format-8 `.skl` files of the retail install with patches (42 LODs, 564 bones).
+- **Confidence:** **high** for the object layout, hierarchy, length-field names and serialized IK bounds. The quaternion and matrix conventions are checked on 563 of 564 bones. **Low** for the IK solver and skinning behavior inferred from a static trace, pending runtime confirmation. Data scope is all **31** distinct format-8 `.skl` files of the retail install with patches (42 LODs, 564 bones).
 
 Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.md`. Related: `bmf.md` (bone weights and bone palettes).
 
@@ -15,9 +15,17 @@ A skeleton is a CTSEMETA file with exactly two objects, a `CResourceFile` (objec
 `tools/re/skl_verify.py` (read-only, `SS2_DATA_DIR`) over the retail install with all patches:
 
 - All 31 files decode; each has the classes `[CResourceFile, CSkeleton]`.
-- **563 of 564 bones**: composing the local transforms (member 4) down the parent chain and inverting the result gives member 5 to within 1e-4. The check fails with the opposite quaternion sign (error up to 22), so the conventions below are the right ones.
+- For **563 of 564 bones**, composing the local transforms (member 4) down the parent chain and inverting the result gives member 5 to within 1e-4. Conjugating each stored quaternion before composition increases the maximum error to about 22.
 - Member 6 equals the length of the local translation for 537 bones; for the other 27 the translation is zero and member 6 is exactly 1.0.
 - The quaternions have unit length (error below 4e-7). The parent of every bone has a smaller id (42 of 42 LODs) and is present in the same LOD.
+
+T01-056 cross-checked the serialized fields with the type registration, bone accessors,
+IK and model-render paths in the installed 32-bit `Engine.dll`, plus the editor's IK flag
+operations in `EditKit_Skeleton.dll`. The retail data checks used the 2.100 patch set.
+The analyzed binary identities are SHA-256
+`da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851` (Engine) and
+`6208c40fc02e5d6790d10b86e08d9c08ecf6fc57dc15804c8aaaf86221a2da1f` (editor).
+The verifier reads only archive data.
 
 ## Objects and members
 
@@ -32,13 +40,13 @@ CSkeletonLOD
 SkeletonBone
   .1  int               bone id
   .2  int               parent bone id (0 = no parent)
-  .3  float             unknown (0.011 to 10.8, 230 distinct values)
+  .3  float             authored bone length (sb_fLength)
   .4  QuatVect          local transform: .1 Quaternion4f (members 1..4 = x, y, z, w), .2 Vector3f (translation)
   .5  Matrix34f         inverse bind matrix: members 1..12 = 3 rows of 4, row-major
-  .6  float             bone length
-  .7  Vector3f          lower angle limit (x, y, z)
-  .8  Vector3f          upper angle limit (x, y, z)
-  .9  SkeletonBoneIKFlags  (4-byte enum)
+  .6  float             parent-offset length (sb_fOffsetLength)
+  .7  Vector3f          lower Euler angle limits in radians (x, y, z)
+  .8  Vector3f          upper Euler angle limits in radians (x, y, z)
+  .9  SkeletonBoneIKFlags  (4-byte enum, one bit per enabled IK component)
 ```
 
 ### Ids and parents
@@ -56,15 +64,58 @@ The quaternion is stored as **x, y, z, w** (the identity is `0, 0, 0, 1`). The l
 
 `Matrix34f.1`..`.12` are the **rows** of a 3×4 matrix: `.1–.4` the first row, `.5–.8` the second, `.9–.12` the third; the last column (`.4`, `.8`, `.12`) is the translation. It is the **inverse of `world(bone)`**: it takes a bind-pose position into the bone's space. For the example below, bone 1 has the world position (0, 1.55, 0) and the stored matrix translation is (0, −1.55, 0).
 
-One bone does not follow this rule: bone 6 of `circularsaw_l.skl` has an identity local rotation, but its stored matrix has a rotation (a quarter turn about the y axis). Which of the two the engine uses for skinning is unknown; for all other bones the two agree.
+Bone 6 of `circularsaw_l.skl`, referenced by `circularsaw_fp_l.mdl`, is the exception.
+Its local rotation is within about 3e-7 of identity as a matrix. The stored inverse bind
+contains a quarter turn about Y.
 
-### Bone length (member 6)
+The default local pose uses member 4. The render evaluation composes the pose down the
+hierarchy and right-multiplies each evaluated bone matrix by the **stored member 5**. The
+render palette copies those results for CPU vertex transforms and shader skinning. The
+absolute-placement query removes the stored inverse bind from the cached result to recover
+the unskinned bone placement. This is a static trace of the installed engine.
 
-The length of the local translation, or **1.0** when the translation is zero (27 bones).
+With column vectors, the skin transform is the evaluated bone-to-model transform times the stored inverse bind.
+Keep member 5 even where it disagrees with an inverse reconstructed from member 4. For the
+odd bone, combining the serialized local pose hierarchy with member 5 gives the rounded
+rows below. Reconstructing an inverse bind from the hierarchy would erase this residual.
 
-### Angle limits and IK flags (low confidence)
+```text
+[ 0  0  1   0.716610 ]
+[ 0  1  0   0        ]
+[-1  0  0  -0.392502 ]
+```
 
-Members 7 and 8 are three-component limits. In all 564 bones every component is exactly −π (lower) and +π (upper) — the limits are never restrictive in the retail data. Member 9 is a flag set: `0x0` (437 bones), `0x3` (86), `0x7` (33), and `0x1`, `0x2`, `0x5`, `0x6` (2 each); the low three bits might be per-axis flags (all of 0x7 are set together only on 33 bones). The meaning is **unknown**.
+### Bone length and parent-offset length (members 3 and 6)
+
+The registration names member 3 `sb_fLength`. `sklGetBoneLength` returns it, and
+`CIKMotionHandler::SetupIKMotionHandler` uses that getter when building the chain. The
+editor exposes this setting through `edtSetBoneLength`. Values
+range from about 0.011 to 10.8 in the retail skeletons. Member 6 is `sb_fOffsetLength`,
+the length of the local translation in 537 bones and **1.0** when the translation is
+zero in the other 27. Preserve the two values independently. For example, the first
+bone in the Levitator skeleton has an authored length of about 0.71 and an offset length
+of 1.55.
+
+### Angle limits and IK flags
+
+The constructor starts all three lower bounds at −π and upper bounds at +π. The editor's
+enable/disable functions set or clear the flag bit for the supplied component index.
+The engine's IK setup tests masks `0x1`, `0x2` and `0x4` separately, in the same order as the
+`Vector3f` components in members 7 and 8. The solver retains the current angle for a clear
+bit and uses that component's bounds when the bit is set. These flags are used by the IK
+path traced here.
+
+All 1,692 angle pairs in the standalone retail corpus are symmetric and approximately
+±π. The script compares the signed bounds independently.
+
+| Bound magnitudes in radians | Enabled component | Disabled component |
+|---:|---:|---:|
+| 3.141590118 | 283 | 1,166 |
+| 3.141592741 | 0 | 243 |
+
+Member 9 masks are `0x0` (437 bones), `0x3` (86), `0x7` (33), and `0x1`, `0x2`,
+`0x5`, `0x6` (2 each). The nearly full-turn ranges leave the visual effect of tighter
+bounds unmeasured. Preserve the signed stored values.
 
 ## Relation to meshes
 
@@ -82,16 +133,17 @@ Skinned `.bmf` surfaces refer to bones through a per-surface **bone palette** (`
 
 `Content/SeriousSam2/Models/Enemies/Levitator/Sources/Skeletons/Skeleton.skl` (2,102 bytes): two LODs (distances 50.0 and 150.0, platform mask `0xFFFFFFFF`), each with the same two bones:
 
-| Bone | id | parent | `.3` | local rotation (x,y,z,w) | local translation | length (`.6`) | inverse bind matrix |
+| Bone | id | parent | bone length (`.3`) | local rotation (x,y,z,w) | local translation | offset length (`.6`) | inverse bind matrix |
 |---|---|---|---|---|---|---|---|
 | 1 | 1 | 0 | 0.71 | 0, 0, 0, 1 | (0, 1.55, 0) | 1.55 | rows `[1 0 0 0]`, `[0 1 0 -1.55]`, `[0 0 1 0]` |
 | 2 | 2 | 1 | 0.49 | 0, 0, 0, 1 | (0, −0.7, −1.01) | 1.2289 | rows `[1 0 0 0]`, `[0 1 0 -0.85]`, `[0 0 1 1.01]` |
 
-(For bone 2 the world position is (0, 0.85, −1.01), so the stored translation is (0, −0.85, 1.01). Both bones have angle limits ±π and `SkeletonBoneIKFlags` 0.)
+(For bone 2 the world position is (0, 0.85, −1.01), so the stored translation is (0, −0.85, 1.01). Both bones have limits near ±π and `SkeletonBoneIKFlags` 0.)
 
 ## Open questions
 
-- Meaning of `SkeletonBone.3`, of the IK flags, and why the angle limits are always ±π; the odd bone in `circularsaw_l.skl` → **T01-056**.
-- Mapping from mesh bone palettes to skeleton bones (needs the model format) → **T01-008**.
+- Verify the skin palette and tighter IK limits at runtime using the oracle and instrumentation work in T01-038 and T01-039.
+- The model spec (`mdl.md`) resolves most embedded mesh palettes. The remaining palette IDs
+  and standalone mesh pairings need the model follow-up T01-057.
 - Which LOD the engine selects, and whether the skeleton LOD distances relate to the mesh LOD distances (T01-008).
 - The one skeleton with extra records after `EDOB` carries editor data (`CEditSkeleton`, `CEditSkeletonLOD`; see `ctsemeta-objects.md`), which a loader can ignore.

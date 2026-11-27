@@ -8,6 +8,7 @@ mod data_location;
 #[cfg(test)]
 mod data_location_tests;
 mod diagnostics;
+mod input;
 mod profiling;
 mod screenshot;
 mod state;
