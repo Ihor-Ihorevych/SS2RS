@@ -1,0 +1,17 @@
+[package]
+name = "ss2-spike-script-guest-dylib"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "The spike's hook as a native plugin (C ABI cdylib) for RFC 0012."
+
+[lib]
+crate-type = ["cdylib"]
+
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

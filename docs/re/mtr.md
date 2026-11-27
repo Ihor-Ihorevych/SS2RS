@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-011
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the object structure, the shader class codes, the member layout of all eight argument classes and the link to mesh UV maps; **medium** for the roles of the texture slots (inferred from the referenced textures, see "Evidence"); **low** for the meaning of the blend types, the common flags and the modifier members. The shader programs themselves are **not** in the data (see "Shader module"). Scope: all **91** distinct format-8 `.mtr` files, plus the **7,391** `CShaderPreset` objects embedded in `.bmf` (260) and `.mdl` (7,131) files, which use the same classes.
+- **Confidence:** **high** for the object structure, the shader class codes, the member layout of all eight argument classes and the link to mesh UV maps, and, as of T01-059 (read in full: `SeriousEngine::gfuBlendType` in `Engine.dll`, confirmed against a fresh decompile of `GfxD3D.dll`'s `gfxBlendFunc`), for the blend-type mechanism down to the real Direct3D render states it sets; **medium** for the roles of the texture slots (inferred from the referenced textures) and, newly, for the modifier/graph mechanism and `ColorMap`'s true type (`CConstantShaderModifier`/`CFloatGraphShaderModifier::ApplyModifications`, `shaModifyValue`, `CShaderArgValColorMap`, all read in full); **low** for the exact named D3D blend factors (the second lookup table was not pinned down), the common flags and the per-shader-class meaning of the unexplained floats. The shader programs themselves are **not** in the data (see "Shader module"). Scope: all **91** distinct format-8 `.mtr` files, plus the **7,391** `CShaderPreset` objects embedded in `.bmf` (260) and `.mdl` (7,131) files, which use the same classes.
 
 Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.md`; `bmf.md` (surfaces), `mdl.md`, `tex.md`.
 
@@ -12,7 +12,7 @@ A **material** is a `CShaderPreset`. It holds a short list of **configs**; each 
 
 ## Evidence
 
-`tools/re/mtr_verify.py` (read-only, `SS2_DATA_DIR`), over the retail install with all patches:
+`tools/re/mtr_verify.py` (read-only, `SS2_DATA_DIR`), over the retail install with all patches; **T01-059** additionally decompiled and read, in `Engine.dll`: `gfuBlendType`, `CConstantShaderModifier`/`CFloatGraphShaderModifier::ApplyModifications`, `shaModifyValue`, `CShaderArgValColorMap`, `CDefaultShader::Exec`; and, newly imported and analysed into the project's Ghidra database for this task (never committed), all of `GfxD3D.dll` (196 functions): `gfxBlendFunc` and its device `SetRenderState` calls — the DLL is tiny (80 KB) and was not previously decompiled by anyone on this project:
 
 - All 91 `.mtr` files decode (classes `CResourceFile`, `CShaderPreset`, the argument classes, modifiers and graphs). Over all files: **7,482** presets, **8,009** configs.
 - **All 8,009** shader references are external references to `Bin/Shaders.module`, and the `EXOB` flag word of each is determined by the argument class (table below): no exception.
@@ -54,7 +54,24 @@ The shader of a config is an external object. In the file's `EXOB` table (`ctsem
 
 ### Shader module
 
-`Bin/Shaders.module` is listed in `RFIL` of every material (flags aside), but there is **no such file**: the install has `Bin/Shaders.dll` and `Bin/GPU-Programs.asm`. The module is a native library; the shaders are its classes, and the GPU programs are outside the data format. How the classes pick programs and what they compute is the subject of T01-020.
+`Bin/Shaders.module` is listed in `RFIL` of every material (flags aside), but there is **no such file**: the install has `Bin/Shaders.dll` and `Bin/GPU-Programs.asm`. The module is a native library; the shaders are its classes, and the GPU programs are outside the data format. `Shaders.dll` itself was not decompiled (out of scope here, T01-020). How the classes pick programs and what they compute is the subject of T01-020.
+
+### The blend mechanism (T01-059: `Engine.dll` and `GfxD3D.dll`, read in full)
+
+`SeriousEngine::gfuBlendType(GfuBlendType)` is the one function every blend-type value passes through, in both materials and particle effects (`pfx.md`): if the value is below `0x1F5` (that is, exactly `0x1F4`/500, the default) it calls `gfxDisableBlend()` and returns — **confirms `0x1F4` is "no blending"**, not merely "looks opaque". Otherwise it computes `index = clamp(value - 500, 0, 7)` and looks up an 8-entry table of `(src, dst)` engine-internal blend-factor codes (`Engine.dll`, static data, read directly from the DLL's `.data` section at its statically-linked address):
+
+| `GfuBlendType` | index | src | dst |
+|---|---|---|---|
+| `0x1F4` (500) | — (disables blending instead) | | |
+| `0x1F5` (501) | 1 | 26 | 27 |
+| `0x1F6` (502) | 2 | 24 | 22 |
+| `0x1F7` (503) | 3 | 21 | 21 |
+| `0x1F8` (504) | 4 | 26 | 21 |
+| `0x1F9` (505) | 5 | 24 | 20 |
+| `0x1FA` (506) | 6 | 20 | 23 |
+| `0x1FB` (507) and above | 7 | 21 | 27 |
+
+It then calls `gfxBlendFunc(src, dst)` (confirmed, by a fresh decompile of `GfxD3D.dll`, to call the live Direct3D device's `SetRenderState` at vtable offset `0xE4` with state codes `0x13` and `0x14` — exactly `D3DRS_SRCBLEND` and `D3DRS_DESTBLEND`, so these genuinely are real Direct3D blend factors, not a cosmetic engine concept) and `gfxEnableBlend()`. The codes 20–27 go through one further lookup inside `GfxD3D.dll` before reaching the real `D3DBLEND_*` constant; that table's address could not be pinned down from the decompile (a symbol collision with an unrelated RTTI string), so the **named** D3D blend factor of each code is still open. One value is confirmed by the numbers alone: `0x1F7`'s src and dst codes are **equal** (21, 21) — the signature of an additive blend (`ONE, ONE`) — which matches `pfx.md`'s independent, purely data-correlated finding that `0x1F7` is additive, by a completely different method (texture alpha-channel statistics). That agreement is the strongest evidence either page has for any one blend type's exact mode.
 
 ## Argument objects
 
@@ -69,7 +86,7 @@ Every arguments object starts with the same members. Each parameter is a **wrapp
 | `CShaderArgValBOOL` | 0 or 1 | switches |
 | `CShaderArgValTexture` | reference to an external `.tex`, or null | texture slots |
 | `CShaderArgValUVMap` | small int | **UV map id** (see below) |
-| `CShaderArgValColorMap` | int (0 in all 6,213 shade configs) | unknown |
+| `CShaderArgValColorMap` | **an `IDENT`, not a plain int** (T01-059: its constructor default is the engine's own "invalid identifier" sentinel, the same one macro variables use; the stored 0 in all 6,213 shade configs is that sentinel, confirmed, not an arbitrary number) | a name the shipped data never actually sets; the feature is present in the class but unused in every retail config |
 | `CShaderArgValBlendType` | `GfuBlendType` enum (4 bytes) | blend mode |
 | `CShaderArgValDepthCmp` | `GfxComp` enum (4 bytes) | depth comparison |
 
@@ -84,7 +101,7 @@ Members of the base classes (the same in all eight argument classes):
 | `CShaderCommonParams.6` | float: 0.5 in 6,156 of 6,213 shade configs |
 | `CShaderCommonParams.7`, `.8` | bools |
 
-Meaning by evidence (all **low** confidence): blend `0x1F4` goes with textures without alpha channel in 4,562 of 5,679 shade configs, `0x1F5` and `0x1F8` with alpha-carrying textures (167 of 190, and 72 of 98), `0x1F7` with alpha-less ones (201 of 216): `0x1F4` looks like opaque (or alpha-tested), the others like blended modes. `CommonParams.5` is 1 for 769 of 907 alpha-carrying first textures under blend `0x1F4` but for only 88 of 4,562 alpha-less ones, so it is probably an **alpha test** switch with `.6` (0.5) as its reference. These readings are not confirmed by the shader code.
+Meaning by evidence (**medium**, now partly confirmed at the engine level, T01-059): blend `0x1F4` goes with textures without alpha channel in 4,562 of 5,679 shade configs, `0x1F5` and `0x1F8` with alpha-carrying textures (167 of 190, and 72 of 98), `0x1F7` with alpha-less ones (201 of 216): `0x1F4` looks like opaque (or alpha-tested), the others like blended modes. `CommonParams.5` is 1 for 769 of 907 alpha-carrying first textures under blend `0x1F4` but for only 88 of 4,562 alpha-less ones, so it is probably an **alpha test** switch with `.6` (0.5) as its reference; `CDefaultShader::Exec` (the engine's own fallback shader, read in full) shows the same general pairing in its own, simpler argument layout — a field selects between fully opaque with depth write (blend disabled) and alpha-blended without depth write (`0x1F5`) as one bundled choice, which supports `CommonParams.5` carrying both decisions together rather than the blend enum alone, though `CDefaultShader` is not proven to share `CShadeShaderArgs`' exact member layout. See "The blend mechanism" below for what `gfuBlendType` itself does.
 
 ### Texture slot pattern
 
@@ -154,7 +171,9 @@ The `CShaderArgValUVMap` value is a **UV map id**, matched against the per-slot 
 | `CFloatGraphShaderModifier` | `EPlatform`; `.1` (target id: 0 in 626, else 4, 20, 30, 56), `.2` int, `.3` → a **graph**, `.4` float (3.0 in the sample), `.5` a value wrapper | 644 |
 | `CGradientShaderModifier` | `EPlatform`; `.1` (0 in 143), `.2`, `.3` a list of (position, ARGB colour) keys, `.4`, `.5` a value wrapper | 150 |
 
-Graph classes seen: `CSineGraph`, `CStepUpGraph`, `CStepDownGraph`, `CStepGraph`, `CLinearGraph`, `CValueGraph`, `CRandomGraph`; each has base members `CGraph.7`…`.12` and a key list of (time, value) pairs (the pair members hold floats; a period-like value `360` appears in the sine graph). **What the target ids select and the exact graph semantics are not determined** (T01-059).
+Graph classes seen: `CSineGraph`, `CStepUpGraph`, `CStepDownGraph`, `CStepGraph`, `CLinearGraph`, `CValueGraph`, `CRandomGraph`; each has base members `CGraph.7`…`.12` and a key list of (time, value) pairs (the pair members hold floats; a period-like value `360` appears in the sine graph).
+
+**The modifier mechanism (T01-059: `Engine.dll`, read in full).** Every modifier's `ApplyModifications` ends by calling `shaModifyValue(IDENT, IDENT, CShaderArgumentValue*)`, a generic function backed by a per-frame **override stack** (grown and popped around a shader's use, `shaPushModifiers`): it asks the new value's own `mdGetDataType()` and searches the current stack frame for an existing entry whose id matches the *first* `IDENT` and whose stored type matches; whatever code later reads a shader argument presumably checks this same stack for an override before falling back to the stored constant. `CConstantShaderModifier` pushes a fixed value (its own `.3`) every time; `CFloatGraphShaderModifier` first computes `phase = fmod(now, .4) / .4` (confirming **`.4` is the cycle's period in seconds**, matching the sample value 3.0), evaluates the graph at that `phase` (a virtual call), and pushes the result. Both pass their own two int members (the data's "target id", 0/4/20/30/56, and a second one the existing doc calls plain "int") as the two `IDENT` arguments; the exact roles of the first versus the second — which one is the lookup key and which is written into a matching entry on a repeat call — were read but not resolved to a one-sentence rule (**medium-low**), and which concrete argument-object member each numeric id names was not found at all: that needs the argument-reading code, inside the un-decompiled `Shaders.dll` (T01-020).
 
 ## Reader invariants
 
@@ -170,8 +189,7 @@ Graph classes seen: `CSineGraph`, `CStepUpGraph`, `CStepDownGraph`, `CStepGraph`
 
 ## Open questions
 
-- What the shader classes compute and how a class picks a program (T01-020); the meaning of the blend types, the common bools, `ColorMap`, the unexplained floats (`.50`/`.51`, `.5`, per-class numbers) → **T01-059**.
+- What the shader classes compute and how a class picks a program stays T01-020 (needs `Shaders.dll`, not decompiled here). **Answered by T01-059** for the rest: the blend types now trace to real Direct3D `SetRenderState(D3DRS_SRCBLEND/DESTBLEND, ...)` calls through a confirmed 8-entry table ("The blend mechanism" above) — the table's own `0x1F7` entry (src = dst) independently confirms `pfx.md`'s additive reading; `ColorMap` is confirmed to be an `IDENT`, always the "no identifier" sentinel in retail data, not a plain unused int; the modifier/graph mechanism (`shaModifyValue`, the override stack, the graph's time/period evaluation) is read in full. Still open: the named D3D blend factor behind each engine-internal code (the second lookup table's address was not found), the common bools' exact rule, the per-class unexplained floats (`.50`/`.51`, `.5`, ...), and which argument-object member each modifier's numeric target id names (needs `Shaders.dll`).
 - Whether presets with several configs choose by platform or by quality (the `EPlatform` bits are decoded: `gui.md`; the masks hardly differ, so quality is the likelier switch).
-- Modifier targets and graph semantics → T01-059.
-- Colour byte order (the top byte is alpha).
+- Colour byte order (the top byte is alpha); not newly resolved.
 - What the engine draws for surfaces without a preset (88 in `.bmf`, see `bmf.md`).

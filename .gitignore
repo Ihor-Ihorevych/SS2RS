@@ -50,3 +50,9 @@ __pycache__/
 
 # Throwaway spikes (spikes/*/README.md): build output is never committed
 /spikes/*/target/
+
+# Original-game instrumentation harness (docs/ORACLE_HARNESS.md): the target map holds addresses
+# worked out from the original binaries and must stay on the author's machine; captures are local data
+targets.json
+*.local.json
+/oracle-out/

@@ -94,7 +94,8 @@ The base class `SMoveCharacter` holds the speed multiplier (0.1 to 4), look-at-f
 
 ## Open questions
 
-- **Search and following:** the algorithm, costs, smoothing, how feelers and the mesh interact (T01-038/039 measurement; `ai.md`).
+- **Search and following:** read from the binary by T01-155 ([`behavior-navigation-mover.md`](behavior-navigation-mover.md): node lookup, the A\* costs, waypoints at the link centres, the straight-line test, the look-ahead of the navigation mover; medium-low); what remains (open-list ties, the compared heights) is T01-403; how feelers and the mesh interact and every timing: T01-038/039 measurement; `ai.md`.
+- **`CNMNode.4`** is read as a plane `height = f0 + f1 x + f2 z` of **world** coordinates (T01-155, medium; the three floats in that order).
 - `CNMNode.2`, `.4`, `.9`, `.10`, `.11` (the mesh's per-node attributes: walkability or terrain class are likely for `.10`) and `CNMLink.3`, and the length of `CNavigationGrid.4` compared with the entry pool.
 - Why the node entry level is one finer than the larger-side rule in 65 % of the nodes (the entries stay within 2 × 2 cells).
 - How formations pick their members and how a spawner uses a formation (`ai.md`), what `SNavigationalBeaconEntity` is for, and the three tactics without a mover.

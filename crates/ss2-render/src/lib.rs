@@ -14,6 +14,9 @@ mod text;
 mod ui_frame;
 #[cfg(test)]
 mod ui_gpu_tests;
+mod world;
+#[cfg(test)]
+mod world_gpu_tests;
 
 pub use batch::*;
 pub use context::*;
@@ -21,3 +24,4 @@ pub use image_diff::*;
 pub use nine_slice::*;
 pub use scissor::*;
 pub use ui_frame::{Filter, ImageDraw, ImageHandle, NineSliceDraw, UiCommand, UiFrame};
+pub use world::{MeshHandle, TextureHandle, WorldBatch};

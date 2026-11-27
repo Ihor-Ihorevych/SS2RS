@@ -487,10 +487,10 @@ The tables below; section titles are ours.
 | `SpaweeAnimationFinished` | Hook: the spawnee's appearing animation ended (spelling as in the binary). | N |
 | `Appear` | Script: makes the puppet appear (warnings when called on a spawner or template). | P |
 | `DoAppear` | Executes it (warnings `called on a puppet that has mechanism`, `already visible`, `marked as alive`). | P |
-| `OnAnimEventAppear` | Animation event: appear (empty). | R |
+| `OnAnimEventAppear` | Animation event: appear: a 5-byte forwarder to `DoAppear` (not empty; corrected in `puppet-spawning.md`). | R |
 | `Disappear` | Script: makes it disappear. | P |
 | `DoDisappear` | Executes it. | P |
-| `OnAnimEventDisappear` | Animation event: disappear (empty). | R |
+| `OnAnimEventDisappear` | Animation event: disappear: forwards to `DoDisappear` (corrected in `puppet-spawning.md`). | R |
 | `SetDefaultState` | Returns the state machine to `PS_DEFAULT`. | R |
 | `SetState` | Changes the puppet state (section 4). | R |
 | `NewClearState` | Creates a state-clearing helper (name). | N |

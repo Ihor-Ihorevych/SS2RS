@@ -1,0 +1,584 @@
+//! The 3D world pass (RFC 0013, slice of T04-005/T04-009): textured static meshes drawn with one matrix per
+//! instance, reverse-Z depth, flat lighting from the camera and alpha cutoff. The 2D pass draws on top.
+//!
+//! The renderer keeps no CPU copy of world data. When the GPU device is rebuilt (or [`crate::Renderer::clear_world`]
+//! is called) every mesh, texture and batch is dropped and [`crate::Renderer::world_generation`] changes; the
+//! owner of the level uploads it again. Handles from an older generation are refused.
+
+use std::ops::Range;
+
+use ss2_core::math::Mat4;
+use ss2_render_api::Camera;
+use ss2_render_api::scene_data::{MeshData, MeshVertex, TexelFormat, TextureData};
+use wgpu::util::DeviceExt;
+
+use crate::context::RenderError;
+
+/// The depth buffer's format.
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// A mesh uploaded with [`crate::Renderer::create_mesh`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MeshHandle {
+    index: u32,
+    generation: u64,
+}
+
+/// A texture uploaded with [`crate::Renderer::create_texture`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TextureHandle {
+    index: u32,
+    generation: u64,
+}
+
+/// One mesh drawn with one look at many places.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorldBatch {
+    /// What to draw.
+    pub mesh: MeshHandle,
+    /// The base-colour texture; `None` draws `tint` alone.
+    pub texture: Option<TextureHandle>,
+    /// Multiplies the texture (linear RGBA).
+    pub tint: [f32; 4],
+    /// Texels whose alpha (after the tint) is below this are not drawn; `None` draws all.
+    pub alpha_cutoff: Option<f32>,
+    /// Model-to-world matrices, one per place.
+    pub instances: Vec<Mat4>,
+}
+
+struct GpuMesh {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    index_count: u32,
+}
+
+struct GpuTexture {
+    view: wgpu::TextureView,
+    repeat_u: bool,
+    repeat_v: bool,
+}
+
+struct GpuBatch {
+    mesh: u32,
+    material: wgpu::BindGroup,
+    instances: Range<u32>,
+}
+
+/// Everything the world pass owns on one device.
+pub(crate) struct WorldGpu {
+    pipeline: wgpu::RenderPipeline,
+    camera: wgpu::Buffer,
+    camera_group: wgpu::BindGroup,
+    material_layout: wgpu::BindGroupLayout,
+    /// Indexed by `repeat_u as usize + 2 * repeat_v as usize`.
+    samplers: [wgpu::Sampler; 4],
+    white: wgpu::TextureView,
+    meshes: Vec<GpuMesh>,
+    textures: Vec<GpuTexture>,
+    batches: Vec<GpuBatch>,
+    instances: Option<wgpu::Buffer>,
+    depth: Option<(wgpu::TextureView, (u32, u32))>,
+    generation: u64,
+    srgb: bool,
+    bc: bool,
+}
+
+impl WorldGpu {
+    /// Build the pipeline for a `format` target. `generation` starts the handle generation.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        generation: u64,
+    ) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("world"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("world.wgsl").into()),
+        });
+        let camera = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("world camera"),
+            size: 80,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let camera_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("world camera layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let camera_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("world camera"),
+            layout: &camera_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera.as_entire_binding(),
+            }],
+        });
+        let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("world material layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("world layout"),
+            bind_group_layouts: &[Some(&camera_layout), Some(&material_layout)],
+            immediate_size: 0,
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("world"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<MeshVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                    }),
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 64,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &wgpu::vertex_attr_array![3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4],
+                    }),
+                ],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            // No face culling: the winding of the game's meshes is not verified yet, and mirrored placements
+            // reverse it.
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Greater),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let sampler = |repeat_u: bool, repeat_v: bool| {
+            let mode = |repeat| {
+                if repeat {
+                    wgpu::AddressMode::Repeat
+                } else {
+                    wgpu::AddressMode::ClampToEdge
+                }
+            };
+            device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("world sampler"),
+                address_mode_u: mode(repeat_u),
+                address_mode_v: mode(repeat_v),
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::MipmapFilterMode::Linear,
+                anisotropy_clamp: 8,
+                ..Default::default()
+            })
+        };
+        let samplers = [
+            sampler(false, false),
+            sampler(true, false),
+            sampler(false, true),
+            sampler(true, true),
+        ];
+        let white = device
+            .create_texture_with_data(
+                queue,
+                &wgpu::TextureDescriptor {
+                    label: Some("world white texel"),
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::LayerMajor,
+                &[255, 255, 255, 255],
+            )
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        Self {
+            pipeline,
+            camera,
+            camera_group,
+            material_layout,
+            samplers,
+            white,
+            meshes: Vec::new(),
+            textures: Vec::new(),
+            batches: Vec::new(),
+            instances: None,
+            depth: None,
+            generation,
+            srgb: format.is_srgb(),
+            bc: device
+                .features()
+                .contains(wgpu::Features::TEXTURE_COMPRESSION_BC),
+        }
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub(crate) fn supports(&self, format: TexelFormat) -> bool {
+        match format {
+            TexelFormat::Rgba8 => true,
+            TexelFormat::Bc1 | TexelFormat::Bc2 | TexelFormat::Bc3 => self.bc,
+        }
+    }
+
+    /// Drop every mesh, texture and batch; older handles stop working.
+    pub(crate) fn clear(&mut self) {
+        self.meshes.clear();
+        self.textures.clear();
+        self.batches.clear();
+        self.instances = None;
+        self.generation += 1;
+    }
+
+    pub(crate) fn create_mesh(
+        &mut self,
+        device: &wgpu::Device,
+        mesh: &MeshData,
+    ) -> Result<MeshHandle, RenderError> {
+        mesh.validate()
+            .map_err(|e| RenderError::World(e.to_string()))?;
+        if mesh.indices.is_empty() {
+            return Err(RenderError::World(
+                "a mesh needs at least one triangle".into(),
+            ));
+        }
+        let index_count = u32::try_from(mesh.indices.len())
+            .map_err(|_| RenderError::World("too many indices".into()))?;
+        let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("world mesh vertices"),
+            contents: bytemuck::cast_slice(&mesh.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("world mesh indices"),
+            contents: bytemuck::cast_slice(&mesh.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let index = u32::try_from(self.meshes.len())
+            .map_err(|_| RenderError::World("too many meshes".into()))?;
+        self.meshes.push(GpuMesh {
+            vertices,
+            indices,
+            index_count,
+        });
+        Ok(MeshHandle {
+            index,
+            generation: self.generation,
+        })
+    }
+
+    pub(crate) fn create_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &TextureData,
+    ) -> Result<TextureHandle, RenderError> {
+        texture
+            .validate()
+            .map_err(|e| RenderError::World(e.to_string()))?;
+        if !self.supports(texture.format) {
+            return Err(RenderError::World(format!(
+                "{:?} textures are not supported by this GPU",
+                texture.format
+            )));
+        }
+        let (w, h) = (texture.width, texture.height);
+        let limit = device.limits().max_texture_dimension_2d;
+        if w > limit || h > limit {
+            return Err(RenderError::World(format!(
+                "a {w}x{h} texture exceeds the limit of {limit}"
+            )));
+        }
+        let block = texture.format != TexelFormat::Rgba8;
+        if block && (!w.is_multiple_of(4) || !h.is_multiple_of(4)) {
+            return Err(RenderError::World(format!(
+                "a block-compressed texture must be a multiple of 4 in size, not {w}x{h}"
+            )));
+        }
+        let format = match (texture.format, self.srgb) {
+            (TexelFormat::Rgba8, false) => wgpu::TextureFormat::Rgba8Unorm,
+            (TexelFormat::Rgba8, true) => wgpu::TextureFormat::Rgba8UnormSrgb,
+            (TexelFormat::Bc1, false) => wgpu::TextureFormat::Bc1RgbaUnorm,
+            (TexelFormat::Bc1, true) => wgpu::TextureFormat::Bc1RgbaUnormSrgb,
+            (TexelFormat::Bc2, false) => wgpu::TextureFormat::Bc2RgbaUnorm,
+            (TexelFormat::Bc2, true) => wgpu::TextureFormat::Bc2RgbaUnormSrgb,
+            (TexelFormat::Bc3, false) => wgpu::TextureFormat::Bc3RgbaUnorm,
+            (TexelFormat::Bc3, true) => wgpu::TextureFormat::Bc3RgbaUnormSrgb,
+        };
+        let mip_level_count = u32::try_from(texture.mips.len())
+            .map_err(|_| RenderError::World("too many mip levels".into()))?;
+        let data: Vec<u8> = texture.mips.concat();
+        let gpu = device.create_texture_with_data(
+            queue,
+            &wgpu::TextureDescriptor {
+                label: Some("world texture"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            wgpu::util::TextureDataOrder::LayerMajor,
+            &data,
+        );
+        let index = u32::try_from(self.textures.len())
+            .map_err(|_| RenderError::World("too many textures".into()))?;
+        self.textures.push(GpuTexture {
+            view: gpu.create_view(&wgpu::TextureViewDescriptor::default()),
+            repeat_u: texture.repeat_u,
+            repeat_v: texture.repeat_v,
+        });
+        Ok(TextureHandle {
+            index,
+            generation: self.generation,
+        })
+    }
+
+    fn mesh_index(&self, h: MeshHandle) -> Result<u32, RenderError> {
+        if h.generation != self.generation || h.index as usize >= self.meshes.len() {
+            return Err(RenderError::World(format!(
+                "mesh {h:?} is stale or unknown (world generation {})",
+                self.generation
+            )));
+        }
+        Ok(h.index)
+    }
+
+    fn texture(&self, h: TextureHandle) -> Result<&GpuTexture, RenderError> {
+        if h.generation != self.generation {
+            return Err(RenderError::World(format!(
+                "texture {h:?} is stale (world generation {})",
+                self.generation
+            )));
+        }
+        self.textures
+            .get(h.index as usize)
+            .ok_or_else(|| RenderError::World(format!("texture {h:?} is unknown")))
+    }
+
+    /// Replace what is drawn. Nothing changes if it returns an error.
+    pub(crate) fn set_world(
+        &mut self,
+        device: &wgpu::Device,
+        batches: Vec<WorldBatch>,
+    ) -> Result<(), RenderError> {
+        let mut matrices: Vec<f32> = Vec::new();
+        let mut planned = Vec::with_capacity(batches.len());
+        for (i, b) in batches.iter().enumerate() {
+            let mesh = self.mesh_index(b.mesh)?;
+            let texture = b.texture.map(|t| self.texture(t)).transpose()?;
+            let cutoff = b.alpha_cutoff.unwrap_or(0.0);
+            if !b.tint.iter().all(|c| c.is_finite()) || !cutoff.is_finite() {
+                return Err(RenderError::World(format!(
+                    "batch {i} has a non-finite tint or cutoff"
+                )));
+            }
+            if !b.instances.iter().all(Mat4::is_finite) {
+                return Err(RenderError::World(format!(
+                    "batch {i} has a non-finite matrix"
+                )));
+            }
+            let first = u32::try_from(matrices.len() / 16)
+                .map_err(|_| RenderError::World("too many instances".into()))?;
+            for m in &b.instances {
+                matrices.extend_from_slice(&m.to_cols_array());
+            }
+            let last = u32::try_from(matrices.len() / 16)
+                .map_err(|_| RenderError::World("too many instances".into()))?;
+            if first == last {
+                continue;
+            }
+            let (view, sampler) = match texture {
+                Some(t) => (
+                    &t.view,
+                    &self.samplers[usize::from(t.repeat_u) + 2 * usize::from(t.repeat_v)],
+                ),
+                None => (&self.white, &self.samplers[3]),
+            };
+            let mut uniform = [0f32; 8];
+            uniform[..4].copy_from_slice(&b.tint);
+            uniform[4] = cutoff;
+            let params = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("world material"),
+                contents: bytemuck::cast_slice(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let material = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("world material"),
+                layout: &self.material_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: params.as_entire_binding(),
+                    },
+                ],
+            });
+            planned.push(GpuBatch {
+                mesh,
+                material,
+                instances: first..last,
+            });
+        }
+        self.instances = (!matrices.is_empty()).then(|| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("world instances"),
+                contents: bytemuck::cast_slice(&matrices),
+                usage: wgpu::BufferUsages::VERTEX,
+            })
+        });
+        self.batches = planned;
+        Ok(())
+    }
+
+    /// Clear `view` (a `size`-pixel target) to `clear` and draw the world as `camera` sees it.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: &Camera,
+        clear: wgpu::Color,
+    ) {
+        if self.depth.as_ref().is_none_or(|(_, s)| *s != size) {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("world depth"),
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.depth = Some((
+                texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                size,
+            ));
+        }
+        let aspect = size.0 as f32 / size.1.max(1) as f32;
+        let mut uniform = [0f32; 20];
+        uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
+        uniform[16..19].copy_from_slice(&camera.forward().to_array());
+        queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&uniform));
+        let Some((depth, _)) = &self.depth else {
+            return;
+        };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("world"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    // Reverse-Z: far is 0.
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: wgpu::StoreOp::Discard,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        let Some(instances) = &self.instances else {
+            return;
+        };
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.camera_group, &[]);
+        pass.set_vertex_buffer(1, instances.slice(..));
+        for b in &self.batches {
+            let mesh = &self.meshes[b.mesh as usize];
+            pass.set_bind_group(1, &b.material, &[]);
+            pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+            pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.index_count, 0, b.instances.clone());
+        }
+    }
+}
