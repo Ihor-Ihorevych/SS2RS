@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-010
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the object layout, the keyframe rules and the relation to the skeleton (checked on every envelope); **medium** for the meaning of the values (parent-relative local transforms) and for the event structure; **low** for `CAnimSet.3`, `CAnimation.1`, the float envelopes, interpolation and loop behaviour. Scope: the **88** distinct format-8 `.ans` files and the **354** animation sets embedded in `.mdl` files (1,647 animations in all, 852 of them in `.ans` files).
+- **Confidence:** **high** for the object layout, the keyframe rules and the relation to the skeleton (checked on every envelope), and, as of T01-058 (`Engine.dll`'s `ani*` animation-evaluation API and `CAnimation`'s own constructor, read in full), for `CAnimation.1`'s meaning, the interpolation method of each envelope kind, and the mechanism behind looping/reverse/clamping; **medium** for the meaning of the stored transform values (parent-relative local transforms) and for the event structure, and for what the float envelopes actually drive (the evaluation API is confirmed generic; its caller was not traced); **low** for `CAnimSet.3`, the exact per-flag-bit names of the playback mode, and the `.mas` naming scheme that resolves an IDENT to a human-readable name. Scope: the **88** distinct format-8 `.ans` files and the **354** animation sets embedded in `.mdl` files (1,647 animations in all, 852 of them in `.ans` files).
 
 Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.md`; `skl.md` (bones), `mdl.md` (how a model refers to a set).
 
@@ -12,7 +12,7 @@ An animation set (`CAnimSet`) is a list of animations. An animation has a frame 
 
 ## Evidence
 
-`tools/re/ans_verify.py` (read-only, `SS2_DATA_DIR`) over the retail install with all patches. For **all 64,927 envelopes** of the 1,647 animations: the key count in the envelope equals the list length; frame numbers strictly ascend; the first and last key sit exactly on the animation's first and last frame; the envelope's own first/last frame equal the animation's; member 5 equals `1 / (last − first + 1)`. All 29,555 rotation envelopes have unit-length quaternions (error below 1e-4), and every bone that has one of the two kinds has both (translation and rotation: 29,555 bones, none with only one). For the 342 embedded sets whose model has an embedded skeleton: 29,344 of 29,452 translation/rotation envelopes address a bone id of that skeleton; the translation member `len` times the bone's length is 1 in 14,468 of 14,665 envelopes.
+`tools/re/ans_verify.py` (read-only, `SS2_DATA_DIR`) over the retail install with all patches; **T01-058** additionally decompiled and read, in `Engine.dll`: `CAnimation`'s constructors (for `.1`'s true type and default), `aniFindAnimationInAnimHost`, `aniUpdateLookupTable`, `aniCalcAnimFrame`, `aniEvaluate` and its four per-type evaluators (`aniEvaluatePosition`, `aniEvaluateRotation`, `aniEvaluateColor`, `aniEvaluateStrength`) and their inlined/called interpolation helpers. For **all 64,927 envelopes** of the 1,647 animations: the key count in the envelope equals the list length; frame numbers strictly ascend; the first and last key sit exactly on the animation's first and last frame; the envelope's own first/last frame equal the animation's; member 5 equals `1 / (last − first + 1)`. All 29,555 rotation envelopes have unit-length quaternions (error below 1e-4), and every bone that has one of the two kinds has both (translation and rotation: 29,555 bones, none with only one). For the 342 embedded sets whose model has an embedded skeleton: 29,344 of 29,452 translation/rotation envelopes address a bone id of that skeleton; the translation member `len` times the bone's length is 1 in 14,468 of 14,665 envelopes.
 
 ## Objects and members
 
@@ -31,7 +31,7 @@ CAnimation
   .8   -> CAnimEventHolder  or null (465 of 1,647 animations have one)
 ```
 
-`CAnimation.1` equals `CAnimation.2` in only 8 animations and is not the index in the list: its meaning is open.
+**`CAnimation.1` is confirmed to be an `IDENT`** (T01-058: `CAnimation`'s default constructor sets this member to the engine's own "invalid identifier" sentinel — the same one used elsewhere, for example `ColorMap` in `mtr.md`), and it is the animation's **lookup key**: `SeriousEngine::aniFindAnimationInAnimHost(host, id)` (read in full) scans every `CAnimSet` of a host and returns the first `CAnimation` whose `.1` equals the given `id`; `aniUpdateLookupTable` builds a sorted per-set index keyed the same way. So an animation is selected by **IDENT**, not by its list position; how that IDENT is derived from (or resolved back to) the human-readable names used by `.mas` schemes was not found in this reading. `CAnimation.1` equals `CAnimation.2` in only 8 animations, confirming it is a name-like id, not a copy of the first frame.
 
 ### Envelopes
 
@@ -53,17 +53,34 @@ The three classes differ in their key list:
 | `CQuatAnimEnvelope` | `.1` keys | `CQuatAnimFrame`: `Quaternion4f`, stored **x, y, z, w** (w last), unit length |
 | `CFloatAnimEnvelope` | `.1` keys | float keys (same frame rules): 5,074 in the `.ans` files |
 
-In `CAnimation.6` the envelopes are grouped by kind: all translation envelopes first, then all rotation envelopes, in the same bone order (sample below). Keys are **sparse**: a static bone has two keys (first and last frame), a moving bone has a key at every changed frame. How to interpolate between keys (linear for translation, spherical for rotation is the likely answer) **cannot be told from the data** and is not specified here.
+A **fourth envelope class exists in the engine but was not seen in this format's data**: `CColorAnimEnvelope` (T01-058, `Engine.dll`), evaluated through its own `aniEvaluateColor` the same way the other three are; `ans_verify.py`'s class tally over all 64,927 envelopes never found one, so it is either unused by this game's shipped `.ans`/`.mdl` animations or stored some other way not checked here.
+
+In `CAnimation.6` the envelopes are grouped by kind: all translation envelopes first, then all rotation envelopes, in the same bone order (sample below). Keys are **sparse**: a static bone has two keys (first and last frame), a moving bone has a key at every changed frame.
+
+**Interpolation (T01-058: `Engine.dll`'s `aniEvaluate` and the per-type evaluator it dispatches to, `aniEvaluatePosition`/`aniEvaluateRotation`/`aniEvaluateStrength`/`aniEvaluateColor`, all read in full).** The answer differs by envelope kind, confirmed from the actual arithmetic:
+
+- **Translation and float ("strength") envelopes interpolate linearly** between the two keys that bracket the current frame: `value = lerp(key1, key2, t)` with `t = (frame - key1.frame) / (key2.frame - key1.frame)`.
+- **Rotation envelopes use proper spherical interpolation (slerp)**, not plain lerp-and-renormalize: the two keys' dot product is computed and the second key negated if it is negative (shortest-path correction, the standard slerp fix for quaternion double-cover); when the two keys are nearly identical (dot above a fixed threshold) it falls back to a **linear** blend of the four components instead of slerp, to avoid dividing by a near-zero `sin` — again the standard numerically-safe slerp. **Blending between several animations played at once also uses this same slerp for rotation** (a second, identical acos/sin pass blends the freshly-interpolated key value into the accumulator from earlier-evaluated layers) and plain lerp for translation/strength/colour — so layering respects quaternion geometry throughout, not just within one animation's own keys.
+- All four evaluators (`aniEvaluatePosition`, `aniEvaluateRotation`, `aniEvaluateColor`, `aniEvaluateStrength`) are thin wrappers that queue one target id into a shared per-frame query and call the common `aniEvaluate`, which walks every currently-played animation list and layer-blends the result; this is also how several simultaneously playing animations (not just several keys) are combined.
 
 **Translation member `len`.** `CVec3LenAnimEnvelope.1` is the **reciprocal of the skeleton's bone length** (`skl.md`, member 6) of the target bone: `len × boneLength = 1` for 14,468 of 14,665 envelopes (98.7 %); the other 197 are in models whose skeleton differs from the one the animation was exported with. It is not the path length, nor the largest key length (tested). It most likely supports retargeting translations to a skeleton with different bone lengths.
 
 **Meaning of the values.** Keys are in the same space as the skeleton's local transforms (`skl.md`, member 4: parent-relative translation and quaternion): the first translation key equals the bone's rest translation in 14,094 of 14,665 cases (96 %), as expected for bones that hardly move; the first rotation key equals the rest rotation in 5,494 (37 %), the rest are bones that really rotate. Values are therefore absolute local transforms, **not deltas** (deltas would be near zero for static bones).
 
-**Target ids.** Translation and rotation envelopes address bone ids of the model's skeleton (99.6 % of the 29,452 checked; the exceptions are not analysed). The float envelopes address ids that are **not** bones: all 743 checked ids lie above the largest bone id of the skeleton (for example 104..107 with 91 bones in `boss_princchan.mdl`) and are not attachment child ids (`mdl.md`) either. What they animate is **unknown**; the same may hold for the palette ids beyond the skeleton found in `mdl.md`.
+**Target ids.** Translation and rotation envelopes address bone ids of the model's skeleton (99.6 % of the 29,452 checked; the exceptions are not analysed). The float envelopes address ids that are **not** bones: all 743 checked ids lie above the largest bone id of the skeleton (for example 104..107 with 91 bones in `boss_princchan.mdl`) and are not attachment child ids (`mdl.md`) either. **What consumes them is confirmed to be generic** (T01-058): `aniEvaluateStrength(default, id, &out)` evaluates any float track by `IDENT` the same way `aniEvaluatePosition`/`aniEvaluateRotation` evaluate a bone's transform — a first-class scalar animation channel, not a transform — but which caller asks for which id (a blend-shape weight, a shader parameter, an attachment's visibility, …) was not traced past the animation system itself, so **what they animate in this game stays unknown**; the same may hold for the palette ids beyond the skeleton found in `mdl.md`.
 
 ### Time
 
-`CAnimation.4 × CAnimation.5 = 1` for all 1,647 animations. Key frames are integers on the animation's frame grid; events use float frames. Whether the animation's duration is `(last − first) / fps` or `(last − first + 1) / fps` (the envelope member `.5` suggests a frame count of `last − first + 1`) and how looping wraps are **not determined**.
+`CAnimation.4 × CAnimation.5 = 1` for all 1,647 animations. Key frames are integers on the animation's frame grid; events use float frames.
+
+**Duration and looping (T01-058: `SeriousEngine::aniCalcAnimFrame`, `Engine.dll`, read in full).** The current playback frame is computed from elapsed real time times the animation's own `fps` (`.5`) times a per-instance speed multiplier, added to a start offset, then one of three modes applies, selected by flag bits of the playing instance (the public enum names for these bits were not found, only their effect):
+
+- **Loop** (one bit set): the frame wraps with a modulo of the frame count, `last − first + 1` — confirming the envelope member `.5`'s `1 / (last − first + 1)` is exactly this same frame count, used the same way by every envelope's own interpolation fraction.
+- **Reverse** (another bit): the elapsed time is subtracted instead of added, with its own end-of-range wrap check against `first`.
+- **Clamp** (neither bit, the default): playback stops at `last` (or `first` if reversed).
+- Independently of these, when a further bit is set and a per-instance fade-period is non-zero, finishing the animation computes a **fade-out window** (time remaining scaled by that period, clamped to zero) rather than cutting off sharply — the data-side period for this is not identified here.
+
+This resolves "how looping wraps" to an exact mechanism, though the engine's own names for the three modes and the fade bit stay open (would need the public header, not present in this reading).
 
 ## Events
 
@@ -84,6 +101,8 @@ followed by class-specific members, for example `CSamSoundAnimEvent.ssae_idSound
 3. Look bones up by id; ids not present in the skeleton (and all float envelope ids) must be skipped, not indexed.
 4. Never allocate from a count before checking it against the bytes remaining (a set reaches 2.5 MB).
 5. Treat events as optional: an unknown event class should fail the set or be skipped explicitly, never guessed.
+6. Interpolate translation and float envelopes linearly between the bracketing keys; interpolate rotation envelopes with slerp, negating the second key when the quaternion dot product is negative, falling back to a linear blend of the four components when the keys are nearly identical (T01-058, "Interpolation" above).
+7. Select an animation by `CAnimation.1` (an `IDENT`), not by its position in the set's list (T01-058).
 
 ## Test vector
 
@@ -98,7 +117,8 @@ followed by class-specific members, for example `CSamSoundAnimEvent.ssae_idSound
 
 ## Open questions
 
-- Meaning of `CAnimSet.3` (values 4 to 85; not the bone count, the largest bone id or the animation count) and `CAnimation.1` → **T01-058**.
-- Interpolation between sparse keys, duration and looping, how animations are named and selected (the names live in animation schemes, `.mas`, T01-019/T01-057) → T01-058.
-- What the float envelopes (ids above the bones) animate; the 108 translation/rotation envelopes whose id is not a bone of the model's skeleton → T01-058.
+- Meaning of `CAnimSet.3` (values 4 to 85; not the bone count, the largest bone id or the animation count): **not resolved by T01-058** — no reader of this member was found in `Engine.dll`; it may be editor-only or consumed by a different module entirely.
+- ~~Interpolation between sparse keys, duration and looping~~ **Answered by T01-058** (sections "Interpolation" and "Duration and looping" above: lerp for translation/strength, slerp with shortest-path and a linear-identical fallback for rotation; loop/reverse/clamp playback modes with an optional fade-out window). How animations are **named** and selected by a human-readable name (the `.mas` schemes, T01-019/T01-057) stays open; selection by `IDENT` is answered (`CAnimation.1`, above).
+- What the float envelopes (ids above the bones) animate: **the delivery mechanism is answered** (`aniEvaluateStrength`, a generic scalar channel), but the actual consumer/purpose in this game is not; the 108 translation/rotation envelopes whose id is not a bone of the model's skeleton stay unanalysed.
+- New from T01-058: a fourth envelope class, `CColorAnimEnvelope`, exists in the engine (evaluated via `aniEvaluateColor`) but was not observed in any of the 64,927 envelopes checked in this format's data.
 - Exact behaviour of each event class → gameplay specs.

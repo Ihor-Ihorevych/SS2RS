@@ -50,6 +50,7 @@ pub mod quality;
 mod renderer;
 mod resources;
 mod scene;
+pub mod scene_data;
 pub mod screen_effects;
 pub mod texture_sampling;
 pub mod transparency;

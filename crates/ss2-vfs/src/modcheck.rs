@@ -502,13 +502,13 @@ impl ModReport {
     }
 }
 
-fn plural(n: usize) -> &'static str {
+pub(crate) fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
 /// `s` with everything that is not printable ASCII (or a newline) written as an escape, so a
 /// hostile name cannot garble a terminal.
-fn ascii(s: &str) -> String {
+pub(crate) fn ascii(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         if c == '\n' || c.is_ascii_graphic() || c == ' ' {
@@ -541,14 +541,14 @@ struct ModFile {
     size: u64,
 }
 
-struct ScanProblem {
+pub(crate) struct ScanProblem {
     lint: Lint,
-    path: String,
-    message: String,
+    pub(crate) path: String,
+    pub(crate) message: String,
 }
 
 /// Every file below the root of `vfs`, sorted, plus what could not be read.
-fn scan_layer(vfs: &dyn Vfs) -> (Vec<(VfsPath, u64)>, Vec<ScanProblem>) {
+pub(crate) fn scan_layer(vfs: &dyn Vfs) -> (Vec<(VfsPath, u64)>, Vec<ScanProblem>) {
     let mut files = Vec::new();
     let mut problems = Vec::new();
     let mut pending = vec![VfsPath::root()];

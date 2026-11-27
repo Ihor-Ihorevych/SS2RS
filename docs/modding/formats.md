@@ -44,7 +44,8 @@ found, 2 wrong command line. More: [meta-dump](../META_DUMP.md), [asset-export](
 | `.fnt` | bitmap font | CTSEMETA | `ss2-format-fnt` | no |
 | `.ans` | animation set | CTSEMETA | `ss2-format-ans` | no |
 | `.pfx`, `.lfx`, `.tfx`, `.vfx` | particle effect, lens flare, text effect, vibration | CTSEMETA | `ss2-format-fx` | no |
-| `.mdl`, `.skl`, `.wld` | model, skeleton, world (level) | CTSEMETA | not yet (specified only) | no |
+| `.mdl` | model | CTSEMETA | `ss2-format-mdl` (static mesh and materials only) | no |
+| `.skl`, `.wld` | skeleton, world (level) | CTSEMETA | not yet (specified only) | no |
 | `.wav`, `.ogg` | sound | RIFF, Ogg Vorbis | `ss2-audio::decode` | any audio tool |
 | `.ogv` | movie | Ogg Theora/Vorbis | not yet (T06-010) | any video tool |
 | `.xmv` | Xbox movie | proprietary | **ignored by design** | no |
@@ -123,7 +124,10 @@ member layout. **Unknown:** what each shader computes (the shader programs are n
 members; the role of a texture slot is inferred from the textures that fill it. [Spec](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/mtr.md).
 
 **`.mdl`** is a model: a mesh reference, materials, attachments, animation host, physics and destruction parts (3,707 files).
-**`.skl`** is a skeleton (31 files, 564 bones). **No reader exists in the repository yet**; `meta-dump` prints both.
+`ss2-format-mdl` reads the part a static renderer needs: the bounding box, the mesh of each mesh instance (embedded in the model
+in 3,517 instances, an external `.bmf` in 127) and the material presets its surfaces use, with the base colour texture of each.
+**Verified:** all 3,707 models read, with the spec's counts. **Not read:** skeleton, animation, attachment children, physics,
+destruction and custom data. **`.skl`** is a skeleton (31 files, 564 bones); no reader exists yet, `meta-dump` prints it.
 [mdl](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/mdl.md), [skl](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/skl.md).
 
 ## `.mat`, `.scs`, `.scp`, `.sca`, `.mas`: what a surface is made of

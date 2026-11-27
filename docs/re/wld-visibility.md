@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-012c (part c of the world spec T01-012)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the vis box entity, its property record and renderable, the group membership relation, the active list and the grid structure (checked on all 59 worlds, `tools/re/wld_vis_verify.py`); **medium** for the roles of the two numeric vis box members and of the group flag (read from value ranges only); **low** for how the engine uses groups at run time (nothing in the data says when a group is shown). Scope: all 59 distinct worlds of the retail install with patches.
+- **Confidence:** **high** for the vis box entity, its property record and renderable, the group membership relation, the active list and the grid structure (checked on all 59 worlds, `tools/re/wld_vis_verify.py`), and, as of T01-062 (`Engine.dll`, read in full: `CVisBoxRenderable::{AddToRendering,SetCullDistance,RenderTest}`, `CVisGroupRenderable::AddMembersToRendering`), for the run-time meaning of `SVisBoxProperties.2`/`.3` and the mechanism that shows or hides a group; **medium** for the AspectFlags bits and the two grid-level exceptions (read from value ranges and one data check only). Scope: all 59 distinct worlds of the retail install with patches.
 
 Prerequisites: `wld-root.md` (entities, aspects, domains and the grid pool layout), `wld-geometry.md`.
 
@@ -15,13 +15,13 @@ Prerequisites: `wld-root.md` (entities, aspects, domains and the grid pool layou
 
 ## Evidence
 
-`tools/re/wld_vis_verify.py` (read-only, `SS2_DATA_DIR`; about 15 minutes for all worlds) over the retail install with all patches, 59 worlds:
+`tools/re/wld_vis_verify.py` (read-only, `SS2_DATA_DIR`; about 15 minutes for all worlds) over the retail install with all patches, 59 worlds; **T01-062** additionally decompiled and read, in `Engine.dll`: `CVisBoxRenderable::{AddToRendering, SetCullDistance, RenderTest}`, `CVisGroupRenderable::AddMembersToRendering`, and `CVisBoxEntity`'s own method list in `Sam2Game.dll` (no action methods beyond the lifecycle ones):
 
 - **Every vis box entity owns exactly one `CVisBoxRenderable`** (`SVisBoxEntity.1`) whose `CAspect.5` points back: 362 of 362. Each has an `SVisBoxProperties` record in the extra section, and the record's three members equal the renderable's three: 362 of 362. All 362 are named (`CEntityProperties.4`, for example `Village_Approach_01`).
 - **`CRenderable.2` and `CVisGroupRenderable.1` are exact inverses** in all 59 worlds (each renderable in at most one group; every set `CRenderable.2` points at a `CVisBoxRenderable`).
 - **Grid structure:** for all 118 renderable grids and 59 light grids, every cell of every entry has exactly one link at the node reached by the walk below, and the used links are exactly those (one per entry and cell), the used nodes exactly the nodes on those paths. All 99,122 renderable entries and 11,438 light entries cover at most 2 cells per axis.
 - **`CRenderable.1` is the index of the renderable's grid entry**: a used entry of its grid in all 118 grids, unique within a grid (it equals the list position in 113 of 118 grids).
-- **Vis box rectangles** equal the rule below in 360 of 362 boxes (the other two are not analysed).
+- **Vis box rectangles** equal the rule below in 360 of 362 boxes; the other two (T01-062: identified) are both unusually large boxes — `6_5_BossArena` (size 3,003 x 1,429 x 1,429) and `7_2_City_Part_II` (1,759 x 225 x 1,947) — whose projected half-extent reaches past the grid's own `-extent/2` edge; the plain formula computes a negative cell index there while the stored entry clamps to 0, so these are a boundary case of the same rule, not a different one (medium: the exact clamp was not re-derived from the engine, only inferred from the two data points).
 
 ## The vis box
 
@@ -41,11 +41,24 @@ CVisBoxRenderable       (CAspect -> CRenderable -> CVisGroupRenderable -> CVisBo
 ```
 
 - **Placement and size.** The box is centred on the renderable's world placement (`CAspect.7`) with edge lengths `.1`; 311 of 362 have an identity rotation; the other 51 are rotated. The members' origins lie inside their box in 71,059 of 71,086 cases (27 outside, in a few worlds); the origin test is `|local position| <= size/2` per axis with the box's rotation.
-- **`.2`** is 3.0e38 (effectively "no limit") in 153 boxes and a round number between 70 and 400 in the rest (100: 20, 200: 19, 120: 10, 170: 8, 150: 8, 400: 8, …): by its range a **distance**; its use is not stated in the data. **`.3`** is a flag, 1 in almost all.
+- **`.2`** is 3.0e38 (effectively "no limit") in 153 boxes and a round number between 70 and 400 in the rest (100: 20, 200: 19, 120: 10, 170: 8, 150: 8, 400: 8, …): a **distance**, confirmed (T01-062, section "Run-time behaviour" below): it is the box's own **cull distance**, fed into the generic renderable pipeline exactly like any other object's. **`.3`** is a flag, 1 in almost all: confirmed as the box's own **occlusion-testing enable bit** (section below).
 - **Nesting.** 52 vis boxes are themselves members of another box (`CRenderable.2` of a `CVisBoxRenderable` is set): a nesting depth of exactly 1 in the data (310 top-level boxes, 52 nested, no cycles).
 - **Membership is not spatial.** 4,254 renderables that are in no group have their origin inside some box, so a group is the list stored in the file, not a query a reader can repeat. 71,086 members: editor primitives 45,790, models 18,069, editor model proxies 3,801, effects 1,814, flares 1,480, and so on; their owners are mostly path markers, static models, lights, formation markers and characters.
 - **Group sizes** range from under 50 renderables (117 groups) to 400 and more (56 groups).
 - **Entity visibility id.** Every property record of the newer class variant has `CBaseProperties.ep_ulEntityIDVis` equal to the entity's own serial (`CEntity.1`) and to `CEntityProperties.8`: 51,703 of 51,704 records (the exception is one force field entity whose value is 1). 17,473 records come from an older class variant without the member. The member is therefore **not** the id of the entity's group; groups are only given by `CRenderable.2`.
+
+## Run-time behaviour (T01-062: `Engine.dll`, read in full)
+
+A group is shown or hidden by **GPU hardware occlusion culling of its box**, not by distance, camera position or script:
+
+1. **`CVisBoxRenderable::AddToRendering`** is the entry point (called once the box itself has passed ordinary frustum culling, like any renderable). If the global feature switch `ren_bVisibilityGroups` is off, it skips all of the below and unconditionally calls `CVisGroupRenderable::AddMembersToRendering` — **every member of every group is drawn** when the feature is disabled.
+2. Otherwise it prepares a render command for the box itself (`CObjRenCmd::Prepare`, the box's own cull-distance test — see `.2` below); if the box fails this ordinary test (too far, outside the frustum) the function returns at once and **no member is added**.
+3. If hardware occlusion queries are supported (`gfx_ulFlags & 0x800`) and the console option `ren_bOcclusionCulling` is on, it issues a GPU occlusion query for the box (`gfxPullOcclusionQuery`) and compares the visible-pixel count against `ren_ctOcclusionPassThreshold`; if the box is occluded, the function returns **without** adding members (the members simply are not drawn that frame).
+4. Only if the box is not occluded (or occlusion culling is unavailable or off) does `AddMembersToRendering` run, submitting every member of the group for rendering, each wrapped under the box's own test render command so the renderer can retire the query.
+5. **`CVisBoxRenderable::RenderTest`** (the function that actually performs the query, called back by the renderer) gates its entire body on `SVisBoxProperties.3`/`CVisBoxRenderable.3` being non-zero: **this is the box's own "run occlusion testing" enable bit.** 15 of 362 boxes have it 0: for those, `RenderTest` does nothing at all, so their group's visibility is decided purely by the ordinary frustum test of step 2, never by occlusion.
+6. **`SVisBoxProperties.2`/`CVisBoxRenderable.2`** is confirmed to be the box's **cull distance**: `CVisBoxRenderable::SetCullDistance(float)` stores it at the exact field (`this + 0x78`) that `AddToRendering` reads and passes into the renderable pipeline's own standard cull-distance test (step 2) — the same mechanism every renderable uses, not something specific to vis groups. 3.0e38 (153 boxes) is "no limit"; the round 70 to 400 values are real world-unit distances beyond which the whole group stops being tested and drawn.
+
+So: a group's members are drawn when (a) visibility groups are off entirely, or (b) the box passes its own cull-distance/frustum test **and** either occlusion testing is disabled for that box (`.3` = 0), occlusion culling is unavailable or off globally, or the box's occlusion query came back "visible enough". `AspectFlags` (`CAspect.6`, 0x80005 for every vis box) was searched for in `Engine.dll` for named bit tests and none were found as separate symbols; its bits stay open, shared with `wld-root.md`.
 
 ## The active list `CRenderingDomain.8`
 
@@ -68,7 +81,7 @@ for each cell (cx, cz) of an entry: start at node 0; for s = 1..L:
   the link list of that node holds exactly one link for this entry.
 ```
 
-- **The level of an entry** is the finest level whose cell size is at least the larger side of the object's rectangle, so it spans one or two cells per axis. For a vis box the rectangle is the rotated box (centre +- the projected half sizes in x and z): 360 of 362 boxes. For the other renderables and lights the object's bounding rectangle is not stored, but the same bound holds (all 110,560 entries cover at most 2 x 2 cells), and the renderable's origin lies inside its rectangle in 98,817 of 99,122 renderables (the origin of a model can lie outside its bounds).
+- **The level of an entry** is the finest level whose cell size is at least the larger side of the object's rectangle, so it spans one or two cells per axis. For a vis box the rectangle is the rotated box (centre +- the projected half sizes in x and z): 360 of 362 boxes, the other two clamped at the grid edge (above). For the other renderables and lights the object's bounding rectangle is not stored, but the same bound holds (all 110,560 entries cover at most 2 x 2 cells), and the renderable's origin lies inside its rectangle in 98,817 of 99,122 renderables (the origin of a model can lie outside its bounds); **how the level is chosen for these stays open** — the exact rectangle a non-box renderable used (presumably its own bounding box, computed by the world editor/exporter, not the running game) was not found in either game DLL, consistent with that computation belonging to the editor rather than `Sam2Game.dll`/`Engine.dll`.
 - **Which grid holds what:** `CRenderingDomain.6` holds all vis boxes and nothing else (44 worlds) or is empty (the 15 worlds without boxes); `.7` holds all other renderables of the world except the haze effect (118 grids in 59 worlds). The light grid (`.5`) holds the light sources in the same layout (11,438 entries in total).
 - The entry index of a renderable is its `CRenderable.1`.
 
@@ -83,11 +96,13 @@ for each cell (cx, cz) of an entry: start at node 0; for s = 1..L:
 
 ## Test vector
 
+**Run-time mechanism (T01-062, binary reading):** with `ren_bVisibilityGroups` off, every group's members are added to rendering regardless of their box. With it on and the box's own cull-distance/frustum test passed: if `.3` is 0, or hardware occlusion queries are unsupported, or `ren_bOcclusionCulling` is off, the members are added unconditionally (ordinary culling only); otherwise a GPU occlusion query decides, per frame, whether the members are added at all.
+
 `Content/SeriousSam2/Levels/01_MDigBo/1_3_Village/1_3_Village.wld`: 7 vis boxes, all top-level. The first (entity serial 1976, renderable object 2986, name `Village_Approach_01`): size (33.404, 36.876, 88.462) at (126.471, 21.022, −95.277) with an identity rotation, `.2` = 3.0e38, `.3` = 1, one member (an editor primitive). The seven boxes have member counts 1, 158, 142, 59, 14, 199 and 164 (737 members); 663 members are in a group whose `.3` is 0 and 74 in groups whose `.3` is 1; the members are exactly the renderables outside `CRenderingDomain.8` (157 are in `.8`, 737 are in groups and 1 is the haze effect renderable, 895 in all). The vis grid (object 4548): depth 12, extent 4096, 16 entry slots of which 7 are used, entries `(16,17,14,15,5)`, `(34,35,27,28,6)`, `(35,36,27,28,6)`, `(17,17,14,15,5)`, `(17,18,14,15,5)`, `(35,36,28,29,6)`, `(34,35,28,29,6)` in the order of the box list; 26 used links (one per entry cell), 25 used nodes of 32.
 
 ## Open questions
 
-- What a group does at run time: the meaning of `SVisBoxProperties.2` (a distance?) and `.3`, and whether groups are shown or hidden by position, by script or by distance (T04 renderer, T01-030 scripting).
-- How the level of non-box entries is chosen exactly (the bounding rectangles of models and lights are not stored), and the two vis boxes whose entry differs from the rule.
-- Whether the macro language can address a group (nothing visibility-related appears among the classes; groups are addressed by entity serial at most).
-- `AspectFlags` bit meanings (shared with `wld-root.md`).
+- **What a group does at run time:** **answered by T01-062** ("Run-time behaviour" above): `SVisBoxProperties.2` is the box's own cull distance, `.3` enables GPU hardware occlusion testing of the box; a group is shown or hidden by occlusion culling of its box (or ordinary frustum/distance culling when occlusion testing is off for that box, unavailable, or disabled globally), never by a script or by the members' own positions.
+- **How the level of non-box entries is chosen**, and **the two vis boxes whose entry differs from the rule**: the two exceptions are identified (above: both large boxes clamped at the grid edge, the same rule at a boundary, not a different one); how a non-box renderable's own rectangle is computed stays open — it was not found in `Sam2Game.dll` or `Engine.dll`, so it most likely belongs to the world editor/exporter, not the running game.
+- **Whether the macro language can address a group:** **answered by T01-062**: no. `CVisBoxEntity` exports only its standard lifecycle methods (`OnCreate`, `GetAbsPlacement`, the constructors) and no action a level script could call; a macro program could at most bind a variable to the box by name, with no verb to invoke on it.
+- `AspectFlags` bit meanings (shared with `wld-root.md`): searched for in `Engine.dll` (named bit tests on `CAspect`'s flags field) and not found; still open.

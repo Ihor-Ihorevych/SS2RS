@@ -12,6 +12,8 @@ publish = false
 workspace = true
 
 [dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-render-api = { path = "../ss2-render-api" }
 ss2-ui = { path = "../ss2-ui" }
 wgpu.workspace = true
 glyphon.workspace = true
@@ -22,4 +24,4 @@ png.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-ss2-core = { path = "../ss2-core" }
+ss2-world = { path = "../ss2-world" }
