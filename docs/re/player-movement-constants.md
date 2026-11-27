@@ -11,13 +11,13 @@
   or open** where stated, in particular the player's collision shape and size, crouch movement
   speed, and whether the player's gravity is scaled. Nothing was run on the original game.
 
-Prerequisites: [`player-rules.md`](player-rules.md) (the global and puppet parameters),
+Prerequisites: `player-rules.md` (the global and puppet parameters),
 [`puppet-legged-classes.md`](puppet-legged-classes.md) (the three environment records, jump and
 air-control members, pose rules), [`puppet-record-members.md`](puppet-record-members.md) section 8
 (the declared names and roles of the environment record, read in full for T01-214),
-[`game-modes.md`](game-modes.md) (the single-player/deathmatch parameter diff), [`ep.md`](ep.md) /
-[`ep-schema.md`](ep-schema.md) (the file format), [`wld-root.md`](wld-root.md) (the world's gravity
-vector), [`misc-types.md`](misc-types.md) (`.mch` mechanism templates, still open as T01-057).
+`game-modes.md` (the single-player/deathmatch parameter diff), `ep.md` /
+`ep-schema.md` (the file format), `wld-root.md` (the world's gravity
+vector), `misc-types.md` (`.mch` mechanism templates, still open as T01-057).
 
 ## Summary
 
