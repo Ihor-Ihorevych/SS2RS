@@ -7,9 +7,12 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
+use ss2_core::{Error, Result};
+use ss2_format_wld::World;
 use ss2_vfs::levels::{LevelInfo, discover_levels};
+use ss2_vfs::{DirEntry, ReadSeek, Stat, Vfs, VfsPath};
 use ss2_world::load::{LoadOptions, load_level};
-use ss2_world::scene::{LevelScene, LoadStage};
+use ss2_world::scene::{CubeFace, LevelScene, LoadStage};
 
 fn level<'a>(levels: &'a [LevelInfo], id: &str) -> &'a LevelInfo {
     levels
@@ -143,6 +146,127 @@ fn every_level_loads() {
         eprintln!("{n:>6} x {r}");
     }
     assert!(failures.is_empty(), "{failures:?}");
+}
+
+/// The install without its models: loading a level then reads the world and the sky's textures
+/// only, so every level loads in a moment.
+struct WithoutModels<'a>(&'a dyn Vfs);
+
+impl WithoutModels<'_> {
+    fn check(path: &VfsPath) -> Result<()> {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("mdl"))
+        {
+            return Err(Error::NotFound(path.as_str().to_string()));
+        }
+        Ok(())
+    }
+}
+
+impl Vfs for WithoutModels<'_> {
+    fn stat(&self, path: &VfsPath) -> Result<Stat> {
+        Self::check(path)?;
+        self.0.stat(path)
+    }
+
+    fn open(&self, path: &VfsPath) -> Result<Box<dyn ReadSeek>> {
+        Self::check(path)?;
+        self.0.open(path)
+    }
+
+    fn list(&self, dir: &VfsPath) -> Result<Vec<DirEntry>> {
+        self.0.list(dir)
+    }
+
+    fn read(&self, path: &VfsPath) -> Result<Vec<u8>> {
+        Self::check(path)?;
+        self.0.read(path)
+    }
+}
+
+/// Every level whose world has a sky loads one, with a face for each face texture the world
+/// names (`environment.md`: 55 skies with five or six faces, 3 without any), and the scene
+/// validates. Faces whose texture cannot be read become white with a skipped line: only the two
+/// skies whose faces are pre-format-8 textures.
+#[test]
+fn every_sky_loads() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let without_models = WithoutModels(&vfs);
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut worlds, mut skies, mut faces) = (0, 0, 0);
+    let mut per_face = [0usize; 6];
+    let mut tints = std::collections::BTreeSet::new();
+    let mut unreadable = Vec::new();
+    let mut failures = Vec::new();
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        worlds += 1;
+        let world = World::from_bytes(&bytes).unwrap();
+        let scene = load_level(
+            &without_models,
+            &info.wld,
+            &LoadOptions::default(),
+            &mut |_| {},
+        )
+        .unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        let (Some(want), Some(got)) = (&world.sky, &scene.sky) else {
+            if world.sky.is_some() != scene.sky.is_some() {
+                failures.push(format!("{}: sky {:?}", info.id, scene.sky));
+            }
+            continue;
+        };
+        skies += 1;
+        let loaded = got.faces.iter().flatten().count();
+        if loaded != want.face_count() {
+            failures.push(format!(
+                "{}: {loaded} faces loaded of {}",
+                info.id,
+                want.face_count()
+            ));
+        }
+        faces += loaded;
+        for f in CubeFace::ALL {
+            per_face[f.index()] += usize::from(got.faces[f.index()].is_some());
+        }
+        tints.insert(got.tint.map(f32::to_bits));
+        unreadable.extend(
+            scene
+                .skipped
+                .iter()
+                .filter(|l| l.starts_with("texture"))
+                .map(|l| format!("{}: {l}", info.id)),
+        );
+    }
+    eprintln!(
+        "{worlds} worlds, {skies} skies, {faces} faces, per cube face {per_face:?}          (+X -X +Y -Y +Z -Z), {} tints; unreadable faces: {unreadable:#?}",
+        tints.len()
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+    // `discover_levels` lists the 58 playable worlds, all with a sky (the 59th world of the
+    // install, `dockingbay`, has none and is not a level).
+    assert_eq!((worlds, skies), (58, 58));
+    // The two skies with pre-format-8 face textures (`environment.md`) are drawn white.
+    let legacy: std::collections::BTreeSet<_> = unreadable
+        .iter()
+        .map(|l| l.split(':').next().unwrap_or_default())
+        .collect();
+    assert_eq!(
+        legacy.into_iter().collect::<Vec<_>>(),
+        ["dm_deserttemple", "dm_dockingbay"]
+    );
+    assert_eq!(unreadable.len(), 11);
+    // East +X, West -X, Ceiling +Y, Floor -Y, South +Z, North -Z.
+    assert_eq!(per_face, [55, 55, 55, 11, 55, 55]);
+    assert_eq!(faces, 55 * 5 + 11);
 }
 
 /// A skipped line without its paths, names and numbers, to group similar lines.
