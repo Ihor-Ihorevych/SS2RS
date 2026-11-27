@@ -6,6 +6,7 @@
 - [Design](superpowers/specs/2026-11-21-ss2rs-design.md)
 - [Playable MVP design](superpowers/specs/2026-11-27-playable-mvp-design.md)
 - [Playing a level](PLAYING.md)
+- [Sky and lightmaps design](superpowers/specs/2026-11-27-sky-and-lightmaps-design.md)
 
 # User guide
 
