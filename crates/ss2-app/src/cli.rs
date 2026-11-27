@@ -4,7 +4,7 @@ use ss2_core::cli::{LaunchOptions, Parsed, Role, parse_launch_options};
 use ss2_ui::ScreenId;
 use std::path::PathBuf;
 
-const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause|about> <out.png> [--size WxH]\n  ss2-app --smoke-frames <N>";
+const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause|about> <out.png> [--size WxH]\n  ss2-app --level <name> --screenshot <out.png> [--size WxH] [--data <folder>]\n  ss2-app --smoke-frames <N>";
 
 /// What `ss2-app` was asked to do.
 #[derive(Debug, PartialEq)]
@@ -23,6 +23,42 @@ pub enum Mode {
     },
     /// Open the window, render this many frames, then exit (automated smoke test).
     Smoke { frames: u32 },
+    /// Load a level and render it from its start offscreen to a PNG, then exit.
+    LevelScreenshot {
+        level: String,
+        out: PathBuf,
+        size: (u32, u32),
+        data: Option<PathBuf>,
+    },
+}
+
+/// `--level NAME --screenshot OUT [--size WxH] [--data DIR | --data=DIR]`, in any order.
+fn parse_level_screenshot(args: Vec<String>) -> Result<Mode, String> {
+    let (mut level, mut out, mut size, mut data) = (None, None, (1280, 720), None);
+    let mut it = args.into_iter();
+    while let Some(arg) = it.next() {
+        let mut value = |name: &str| {
+            it.next()
+                .ok_or_else(|| format!("{name} needs a value\n{USAGE}"))
+        };
+        match arg.as_str() {
+            "--level" => level = Some(value("--level")?),
+            "--screenshot" => out = Some(PathBuf::from(value("--screenshot")?)),
+            "--size" => size = parse_size(&value("--size")?)?,
+            "--data" => data = Some(PathBuf::from(value("--data")?)),
+            other => match other.strip_prefix("--data=") {
+                Some(dir) => data = Some(PathBuf::from(dir)),
+                None => return Err(format!("unknown argument '{other}'\n{USAGE}")),
+            },
+        }
+    }
+    Ok(Mode::LevelScreenshot {
+        level: level
+            .ok_or_else(|| format!("--screenshot of a level needs --level <name>\n{USAGE}"))?,
+        out: out.ok_or_else(|| format!("--screenshot needs an output path\n{USAGE}"))?,
+        size,
+        data,
+    })
 }
 
 fn parse_size(text: &str) -> Result<(u32, u32), String> {
@@ -92,8 +128,12 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, Strin
             Ok(Mode::Smoke { frames })
         }
         _ => {
+            let all: Vec<String> = std::iter::once(first).chain(args).collect();
+            if all.iter().any(|a| a == "--screenshot") {
+                return parse_level_screenshot(all);
+            }
             // Everything else is a launch option shared with ss2-server.
-            let all = std::iter::once(first).chain(args);
+            let all = all.into_iter();
             match parse_launch_options(Role::Client, all).map_err(|e| e.to_string())? {
                 Parsed::Run(options) => Ok(Mode::Window(*options)),
                 Parsed::Help => Ok(Mode::Help),
@@ -132,6 +172,43 @@ mod tests {
         };
         assert_eq!(o.connect.as_deref(), Some("example.org:27960"));
         assert!(parse(&["--listen"]).is_ok());
+    }
+
+    #[test]
+    fn a_level_screenshot_takes_its_flags_in_any_order() {
+        assert_eq!(
+            parse(&["--level", "dm_dockingbay", "--screenshot", "out/d.png"]),
+            Ok(Mode::LevelScreenshot {
+                level: "dm_dockingbay".into(),
+                out: PathBuf::from("out/d.png"),
+                size: (1280, 720),
+                data: None,
+            })
+        );
+        assert_eq!(
+            parse(&[
+                "--data=C:/SS2",
+                "--size",
+                "640x360",
+                "--screenshot",
+                "a.png",
+                "--level",
+                "1_1_jungle"
+            ]),
+            Ok(Mode::LevelScreenshot {
+                level: "1_1_jungle".into(),
+                out: PathBuf::from("a.png"),
+                size: (640, 360),
+                data: Some(PathBuf::from("C:/SS2")),
+            })
+        );
+        assert!(parse(&["--level", "x", "--screenshot"]).is_err(), "no path");
+        assert!(
+            parse(&["--data", "C:/x", "--screenshot", "a.png"]).is_err(),
+            "no level"
+        );
+        assert!(parse(&["--level", "x", "--screenshot", "a.png", "--fly"]).is_err());
+        assert!(parse(&["--level", "x", "--screenshot", "a.png", "--size", "0x9"]).is_err());
     }
 
     #[test]

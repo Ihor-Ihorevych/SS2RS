@@ -9,6 +9,7 @@ mod data_location;
 mod data_location_tests;
 mod diagnostics;
 mod input;
+mod level_session;
 mod profiling;
 mod screenshot;
 mod state;
@@ -28,7 +29,9 @@ fn main() -> ExitCode {
     let paths = match &mode {
         cli::Mode::Window(options) => diagnostics::start(options),
         cli::Mode::Help | cli::Mode::Version => None,
-        cli::Mode::Smoke { .. } | cli::Mode::Screenshot { .. } => {
+        cli::Mode::Smoke { .. }
+        | cli::Mode::Screenshot { .. }
+        | cli::Mode::LevelScreenshot { .. } => {
             ss2_core::logging::init_logging("info");
             None
         }
@@ -53,6 +56,12 @@ fn main() -> ExitCode {
         cli::Mode::Window(options) => launch(&options, paths.as_ref()),
         cli::Mode::Smoke { frames } => app::run(Some(frames), &[], None),
         cli::Mode::Screenshot { screen, out, size } => screenshot::take(screen, &out, size),
+        cli::Mode::LevelScreenshot {
+            level,
+            out,
+            size,
+            data,
+        } => level_session::take_level_screenshot(&level, &out, size, data.as_deref()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

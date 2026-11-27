@@ -31,12 +31,17 @@ pub fn take(screen: ScreenId, out: &Path, size: (u32, u32)) -> Result<(), String
     let image = renderer
         .render_to_image(&menu.draw(), theme::BACKGROUND)
         .map_err(|e| e.to_string())?;
+    save_png(out, &image)
+}
+
+/// Write `image` to `out` as a PNG, creating the folder; an existing file is replaced.
+pub fn save_png(out: &Path, image: &ImageRgba8) -> Result<(), String> {
     if let Some(parent) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
     let file = File::create(out).map_err(|e| format!("cannot create {}: {e}", out.display()))?;
-    write_png(file, &image, out)
+    write_png(file, image, out)
 }
 
 /// Write a capture to a new file without overwriting an existing screenshot.
