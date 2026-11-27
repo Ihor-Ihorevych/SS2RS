@@ -127,6 +127,8 @@ pub(crate) struct UploadReport {
     pub instances: usize,
     /// Whether the level's sky was set.
     pub sky: bool,
+    /// Placements drawn with their own lightmap (one batch each per model part).
+    pub lightmapped: usize,
 }
 
 /// Put `scene` on the GPU as the renderer's world, replacing what was there: one mesh and one batch per model part,
@@ -159,15 +161,24 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
             }
         }
     }
-    let mut placements: Vec<Vec<Mat4>> = vec![Vec::new(); scene.models.len()];
+    // Placements without a lightmap share one batch per model part; each lightmapped placement gets its own, with its
+    // lightmap (RFC 0013 amendment 2).
+    let mut shared: Vec<Vec<Mat4>> = vec![Vec::new(); scene.models.len()];
+    let mut lit: Vec<Vec<(Mat4, TextureHandle)>> = vec![Vec::new(); scene.models.len()];
     for inst in &scene.instances {
-        if let Some(list) = placements.get_mut(inst.model as usize) {
-            list.push(inst.transform.matrix());
+        let m = inst.model as usize;
+        if m >= scene.models.len() {
+            continue;
+        }
+        match inst.lightmap {
+            Some(l) => lit[m].push((inst.transform.matrix(), textures[l as usize])),
+            None => shared[m].push(inst.transform.matrix()),
         }
     }
+    report.lightmapped = lit.iter().map(Vec::len).sum();
     let mut batches = Vec::new();
-    for (model, instances) in scene.models.iter().zip(&placements) {
-        if instances.is_empty() {
+    for ((model, shared), lit) in scene.models.iter().zip(&shared).zip(&lit) {
+        if shared.is_empty() && lit.is_empty() {
             continue;
         }
         for part in &model.parts {
@@ -176,8 +187,7 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
                 .create_mesh(&part.mesh)
                 .map_err(|e| e.to_string())?;
             report.meshes += 1;
-            report.instances += instances.len();
-            batches.push(WorldBatch {
+            let batch = |instances: Vec<Mat4>, lightmap: Option<TextureHandle>| WorldBatch {
                 mesh,
                 texture: material.base_texture.map(|t| textures[t as usize]),
                 tint: material.base_color,
@@ -187,9 +197,19 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
                     AlphaMode::Mask { cutoff } => Some(cutoff),
                     AlphaMode::Blend => Some(0.5),
                 },
-                instances: instances.clone(),
-                lightmap: None,
-            });
+                instances,
+                lightmap,
+            };
+            if !shared.is_empty() {
+                report.instances += shared.len();
+                batches.push(batch(shared.clone(), None));
+            }
+            // A part without lightmap UVs cannot use a lightmap: it is drawn by the flat light.
+            let lightmap_uvs = part.mesh.lightmap_uvs.is_some();
+            for (matrix, lightmap) in lit {
+                report.instances += 1;
+                batches.push(batch(vec![*matrix], lightmap_uvs.then_some(*lightmap)));
+            }
         }
     }
     renderer.set_world(batches).map_err(|e| e.to_string())?;
@@ -358,6 +378,20 @@ mod tests {
         assert!(
             centre.iter().zip(top).all(|(a, b)| a.abs_diff(b) <= 3),
             "{centre:?} is the sky's top face {top:?}"
+        );
+        // The floor is the room's one lightmapped placement: from above, its middle is in the lightmap's shadow.
+        assert_eq!(report.lightmapped, 1);
+        let above = Camera {
+            position: Vec3::new(0.0, 12.0, 0.0),
+            rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+            ..start_camera(&room)
+        };
+        let image = renderer.render_world_to_image(&above, None, SKY).unwrap();
+        let at = |x: usize, y: usize| f32::from(image.pixels[(y * 160 + x) * 4]);
+        let ratio = at(80, 45) / at(80, 3);
+        assert!(
+            (ratio - 0.3).abs() < 0.05,
+            "shadow/light ratio on the floor: {ratio}"
         );
         // A level without a sky clears to the sky colour.
         let mut bare = LevelScene::test_room();
