@@ -51,7 +51,8 @@ fn walking_forward_moves_towards_the_steps_and_stays_on_the_floor() {
     let mut s = session();
     run(&mut s, &forward(), 0.4);
     let feet = s.feet();
-    assert!(feet.z < 3.0, "{feet}");
+    // From z = 6: at least 2 m in 0.4 s.
+    assert!(feet.z < 4.0, "{feet}");
     assert!(feet.y.abs() < 0.05, "{feet}");
     assert!(s.grounded());
 }

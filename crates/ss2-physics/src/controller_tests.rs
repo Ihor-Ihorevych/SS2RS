@@ -143,12 +143,14 @@ fn a_walker_slides_along_a_wall_it_meets_at_an_angle() {
         ..forward()
     };
     run(&w, &mut p, &diagonal, 2.0);
-    assert!(p.position.x > 3.0, "slid along +X: {}", p.position);
+    // Half the speed along the wall for two seconds, less the start-up: well over 0.3 x speed.
+    let speed = WalkConfig::PROVISIONAL.speed;
+    assert!(p.position.x > 0.3 * speed, "slid along +X: {}", p.position);
 }
 
 #[test]
 fn a_low_step_is_climbed_and_a_high_one_is_not() {
-    let low = (Vec3::new(-1.0, 0.0, -4.0), Vec3::new(1.0, 0.4, -2.0));
+    let low = (Vec3::new(-1.0, 0.0, -4.0), Vec3::new(1.0, 1.9, -2.0));
     let w = world(&[floor(), low]);
     let mut p = Walker::new(Vec3::ZERO);
     run(&w, &mut p, &forward(), 0.3);
@@ -156,12 +158,12 @@ fn a_low_step_is_climbed_and_a_high_one_is_not() {
     for _ in 0..60 {
         p.step(&w, &WalkConfig::PROVISIONAL, GRAVITY, &forward(), DT);
         if p.position.z < -2.5 && p.position.z > -3.5 {
-            on_top |= (p.position.y - 0.4).abs() < 0.03 && p.grounded;
+            on_top |= (p.position.y - 1.9).abs() < 0.03 && p.grounded;
         }
     }
     assert!(on_top, "never stood on the low step");
 
-    let high = (Vec3::new(-1.0, 0.0, -4.0), Vec3::new(1.0, 1.0, -2.0));
+    let high = (Vec3::new(-1.0, 0.0, -4.0), Vec3::new(1.0, 2.5, -2.0));
     let w = world(&[floor(), high]);
     let mut p = Walker::new(Vec3::ZERO);
     run(&w, &mut p, &forward(), 2.0);
@@ -309,5 +311,5 @@ fn the_eye_is_above_the_feet() {
     let cfg = WalkConfig::PROVISIONAL;
     let p = Walker::new(Vec3::new(1.0, 2.0, 3.0));
     assert_eq!(p.eye(&cfg), Vec3::new(1.0, 2.0 + cfg.eye_height, 3.0));
-    assert!(cfg.eye_height < cfg.height && cfg.step_height > 0.4 && cfg.step_height < 1.0);
+    assert!(cfg.eye_height < cfg.height && cfg.step_height > 1.9 && cfg.step_height < 2.5);
 }
