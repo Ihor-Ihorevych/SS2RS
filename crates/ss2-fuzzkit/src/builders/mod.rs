@@ -18,4 +18,5 @@ pub mod mat;
 pub mod mdl;
 pub mod mtr;
 pub mod rsc;
+pub mod tex_legacy;
 pub mod wld;

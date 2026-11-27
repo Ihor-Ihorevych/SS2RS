@@ -79,6 +79,51 @@ fn dm_dockingbay_loads() {
     }
 }
 
+/// The two deathmatch levels whose skies are legacy (version 4-7) textures (`tex-legacy.md`):
+/// every sky face is a real image and no texture is replaced for being a legacy file. Before
+/// T02-041 their legacy textures were drawn white, each with a skipped line.
+#[test]
+fn legacy_textures_of_two_levels_load() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    for id in ["dm_dockingbay", "dm_deserttemple"] {
+        let info = level(&levels, id);
+        let scene = load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        scene.validate().unwrap();
+        let textures: Vec<&String> = scene
+            .skipped
+            .iter()
+            .filter(|l| l.starts_with("texture"))
+            .collect();
+        eprintln!(
+            "{id}: {} skipped lines, {} of them textures: {:#?}",
+            scene.skipped.len(),
+            textures.len(),
+            scene.skipped
+        );
+        // Every texture of both levels reads (before T02-041 the legacy textures were drawn
+        // white: 15 skipped lines in `dm_dockingbay`, 31 in `dm_deserttemple`).
+        assert!(textures.is_empty(), "{textures:#?}");
+        let sky = scene.sky.as_ref().expect("a sky");
+        let faces: Vec<_> = sky
+            .faces
+            .iter()
+            .flatten()
+            .map(|&t| &scene.textures[t as usize])
+            .collect();
+        assert!(faces.len() >= 5, "{id}: {} faces", faces.len());
+        for f in faces {
+            assert!(
+                f.width >= 64 && f.height >= 64,
+                "{id}: a {}x{} face",
+                f.width,
+                f.height
+            );
+        }
+    }
+}
+
 #[test]
 fn every_level_loads() {
     let dir = ss2_testkit::require_game_data!();
@@ -187,8 +232,8 @@ impl Vfs for WithoutModels<'_> {
 
 /// Every level whose world has a sky loads one, with a face for each face texture the world
 /// names (`environment.md`: 55 skies with five or six faces, 3 without any), and the scene
-/// validates. Faces whose texture cannot be read become white with a skipped line: only the two
-/// skies whose faces are pre-format-8 textures.
+/// validates. Every face texture reads: the 11 faces of `dm_deserttemple` and `dm_dockingbay`
+/// are legacy (version 4-7) textures, read since T02-041.
 #[test]
 fn every_sky_loads() {
     let dir = ss2_testkit::require_game_data!();
@@ -200,6 +245,7 @@ fn every_sky_loads() {
     let mut per_face = [0usize; 6];
     let mut tints = std::collections::BTreeSet::new();
     let mut unreadable = Vec::new();
+    let mut white_faces = 0;
     let mut failures = Vec::new();
     for info in &levels {
         let bytes = vfs.read(&info.wld).unwrap();
@@ -237,6 +283,12 @@ fn every_sky_loads() {
         for f in CubeFace::ALL {
             per_face[f.index()] += usize::from(got.faces[f.index()].is_some());
         }
+        white_faces += got
+            .faces
+            .iter()
+            .flatten()
+            .filter(|&&t| scene.textures[t as usize].width == 1)
+            .count();
         tints.insert(got.tint.map(f32::to_bits));
         unreadable.extend(
             scene
@@ -254,16 +306,10 @@ fn every_sky_loads() {
     // `discover_levels` lists the 58 playable worlds, all with a sky (the 59th world of the
     // install, `dockingbay`, has none and is not a level).
     assert_eq!((worlds, skies), (58, 58));
-    // The two skies with pre-format-8 face textures (`environment.md`) are drawn white.
-    let legacy: std::collections::BTreeSet<_> = unreadable
-        .iter()
-        .map(|l| l.split(':').next().unwrap_or_default())
-        .collect();
-    assert_eq!(
-        legacy.into_iter().collect::<Vec<_>>(),
-        ["dm_deserttemple", "dm_dockingbay"]
-    );
-    assert_eq!(unreadable.len(), 11);
+    // Every face reads, including the 11 faces of the two skies whose textures are legacy
+    // version 4-7 files (`environment.md`, `tex-legacy.md`; drawn white before T02-041).
+    assert!(unreadable.is_empty(), "{unreadable:#?}");
+    assert_eq!(white_faces, 0, "white stand-in faces");
     // East +X, West -X, Ceiling +Y, Floor -Y, South +Z, North -Z.
     assert_eq!(per_face, [55, 55, 55, 11, 55, 55]);
     assert_eq!(faces, 55 * 5 + 11);

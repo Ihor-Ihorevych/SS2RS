@@ -193,7 +193,7 @@ python -I tools/asset-export/scripts/validate_png.py OUTDIR
 * **Conventions:** handedness, triangle winding and the UV v axis are written as stored and **not verified** against the engine (`bmf.md` leaves them open); `--flip-winding` is a workaround, not a fix.
 * **Materials** are only partly translated: one base colour texture chosen by shader class (shade, reflection, pixel-light, specular only), the texture list in `extras`; tints, blend modes, normal
   maps, modifiers and animated parameters are not. Embedded textures (8 models) are not handled; only external `.tex` references become images.
-* **Textures:** the 125 development-build textures (format versions 4 to 7) are not exported (the reader refuses them, T01-083); no normal-map channel handling; no HDR, 16-bit or compressed (BC) output
+* **Textures:** the 125 development-build textures (format versions 4 to 7) are exported like the others since the reader learned their legacy layouts (T02-041); no normal-map channel handling; no HDR, 16-bit or compressed (BC) output
   (PNG is always 8-bit RGB/RGBA/gray); DXT decoding follows the usual software convention and may differ from a GPU by one level; contact sheets have no text labels (the JSON list is the key); `--face
   all` writes a strip, not a cross, and the cube face order has only medium confidence in the spec; there is no mip-chain sheet (all levels of one texture in one image).
 * **Validation by hand:** the Khronos validator and Pillow were run by hand for this pull request (the Rust test for the validator runs only when `GLTF_VALIDATOR_DIR` is set); CI does not have them.

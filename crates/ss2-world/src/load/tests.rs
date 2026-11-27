@@ -1293,6 +1293,9 @@ fn tex(format: PixelFormat, width: u32, height: u32, data: Vec<u8>) -> Texture {
         faces: 1,
         mip_levels,
         data,
+        format_version: 8,
+        frames: 1,
+        palette: Vec::new(),
     }
 }
 
