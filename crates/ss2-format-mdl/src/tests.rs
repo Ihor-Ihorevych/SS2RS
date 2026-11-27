@@ -571,6 +571,10 @@ fn every_model_of_the_real_install_reads() {
     let mut external_meshes = BTreeSet::new();
     let mut external_materials = BTreeSet::new();
     let mut no_base_classes: BTreeMap<String, usize> = BTreeMap::new();
+    // Collision meshes of the embedded meshes (T02-042): models with one, meshes, empty ones,
+    // triangles and tree references.
+    let (mut col_models, mut col_meshes, mut col_empty) = (0usize, 0usize, 0usize);
+    let (mut col_tris, mut col_refs) = (0usize, 0usize);
     while let Some(d) = stack.pop() {
         for e in vfs.list(&d).unwrap() {
             let path = d.join(&e.name).unwrap();
@@ -589,6 +593,12 @@ fn every_model_of_the_real_install_reads() {
                 }
             };
             files += 1;
+            col_models += usize::from(
+                model
+                    .meshes
+                    .iter()
+                    .any(|m| matches!(m, MeshSource::Embedded(mesh) if mesh.collision.is_some())),
+            );
             *instances_per_model.entry(model.meshes.len()).or_default() += 1;
             presets += model.materials.len();
             for m in &model.materials {
@@ -620,6 +630,12 @@ fn every_model_of_the_real_install_reads() {
                     }
                 };
                 embedded += 1;
+                if let Some(c) = &mesh.collision {
+                    col_meshes += 1;
+                    col_empty += usize::from(c.is_empty());
+                    col_tris += c.triangle_count();
+                    col_refs += c.node_triangles.len();
+                }
                 for lod in &mesh.lods {
                     lods += 1;
                     for s in &lod.surfaces {
@@ -681,10 +697,17 @@ fn every_model_of_the_real_install_reads() {
         &missing_materials[..missing_materials.len().min(5)],
         failures.len()
     );
+    eprintln!(
+        "collision meshes: {col_models} models, {col_meshes} embedded meshes ({col_empty} empty), {col_tris} triangles, {col_refs} tree references"
+    );
     assert!(
         failures.is_empty(),
         "first failures: {:?}",
         &failures[..failures.len().min(10)]
+    );
+    assert_eq!(
+        col_models, 3023,
+        "mdl.md: 3,023 models have a collision mesh"
     );
     assert_eq!(files, 3707, "mdl.md counts 3,707 models");
     assert_eq!((embedded, external, null), (3517, 127, 1), "mdl.md");

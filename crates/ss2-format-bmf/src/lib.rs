@@ -6,9 +6,12 @@
 //! [`Mesh::from_bytes`] cuts those streams out into typed arrays: indices, positions, normals,
 //! optional tangents, UV sets, and optional bone weights and indices with the bone palette.
 //!
+//! The mesh's **collision mesh** ([`Mesh::collision`], `bmf.md` "Collision mesh") is read too:
+//! its vertices (usually streams of the render vertex buffers), triangles, per-triangle collision
+//! surface ids with the surface table, and the flat collision tree ([`CollisionMesh`]).
+//!
 //! What is **not** done here: materials are only identified ([`MaterialRef`]; the material loader
-//! is T02-018), morph maps and the collision mesh are not read (their layout is open, T01-055), and
-//! the editor-side records after `EDOB` are skipped.
+//! is T02-018), morph maps are not read, and the editor-side records after `EDOB` are skipped.
 //!
 //! ```ignore
 //! let mesh = ss2_format_bmf::Mesh::from_bytes(&bytes)?;
@@ -22,6 +25,9 @@
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::{Error, Result};
 use ss2_meta::{Container, Decoded, MetaDeserialize, ObjectRef};
+
+mod collision;
+pub use collision::{CollisionMesh, CollisionNode, CollisionSurface};
 
 const WHAT: &str = ".bmf mesh";
 
@@ -46,7 +52,7 @@ pub struct Aabb {
     pub max: [f32; 3],
 }
 
-/// What a surface uses as its material.
+/// What a surface uses as its material (for a [`CollisionSurface`]: its material attributes).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MaterialRef {
     /// None (88 of 353 surfaces in the retail meshes; what the engine draws is unknown).
@@ -130,8 +136,9 @@ pub struct Mesh {
     /// `CRenderMesh.7`, `.8`, `.9`: three distances (probably fade and view distances; meaning
     /// unconfirmed, `bmf.md`).
     pub distances: [f32; 3],
-    /// `true` if the file has a `CCollisionMesh` (not read).
-    pub has_collision_mesh: bool,
+    /// The collision mesh (`CMesh.2`), `None` when the mesh has none. It may have no triangles
+    /// ([`CollisionMesh::is_empty`]).
+    pub collision: Option<Box<CollisionMesh>>,
 }
 
 #[derive(MetaDeserialize)]
@@ -319,6 +326,22 @@ fn floats<const N: usize>(bytes: &[u8]) -> Vec<[f32; N]> {
         .collect()
 }
 
+/// What a reference names: an object of the file, an external file, or nothing.
+fn material_ref(container: &Container<'_>, decoded: &Decoded, r: ObjectRef) -> MaterialRef {
+    match r.0 {
+        None => MaterialRef::None,
+        Some(id) if decoded.object(id).is_some() => MaterialRef::Embedded(id),
+        Some(id) => container
+            .external_objects
+            .iter()
+            .find(|e| e.object_id == id)
+            .and_then(|e| container.files.get(e.file_ref as usize))
+            .map_or(MaterialRef::None, |f| {
+                MaterialRef::External(f.path.to_string())
+            }),
+    }
+}
+
 fn bytes4(bytes: &[u8]) -> Vec<[u8; 4]> {
     bytes.as_chunks::<4>().0.to_vec()
 }
@@ -402,10 +425,19 @@ impl Mesh {
                 surfaces,
             });
         }
+        let collision = match raw_mesh.collision.0 {
+            None => None,
+            Some(id) => Some(Box::new(collision::read(
+                container,
+                decoded,
+                &vertex_buffers,
+                id,
+            )?)),
+        };
         Ok(Self {
             lods,
             distances: [render.d1, render.d2, render.d3],
-            has_collision_mesh: raw_mesh.collision.0.is_some(),
+            collision,
         })
     }
 
@@ -498,18 +530,7 @@ impl Mesh {
             )));
         }
 
-        let material = match s.material.0 {
-            None => MaterialRef::None,
-            Some(id) if decoded.object(id).is_some() => MaterialRef::Embedded(id),
-            Some(id) => container
-                .external_objects
-                .iter()
-                .find(|e| e.object_id == id)
-                .and_then(|e| container.files.get(e.file_ref as usize))
-                .map_or(MaterialRef::None, |f| {
-                    MaterialRef::External(f.path.to_string())
-                }),
-        };
+        let material = material_ref(container, decoded, s.material);
         Ok(Surface {
             indices,
             positions,
@@ -578,6 +599,17 @@ mod tests {
 
     /// One LOD with one surface; `index_bytes` and `vertex_bytes` are the two buffers.
     fn mesh_file(spec: &Spec, platform: u32, index_bytes: &[u8], vertex_bytes: &[u8]) -> Vec<u8> {
+        mesh_file_with(spec, platform, index_bytes, vertex_bytes, None)
+    }
+
+    /// [`mesh_file`] with an optional collision mesh (object 6).
+    fn mesh_file_with(
+        spec: &Spec,
+        platform: u32,
+        index_bytes: &[u8],
+        vertex_bytes: &[u8],
+        collision: Option<&Coll>,
+    ) -> Vec<u8> {
         let mut b = MetaBuilder::new();
         b.type_block(TypeBlock::primitive(0, "SLONG", 4, 4));
         b.type_block(TypeBlock::alias(1, "INDEX", 0));
@@ -728,10 +760,11 @@ mod tests {
             1,
             5,
             Some(9),
-            &[("1", 27), ("2", 27)],
+            &[("1", 27), ("2", 42)],
         ));
         // The material is a second, empty resource object (a stand-in for a CShaderPreset).
         b.type_block(TypeBlock::class(29, "CShaderPreset", 1, 5, Some(9), &[]));
+        collision_types(&mut b);
 
         b.object(0, 7, ObjectBytes::new().i32(1).finish());
         b.object(
@@ -741,7 +774,7 @@ mod tests {
                 .i32(1)
                 .object_ref(Some(0))
                 .object_ref(Some(2))
-                .object_ref(None)
+                .object_ref(collision.map(|_| 6))
                 .finish(),
         );
         // The render mesh, its LOD with one section and one surface (inline).
@@ -810,7 +843,338 @@ mod tests {
         b.object(3, 10, buffer(0x5F, index_bytes));
         b.object(4, 10, buffer(0x1F, vertex_bytes));
         b.object(5, 29, ObjectBytes::new().i32(-1).object_ref(None).finish());
+        if let Some(c) = collision {
+            b.object(6, 41, collision_object(c));
+        }
         b.build().unwrap()
+    }
+
+    /// A collision mesh description for the synthetic file (`bmf.md`, "Collision mesh").
+    #[derive(Clone)]
+    struct Coll {
+        render_geometry: bool,
+        holder: u8,
+        position_offset: u32,
+        normal_offset: u32,
+        vertex_count: u32,
+        own: Vec<[f32; 3]>,
+        idx16: Vec<u16>,
+        idx32: Vec<u32>,
+        surface_ids: Vec<u8>,
+        /// The double-sided flag of each table entry; the first refers to the preset (object 5).
+        surfaces: Vec<bool>,
+        edge_flags: Vec<u8>,
+        nodes: Vec<[u16; 4]>,
+        refs: Vec<i32>,
+        bounds: [f32; 6],
+    }
+
+    /// The types of a `CCollisionMesh` (ids 30 to 42), with the member order of the retail files.
+    fn collision_types(b: &mut MetaBuilder) {
+        b.type_block(TypeBlock::primitive(30, "UWORD", 2, 2));
+        b.type_block(TypeBlock::short(31, "CStaticArray<UWORD>", 0, 6, 30));
+        b.type_block(TypeBlock::short(32, "CStaticArray<ULONG>", 0, 6, 2));
+        b.type_block(TypeBlock::alias(33, "BOOL", 0));
+        b.type_block(TypeBlock::class(
+            34,
+            "CCollisionMeshSurface",
+            3,
+            5,
+            None,
+            &[("4", 33), ("5", 19)],
+        ));
+        b.type_block(TypeBlock::short(
+            35,
+            "CStaticArray<CCollisionMeshSurface>",
+            0,
+            6,
+            34,
+        ));
+        b.type_block(TypeBlock::short(36, "CStaticStackArray<UBYTE>", 0, 7, 4));
+        b.type_block(TypeBlock::class(
+            37,
+            "CCollisionMeshNode",
+            1,
+            5,
+            None,
+            &[("1", 30), ("2", 30), ("3", 30), ("4", 30)],
+        ));
+        b.type_block(TypeBlock::short(
+            38,
+            "CStaticArray<CCollisionMeshNode>",
+            0,
+            6,
+            37,
+        ));
+        b.type_block(TypeBlock::class(
+            39,
+            "Vector3f",
+            1,
+            5,
+            None,
+            &[("1", 3), ("2", 3), ("3", 3)],
+        ));
+        b.type_block(TypeBlock::short(40, "CStaticArray<Vector3f>", 0, 6, 39));
+        b.type_block(TypeBlock::class(
+            41,
+            "CCollisionMesh",
+            18,
+            5,
+            None,
+            &[
+                ("12", 40),
+                ("13", 31),
+                ("14", 32),
+                ("9", 6),
+                ("11", 35),
+                ("26", 36),
+                ("16", 38),
+                ("17", 17),
+                ("18", 13),
+                ("19", 33),
+                ("20", 4),
+                ("21", 2),
+                ("23", 2),
+                ("22", 1),
+            ],
+        ));
+        b.type_block(TypeBlock::pointer(42, "CCollisionMesh*", 41));
+    }
+
+    fn collision_object(c: &Coll) -> Vec<u8> {
+        let mut o = ObjectBytes::new().array_header(b"STAR", c.own.len() as u32);
+        for p in &c.own {
+            o = o.f32(p[0]).f32(p[1]).f32(p[2]);
+        }
+        o = o.array_header(b"STAR", c.idx16.len() as u32);
+        for &i in &c.idx16 {
+            o = o.u16(i);
+        }
+        o = o.array_header(b"STAR", c.idx32.len() as u32);
+        for &i in &c.idx32 {
+            o = o.u32(i);
+        }
+        o = o
+            .array_header(b"STAR", c.surface_ids.len() as u32)
+            .raw(&c.surface_ids)
+            .array_header(b"STAR", c.surfaces.len() as u32);
+        for (k, &double) in c.surfaces.iter().enumerate() {
+            o = o
+                .u32(u32::from(double))
+                .object_ref(if k == 0 { Some(5) } else { None });
+        }
+        o = o
+            .array_header(b"SSAR", c.edge_flags.len() as u32)
+            .raw(&c.edge_flags)
+            .array_header(b"STAR", c.nodes.len() as u32);
+        for n in &c.nodes {
+            o = o.u16(n[0]).u16(n[1]).u16(n[2]).u16(n[3]);
+        }
+        o = o.array_header(b"STAR", c.refs.len() as u32);
+        for &r in &c.refs {
+            o = o.i32(r);
+        }
+        for v in c.bounds {
+            o = o.f32(v);
+        }
+        o.u32(u32::from(c.render_geometry))
+            .u8(c.holder)
+            .u32(c.position_offset)
+            .u32(c.normal_offset)
+            .u32(c.vertex_count)
+            .finish()
+    }
+
+    /// The quad's two triangles as a collision mesh on the render vertices, with a root split at
+    /// x = 0 and one triangle in each child.
+    fn quad_collision() -> Coll {
+        Coll {
+            render_geometry: true,
+            holder: 0,
+            position_offset: 0,
+            normal_offset: 48,
+            vertex_count: 4,
+            own: vec![],
+            idx16: vec![0, 1, 2, 2, 1, 3],
+            idx32: vec![],
+            surface_ids: vec![0, 1],
+            surfaces: vec![false, true],
+            edge_flags: vec![0x21, 0x30],
+            nodes: vec![
+                [8192, 1, 0, 0],
+                [0xFFFF, 0xFFFF, 1, 0],
+                [0xFFFF, 0xFFFF, 1, 1],
+            ],
+            refs: vec![0, 1],
+            bounds: [-1.0, 0.0, -1.0, 1.0, 0.0, 1.0],
+        }
+    }
+
+    fn with_collision(c: &Coll) -> Result<Mesh> {
+        let (spec, idx, vtx) = quad();
+        Mesh::from_bytes(&mesh_file_with(&spec, 0xFFFF_FFFF, &idx, &vtx, Some(c)))
+    }
+
+    #[test]
+    fn reads_a_collision_mesh_on_the_render_vertices() {
+        let mesh = with_collision(&quad_collision()).unwrap();
+        let c = mesh.collision.as_ref().expect("a collision mesh");
+        let render = &mesh.lods[0].surfaces[0];
+        assert_eq!(c.positions, render.positions);
+        assert_eq!(c.normals, render.normals);
+        assert_eq!(c.triangles, [[0, 1, 2], [2, 1, 3]]);
+        assert_eq!((c.triangle_count(), c.is_empty()), (2, false));
+        assert_eq!(c.surface_ids, [0, 1]);
+        assert_eq!(c.edge_flags, [0x21, 0x30]);
+        assert_eq!(
+            c.surface_of(0),
+            Some(&CollisionSurface {
+                double_sided: false,
+                material: MaterialRef::Embedded(5)
+            })
+        );
+        assert!(c.surface_of(1).unwrap().double_sided);
+        assert_eq!(c.surface_of(1).unwrap().material, MaterialRef::None);
+        assert!(c.surface_of(2).is_none());
+        assert_eq!(c.bounds.min, [-1.0, 0.0, -1.0]);
+        // The tree: the root splits X at the middle of the mesh box.
+        let root = c.nodes[0];
+        assert!(!root.is_leaf());
+        assert_eq!(root.split_plane(&c.bounds), Some((0, 0.0)));
+        assert_eq!(root.children(), Some((1, 2)));
+        assert!(c.node_triangles_of(0).is_empty());
+        assert!(c.nodes[1].is_leaf() && c.nodes[1].children().is_none());
+        assert_eq!(c.nodes[1].split_plane(&c.bounds), None);
+        assert_eq!(c.node_triangles_of(1), [0]);
+        assert_eq!(c.node_triangles_of(2), [1]);
+        assert!(c.node_triangles_of(9).is_empty());
+    }
+
+    #[test]
+    fn split_positions_are_quantized_against_the_full_mesh_box() {
+        let bounds = Aabb {
+            min: [0.0, -2.0, 10.0],
+            max: [4.0, 2.0, 18.0],
+        };
+        let node = |axis: u16, units: u16| CollisionNode {
+            split: (axis << 14) | units,
+            child: 1,
+            triangle_count: 0,
+            first_triangle: 0,
+        };
+        assert_eq!(node(0, 4096).split_plane(&bounds), Some((0, 1.0)));
+        assert_eq!(node(1, 0).split_plane(&bounds), Some((1, -2.0)));
+        assert_eq!(node(2, 12288).split_plane(&bounds), Some((2, 16.0)));
+        assert_eq!(node(3, 0).split_plane(&bounds), None, "no fourth axis");
+    }
+
+    #[test]
+    fn a_collision_mesh_may_use_32_bit_indices_and_its_own_positions() {
+        let mut c = quad_collision();
+        c.render_geometry = false;
+        c.vertex_count = 0;
+        c.own = vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
+        c.idx16.clear();
+        c.idx32 = vec![0, 2, 1];
+        c.surface_ids = vec![0];
+        c.edge_flags = vec![0];
+        c.nodes = vec![[0xFFFF, 0xFFFF, 1, 0]];
+        c.refs = vec![0];
+        let mesh = with_collision(&c).unwrap();
+        let c = mesh.collision.unwrap();
+        assert_eq!(c.positions[1], [1.0, 0.0, 0.0]);
+        assert!(c.normals.is_empty());
+        assert_eq!(c.triangles, [[0, 2, 1]]);
+    }
+
+    #[test]
+    fn an_empty_collision_mesh_and_out_of_table_surface_ids_are_accepted() {
+        // bmf.md: three collision objects have `.19 = 0` and nothing else.
+        let empty = Coll {
+            render_geometry: false,
+            vertex_count: 0,
+            idx16: vec![],
+            surface_ids: vec![],
+            surfaces: vec![],
+            edge_flags: vec![],
+            nodes: vec![],
+            refs: vec![],
+            ..quad_collision()
+        };
+        let c = with_collision(&empty).unwrap().collision.unwrap();
+        assert!(c.is_empty() && c.positions.is_empty() && c.nodes.is_empty());
+        // KlodovikLogo.bmf has surface ids past its table: readable, `surface_of` says None.
+        let mut c = quad_collision();
+        c.surface_ids = vec![0, 7];
+        let c = with_collision(&c).unwrap().collision.unwrap();
+        assert!(c.surface_of(0).is_some());
+        assert!(c.surface_of(1).is_none());
+        assert_eq!(c.surface_ids[1], 7);
+    }
+
+    #[test]
+    fn broken_collision_meshes_are_refused_with_a_reason() {
+        let err = |change: &dyn Fn(&mut Coll)| {
+            let mut c = quad_collision();
+            change(&mut c);
+            with_collision(&c).unwrap_err().to_string()
+        };
+        let e = err(&|c| c.idx16[2] = 4);
+        assert!(e.contains("collision index 4"), "{e}");
+        let e = err(&|c| c.idx32 = vec![0, 1, 2]);
+        assert!(e.contains("both"), "{e}");
+        let e = err(&|c| c.idx16.push(0));
+        assert!(e.contains("whole triangles"), "{e}");
+        let e = err(&|c| {
+            c.surface_ids.pop();
+        });
+        assert!(e.contains("surface id"), "{e}");
+        let e = err(&|c| c.edge_flags.push(0));
+        assert!(e.contains("edge flag"), "{e}");
+        // ... but no edge flags at all are accepted (12 meshes of retail models).
+        let mut c = quad_collision();
+        c.edge_flags.clear();
+        assert!(
+            with_collision(&c)
+                .unwrap()
+                .collision
+                .unwrap()
+                .edge_flags
+                .is_empty()
+        );
+        let e = err(&|c| c.refs[1] = 2);
+        assert!(e.contains("triangle 2 of 2"), "{e}");
+        let e = err(&|c| c.refs[1] = -1);
+        assert!(e.contains("triangle -1"), "{e}");
+        let e = err(&|c| c.nodes[2][2] = 5);
+        assert!(e.contains("refers past"), "{e}");
+        let e = err(&|c| c.nodes[0][1] = 0);
+        assert!(e.contains("children 0"), "{e}");
+        let e = err(&|c| c.nodes[0][1] = 2);
+        assert!(e.contains("children 2 and 3"), "{e}");
+        let e = err(&|c| c.nodes[0][0] = 0xC000);
+        assert!(e.contains("axis 3"), "{e}");
+        let e = err(&|c| c.vertex_count = 40);
+        assert!(e.contains("does not fit"), "{e}");
+        let e = err(&|c| c.holder = 3);
+        assert!(e.contains("buffer 3"), "{e}");
+        let e = err(&|c| c.render_geometry = false);
+        assert!(e.contains("not below the vertex count 0"), "{e}");
+    }
+
+    #[test]
+    fn nothing_panics_on_damaged_collision_meshes() {
+        let (spec, idx, vtx) = quad();
+        let good = mesh_file_with(&spec, 0xFFFF_FFFF, &idx, &vtx, Some(&quad_collision()));
+        assert!(Mesh::from_bytes(&good).is_ok());
+        for len in (0..good.len()).step_by(5) {
+            let _ = Mesh::from_bytes(&good[..len]);
+        }
+        for i in 0..good.len() {
+            let mut bad = good.clone();
+            bad[i] ^= 0xA5;
+            let _ = Mesh::from_bytes(&bad);
+        }
     }
 
     fn f32s(values: &[f32]) -> Vec<u8> {
@@ -851,7 +1215,7 @@ mod tests {
         let mesh = Mesh::from_bytes(&mesh_file(&spec, 0xFFFF_FFFF, &idx, &vtx)).unwrap();
         assert_eq!(mesh.lods.len(), 1);
         assert_eq!(mesh.distances, [0.0, 500.0, 500.0]);
-        assert!(!mesh.has_collision_mesh);
+        assert!(mesh.collision.is_none());
         let lod = &mesh.lods[0];
         assert!(lod.is_for_pc());
         assert_eq!((lod.switch_distance, lod.triangle_count()), (150.0, 2));
@@ -1007,6 +1371,8 @@ mod tests {
         let mut stack = vec![VfsPath::root()];
         let (mut files, mut lods, mut surfaces, mut triangles, mut vertices) = (0, 0, 0, 0, 0usize);
         let (mut skinned, mut pc_lods, mut collision) = (0, 0, 0);
+        let (mut populated, mut col_tris, mut col_refs, mut leaves, mut internal) = (0, 0, 0, 0, 0);
+        let mut out_of_table = Vec::new();
         let mut failures = Vec::new();
         while let Some(d) = stack.pop() {
             for e in vfs.list(&d).unwrap() {
@@ -1021,7 +1387,17 @@ mod tests {
                 match Mesh::from_bytes(&vfs.read(&path).unwrap()) {
                     Ok(m) => {
                         files += 1;
-                        collision += usize::from(m.has_collision_mesh);
+                        if let Some(c) = &m.collision {
+                            collision += 1;
+                            populated += usize::from(!c.is_empty());
+                            col_tris += c.triangle_count();
+                            col_refs += c.node_triangles.len();
+                            leaves += c.nodes.iter().filter(|n| n.is_leaf()).count();
+                            internal += c.nodes.iter().filter(|n| !n.is_leaf()).count();
+                            if (0..c.triangle_count()).any(|t| c.surface_of(t).is_none()) {
+                                out_of_table.push(path.as_str().to_string());
+                            }
+                        }
                         for lod in &m.lods {
                             lods += 1;
                             pc_lods += usize::from(lod.is_for_pc());
@@ -1053,11 +1429,23 @@ mod tests {
             "{files} meshes, {lods} LODs ({pc_lods} for PC), {surfaces} surfaces ({skinned} skinned), {triangles} triangles, {vertices} vertices, {collision} with a collision mesh; {} failures",
             failures.len()
         );
+        eprintln!(
+            "collision: {populated} populated, {col_tris} triangles, {col_refs} tree references, {leaves} leaves, {internal} internal nodes; out-of-table surface ids in {out_of_table:?}"
+        );
         assert!(
             failures.is_empty(),
             "first failures: {:?}",
             &failures[..failures.len().min(5)]
         );
         assert_eq!(files, 76, "bmf.md counts 76 meshes");
+        // bmf.md, "Collision mesh" and "Collision tree".
+        assert_eq!((collision, populated), (34, 31));
+        assert_eq!((col_tris, col_refs), (67_327, 77_378));
+        assert_eq!((leaves, internal), (217, 186));
+        assert_eq!(out_of_table.len(), 1, "{out_of_table:?}");
+        assert!(
+            out_of_table[0].ends_with("klodoviklogo.bmf"),
+            "{out_of_table:?}"
+        );
     }
 }
