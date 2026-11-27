@@ -1,0 +1,222 @@
+# RFC 0013: Level scene boundary
+
+- **Number:** 0013 (`docs/rfcs/0013-level-scene-boundary.md`)
+- **Authors:** @Ihor-Ihorevych/agent
+- **Status:** in review
+- **Approvers:** owner of `ss2-render-api`, `ss2-render`, `ss2-world`, `ss2-physics`, `ss2-vfs` **plus one** other maintainer (the project has one maintainer today, so like RFCs 0001-0012 this proceeds "in review")
+- **Review SLA:** 3 working days after "in review"
+- **Roadmap tasks:** T00-035 (this RFC); defines the interfaces of T04-037, T07-027, T04-038, T07-028, T07-029, T07-030, T02-038, T10-034, T03-036, T03-037; slices of T02-020, T02-017, T04-005, T04-009, T04-026, T07-002, T07-005, T07-023
+- **Design:** [Playable MVP](../superpowers/specs/2026-11-27-playable-mvp-design.md)
+
+## Summary
+
+A small set of **format-neutral** types that carry one loaded level from the readers of the game's files to
+the renderer, the collision world and the app: `ss2_render_api::scene_data` (meshes, textures, materials as
+plain CPU data), `ss2_world::scene::LevelScene` (the level: models, instances, spawn points, gravity), a
+loader function, a collision builder, a provisional walking controller, a level list and the renderer calls
+that draw a level. Nothing here names a file format.
+
+## Motivation
+
+The playable MVP (pick a level, walk around it) touches eight crates. The format readers must be written by
+people who did not write the format specs (CLEANROOM.md), and everything downstream of them is written by
+someone who did. A fixed, format-neutral boundary lets both sides work in parallel: the downstream side
+builds and tests against a procedural `LevelScene::test_room()`, the readers produce a `LevelScene` from real
+data. AGENTS.md section 2 requires an RFC for cross-crate APIs.
+
+## Detailed design
+
+Coordinates are the engine's: right-handed, Y up, metres, `-Z` forward (`docs/GEOMETRY.md`). Math types are
+`ss2_core::math` (glam). Errors are `ss2_core::Error` unless stated.
+
+### `ss2_render_api::scene_data` (T04-037)
+
+```rust
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MeshVertex { pub position: [f32; 3], pub normal: [f32; 3], pub uv: [f32; 2] }  // 32 bytes
+
+pub struct MeshData { pub vertices: Vec<MeshVertex>, pub indices: Vec<u32> }   // triangle list
+impl MeshData {
+    pub fn validate(&self) -> Result<()>;          // indices % 3 == 0, in range, finite values
+    pub fn bounds(&self) -> Option<Aabb>;          // None when empty
+}
+
+pub enum TexelFormat { Rgba8, Bc1, Bc2, Bc3 }       // colour data, sRGB-encoded
+pub struct TextureData {
+    pub width: u32, pub height: u32, pub format: TexelFormat,
+    pub mips: Vec<Vec<u8>>,                         // level 0 first; at least one
+    pub repeat_u: bool, pub repeat_v: bool,
+}
+impl TextureData { pub fn validate(&self) -> Result<()>; }   // sizes match the format and each level
+
+pub enum AlphaMode { Opaque, Mask { cutoff: f32 }, Blend }
+pub struct MaterialData {
+    pub base_color: [f32; 4],                       // linear RGBA multiplier
+    pub base_texture: Option<u32>,                  // index into the owner's texture list
+    pub alpha: AlphaMode,
+    pub double_sided: bool,
+}
+```
+
+### `ss2_world::scene` (T07-027)
+
+```rust
+pub struct ModelPart { pub mesh: MeshData, pub material: u32 }       // index into LevelScene::materials
+pub struct CollisionData { pub positions: Vec<Vec3>, pub indices: Vec<u32> }
+pub struct ModelData { pub name: String, pub parts: Vec<ModelPart>, pub collision: Option<CollisionData> }
+pub struct Instance { pub model: u32, pub transform: ss2_render_api::Transform, pub collidable: bool }
+pub struct SpawnPoint { pub position: Vec3, pub yaw: f32 }           // feet position; yaw 0 looks down -Z
+
+pub struct LevelScene {
+    pub name: String,
+    pub gravity: Vec3,
+    pub models: Vec<ModelData>,
+    pub materials: Vec<MaterialData>,
+    pub textures: Vec<TextureData>,
+    pub instances: Vec<Instance>,
+    pub spawns: Vec<SpawnPoint>,
+    pub skipped: Vec<String>,                       // what the loader left out, one line each
+}
+impl LevelScene {
+    pub fn validate(&self) -> Result<()>;           // every index in range, every mesh and texture valid
+    pub fn bounds(&self) -> Option<Aabb>;           // world-space bounds of all instances
+    pub fn start(&self) -> SpawnPoint;              // first spawn, else above the centre of bounds, else origin
+    pub fn test_room() -> LevelScene;               // procedural: floor, walls, a 0.4 m and a 1.0 m step, a ramp
+}
+
+pub enum LoadStage { World, Models, Textures, Collision }
+pub struct LoadProgress { pub stage: LoadStage, pub done: u32, pub total: u32 }
+```
+
+Rules:
+
+- `Instance::transform.scale` may be **negative** on any axis (mirrored placements). Mesh winding stays as
+  authored; consumers that cull handle the mirror (the MVP renderer does not cull).
+- `ModelData::collision` is the coarsest render LOD for now; it is replaced by the real collision mesh once
+  its layout is specified (T01-055). `None` means the model does not collide.
+- A loader that cannot read one model, material or texture **does not fail the load**: it records a line in
+  `skipped` and uses a grey material, a white texture, or drops the instance.
+
+### `ss2_world::load` (T07-028)
+
+```rust
+pub struct LoadOptions { pub max_texture_size: u32 }     // larger textures drop their top mips
+pub fn load_level(
+    vfs: &dyn ss2_vfs::Vfs,
+    wld: &ss2_vfs::VfsPath,
+    options: &LoadOptions,
+    progress: &mut dyn FnMut(LoadProgress),
+) -> Result<LevelScene>;
+```
+
+Fails only when the `.wld` itself cannot be read. Runs on any thread (the app calls it from a worker).
+
+### `ss2_world::collision` (T07-029)
+
+```rust
+pub fn build_static(scene: &LevelScene) -> Result<ss2_physics::query::QueryWorld>;
+```
+
+Every `collidable` instance's `collision` data, transformed by its matrix, in one `TriMesh` with material
+`PhysMaterialId(0)`.
+
+### `ss2_physics::controller` (T07-030)
+
+```rust
+pub struct WalkConfig {
+    pub radius: f32, pub height: f32, pub eye_height: f32, pub step_height: f32,
+    pub max_slope_cos: f32, pub speed: f32, pub accel: f32, pub friction: f32,
+    pub air_accel: f32, pub jump_speed: f32,
+}
+impl WalkConfig { pub const PROVISIONAL: Self; }   // tuned by feel; replaced by T01-024's numbers
+
+pub struct WalkInput { pub wish: Vec2, pub yaw: f32, pub jump: bool }   // wish: x right, y forward, |wish| <= 1
+pub struct Walker { pub position: Vec3, pub velocity: Vec3, pub grounded: bool }   // position = feet
+impl Walker {
+    pub fn new(position: Vec3) -> Self;
+    pub fn eye(&self, cfg: &WalkConfig) -> Vec3;
+    pub fn step(&mut self, world: &dyn SpatialQuery, cfg: &WalkConfig, gravity: Vec3,
+                input: &WalkInput, dt: f32);
+}
+```
+
+`step` is a pure function of (state, input, world, dt): fixed internal substeps, no clock, no hash maps.
+
+### `ss2_vfs::levels` (T02-038)
+
+```rust
+pub struct LevelInfo {
+    pub id: String,              // the level's folder name, e.g. "1_1_jungle"
+    pub group: String,           // the folder above, e.g. "01_mdigbo" or "multiplayer"
+    pub name: String,            // the .nfo NAME, may be empty
+    pub map_types: Vec<String>,  // MAP_TYPE entries, upper case, e.g. ["SINGLE", "COOP"]
+    pub wld: VfsPath,            // the .wld in the same folder
+}
+pub fn discover_levels(vfs: &dyn Vfs) -> Result<Vec<LevelInfo>>;   // sorted by group, then id
+```
+
+A level `.nfo` without a `.wld` next to it is left out.
+
+### `ss2_render::Renderer` additions (T04-038)
+
+```rust
+pub struct MeshHandle(u32);
+pub struct TextureHandle(u32);
+pub struct WorldBatch {
+    pub mesh: MeshHandle, pub texture: Option<TextureHandle>,   // None: white
+    pub tint: [f32; 4], pub alpha_cutoff: Option<f32>,
+    pub instances: Vec<Mat4>,                                   // local to world
+}
+impl Renderer {
+    pub fn supports(&self, format: TexelFormat) -> bool;
+    pub fn create_mesh(&mut self, mesh: &MeshData) -> Result<MeshHandle, RenderError>;
+    pub fn create_texture(&mut self, texture: &TextureData) -> Result<TextureHandle, RenderError>;
+    pub fn set_world(&mut self, batches: Vec<WorldBatch>) -> Result<(), RenderError>;
+    pub fn clear_world(&mut self);                  // drops meshes, textures and batches
+    pub fn world_generation(&self) -> u64;          // changes when a device rebuild dropped the world
+    pub fn render_world(&mut self, camera: &Camera, overlay: &DrawList, clear: Color) -> Result<(), RenderError>;
+    pub fn render_world_to_image(&mut self, camera: &Camera, overlay: Option<&DrawList>,
+                                 clear: Color) -> Result<ImageRgba8, RenderError>;
+}
+```
+
+The world pass clears colour and depth, then the existing 2D pass draws the overlay on top. `render()`
+(2D only) is unchanged. On device loss the world is dropped and `world_generation()` changes; the owner of
+the `LevelScene` uploads it again. This is a direct API on the wgpu renderer, not yet the `RenderWorld`
+contract of RFC 0002; T04-026 later builds that contract on top of it.
+
+### Usage
+
+```rust
+let levels = ss2_vfs::levels::discover_levels(&vfs)?;
+let scene = ss2_world::load::load_level(&vfs, &levels[0].wld, &LoadOptions { max_texture_size: 2048 }, &mut |_| {})?;
+let physics = ss2_world::collision::build_static(&scene)?;
+let mut walker = Walker::new(scene.start().position);
+// per frame
+walker.step(&physics, &WalkConfig::PROVISIONAL, scene.gravity, &input, dt);
+renderer.render_world(&camera_at(walker.eye(&WalkConfig::PROVISIONAL)), &ui, clear)?;
+```
+
+## Alternatives considered
+
+- **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
+  registry that has no implementation behind it; building that first (T04-026) is more work than the MVP
+  needs. The direct API here is what T04-026 will wrap.
+- **Put `LevelScene` in `ss2-render-api`.** Rejected: it carries collision data and spawn points, which are
+  not rendering concerns. `ss2-world` is the level-instance crate (T07-023).
+- **Let format crates produce `LevelScene` themselves.** Rejected: format crates stay independent of the
+  renderer and world crates; the adapter lives in `ss2-world`.
+
+## Compatibility and migration
+
+All additions; no existing signature changes. New dependencies: `ss2-render -> ss2-render-api` (already in
+RFC 0002's diagram), `ss2-world -> ss2-render-api, ss2-physics, ss2-vfs`, and `ss2-app -> ss2-world,
+ss2-physics, ss2-game, ss2-render-api`. New crates `ss2-format-wld` and `ss2-format-mdl` depend only on
+`ss2-core`, `ss2-meta` and other `ss2-format-*` crates.
+
+## Open questions
+
+- The UV v-direction and front-face winding of meshes are not yet verified (`docs/re/bmf.md`). The first
+  rendered comparison settles them; any flip is done in the loader so the boundary stays "as drawn".
+- How single-player and co-op choose their start (T01-210). Until then `start()` uses the first spawn point.

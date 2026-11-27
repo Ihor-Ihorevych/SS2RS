@@ -4,6 +4,7 @@
 
 - [Architecture overview](architecture.md)
 - [Design](superpowers/specs/2026-11-21-ss2rs-design.md)
+- [Playable MVP design](superpowers/specs/2026-11-27-playable-mvp-design.md)
 
 # User guide
 
@@ -148,6 +149,7 @@
 - [0010 UI framework](rfcs/0010-ui-framework.md)
 - [0011 Split-screen scheduling](rfcs/0011-split-screen.md)
 - [0012 Mod gameplay strategy](rfcs/0012-mod-gameplay-strategy.md)
+- [0013 Level scene boundary](rfcs/0013-level-scene-boundary.md)
 
 # Reverse-engineering specs
 
