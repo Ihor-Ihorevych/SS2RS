@@ -2907,6 +2907,7 @@ dependencies = [
  "ss2-testkit",
  "ss2-ui",
  "ss2-vfs",
+ "ss2-world",
 ]
 
 [[package]]
