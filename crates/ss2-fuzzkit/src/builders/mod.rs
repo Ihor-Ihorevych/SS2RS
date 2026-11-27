@@ -15,5 +15,6 @@ pub mod fx_pfx;
 pub mod fx_tfx;
 pub mod fx_vfx;
 pub mod mat;
+pub mod mdl;
 pub mod mtr;
 pub mod rsc;

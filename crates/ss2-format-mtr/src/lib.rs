@@ -165,6 +165,32 @@ impl ShaderConfig {
         })
     }
 
+    /// The member number of the **base colour** texture slot of this config's arguments class,
+    /// from the slot roles of `mtr.md`: `.10` for the shade, pixelight (poly-bump) and reflection
+    /// classes, `.21` for the specular class. For the layered classes (blended layers, terrain)
+    /// it is the first layer, `.10`. The refraction and water classes have no base colour map
+    /// (`None`), nor does an unknown class.
+    pub fn base_color_slot(&self) -> Option<u32> {
+        match self.args_class.as_str() {
+            "CShadeShaderArgs"
+            | "CPixelightShaderArgs"
+            | "CReflectionShaderArgs"
+            | "CBlendShaderArgs"
+            | "CTerrainShaderArgs" => Some(10),
+            "CSpecularShaderArgs" => Some(21),
+            _ => None,
+        }
+    }
+
+    /// The `.tex` path in the base colour slot ([`ShaderConfig::base_color_slot`]), if that slot
+    /// names an external texture (an empty slot or an embedded texture gives `None`).
+    pub fn base_color_texture(&self) -> Option<&str> {
+        match self.param(self.base_color_slot()?)? {
+            Param::Texture(TextureRef::External(path)) => Some(path),
+            _ => None,
+        }
+    }
+
     /// The UV map id belonging to the texture in slot `member` (the next member of the group).
     pub fn uv_map_of(&self, member: u32) -> Option<u32> {
         match self.param(member + 1)? {
@@ -201,6 +227,18 @@ pub struct Material {
 pub struct MaterialFile {
     /// All presets of the file.
     pub presets: Vec<Material>,
+}
+
+impl Material {
+    /// The base colour texture of the material: that of the first config drawn on a PC (bit 0 of
+    /// its platform mask) that has one ([`ShaderConfig::base_color_texture`]). How the engine
+    /// chooses between several configs is not determined (`mtr.md`); first-in-file is a guess.
+    pub fn base_color_texture(&self) -> Option<&str> {
+        self.configs
+            .iter()
+            .filter(|c| c.platform_mask & 0x1 != 0)
+            .find_map(ShaderConfig::base_color_texture)
+    }
 }
 
 fn bad(detail: impl Into<String>) -> Error {
@@ -692,6 +730,59 @@ mod tests {
             [Modifier {
                 class: "CConstantShaderModifier".into()
             }]
+        );
+    }
+
+    #[test]
+    fn the_base_colour_slot_depends_on_the_arguments_class() {
+        // The fixture's specular config holds its texture in `.21`, the specular base colour map.
+        let file = MaterialFile::from_bytes(&material_file(true, 1010)).unwrap();
+        let m = &file.presets[0];
+        assert_eq!(m.configs[0].base_color_slot(), Some(21));
+        assert_eq!(
+            m.base_color_texture(),
+            Some("Content/Test/Textures/body.tex")
+        );
+        let config = |class: &str, member: u32| ShaderConfig {
+            shader: ShaderClass::Shade,
+            platform_mask: 0x3,
+            args_class: class.into(),
+            common: vec![],
+            params: vec![(
+                member,
+                Param::Texture(TextureRef::External(format!("{class}.tex"))),
+            )],
+            modifiers: vec![],
+        };
+        for (class, slot) in [
+            ("CShadeShaderArgs", Some(10)),
+            ("CSpecularShaderArgs", Some(21)),
+            ("CPixelightShaderArgs", Some(10)),
+            ("CReflectionShaderArgs", Some(10)),
+            ("CBlendShaderArgs", Some(10)),
+            ("CTerrainShaderArgs", Some(10)),
+            ("CRefractionShaderArgs", None),
+            ("CWaterShaderArgs", None),
+        ] {
+            let c = config(class, slot.unwrap_or(10));
+            assert_eq!(c.base_color_slot(), slot, "{class}");
+            assert_eq!(c.base_color_texture().is_some(), slot.is_some(), "{class}");
+        }
+        // A slot that is empty or holds something else gives no texture.
+        let mut empty = config("CShadeShaderArgs", 10);
+        empty.params[0].1 = Param::Texture(TextureRef::None);
+        assert_eq!(empty.base_color_texture(), None);
+        // The material takes the first PC config that has one; an Xbox-only config is skipped.
+        let mut xbox = config("CShadeShaderArgs", 10);
+        xbox.platform_mask = 0x2;
+        let material = Material {
+            id: 1,
+            configs: vec![xbox, empty, config("CPixelightShaderArgs", 10)],
+            physical: PhysicalMaterial::None,
+        };
+        assert_eq!(
+            material.base_color_texture(),
+            Some("CPixelightShaderArgs.tex")
         );
     }
 

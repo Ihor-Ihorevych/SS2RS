@@ -148,6 +148,23 @@ pub fn format_mtr() -> Vec<Seed> {
     ]
 }
 
+/// The seeds of `format_mdl`: a model with an embedded quad mesh and its preset, one with an
+/// external mesh and a null instance, and one with a helper configuration next to the main one.
+pub fn format_mdl() -> Vec<Seed> {
+    use builders::mdl::{Inst, Mat, Spec, model_file};
+    let mut helper = Spec::new(&[Inst::Embedded]);
+    helper.second = Some(-1);
+    helper.material = Mat::External;
+    vec![
+        seed("embedded", model_file(&Spec::new(&[Inst::Embedded]))),
+        seed(
+            "external",
+            model_file(&Spec::new(&[Inst::External, Inst::Null])),
+        ),
+        seed("helper", model_file(&helper)),
+    ]
+}
+
 /// The seeds of `format_rsc`: a menu screen and character tools.
 pub fn format_rsc() -> Vec<Seed> {
     vec![

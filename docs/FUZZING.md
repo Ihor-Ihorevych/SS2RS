@@ -32,6 +32,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `format_fx` | `ss2_format_fx` `pfx::Effect`, `lfx::FlareConfiguration`, `tfx::TextEffectConfiguration`, `vfx::VibrationEffect` on the same bytes | read or refused |
 | `format_mat` | `ss2_format_mat` `PhysicalMaterial`, `SoundScheme`, `ParticleScheme` on the same bytes | read or refused |
 | `format_mtr` | `ss2_format_mtr::MaterialFile::from_bytes` | read or refused |
+| `format_mdl` | `ss2_format_mdl::Model::from_bytes` | read or refused; every embedded material a surface names is listed once, in id order |
 | `format_rsc` | `ss2_format_rsc::ResourceDatabase::from_bytes`, `CharacterTool::from_bytes` | read or refused |
 | `audio_decode` | `ss2_audio::decode` (`sniff`, `probe`, `decode`, `decode_wav`, `VorbisStream`, `last_granule`) and `ss2_audio::wav::decode` | decoded or refused, **no panic even one the decoder catches itself**; decoded sound has whole frames and finite samples |
 | `audio_event` | `ss2_audio_api::replication::AudioEvent::decode` | decoded or refused; what decodes encodes to the same bytes again |

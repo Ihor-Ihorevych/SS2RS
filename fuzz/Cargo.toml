@@ -171,6 +171,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "format_mdl"
+path = "fuzz_targets/format_mdl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "format_rsc"
 path = "fuzz_targets/format_rsc.rs"
 test = false

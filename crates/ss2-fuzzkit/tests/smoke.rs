@@ -272,6 +272,12 @@ fn the_format_seeds_are_valid_files() {
         "mtr",
         ss2_format_mtr::MaterialFile::from_bytes(&seed("format_mtr", "preset")).map(drop),
     );
+    for name in ["embedded", "external", "helper"] {
+        ok(
+            "mdl",
+            ss2_format_mdl::Model::from_bytes(&seed("format_mdl", name)).map(drop),
+        );
+    }
     ok(
         "rsc",
         ss2_format_rsc::ResourceDatabase::from_bytes(&seed("format_rsc", "menu")).map(drop),
