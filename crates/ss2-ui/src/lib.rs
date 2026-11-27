@@ -22,6 +22,7 @@ mod about_tests;
 #[cfg(test)]
 mod draw_tests;
 pub mod layout;
+pub mod level_select;
 pub mod loading;
 mod pointer;
 pub mod scale;
