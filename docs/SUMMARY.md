@@ -210,6 +210,7 @@
   - [Puppet parameter files: the file tables and the `_DM` rule](re/puppet-params-loading.md)
   - [The dummy foe puppet](re/puppet-dummy-foe.md)
   - [The members of the puppet record classes](re/puppet-record-members.md)
+  - [The player's stored movement constants](re/player-movement-constants.md)
 - [Projectile classes](re/projectile-classes.md)
 - [Item and pickup classes](re/item-classes.md)
   - [Health, armor, treasure, life, repair and power-ups](re/item-classes-vitals.md)
