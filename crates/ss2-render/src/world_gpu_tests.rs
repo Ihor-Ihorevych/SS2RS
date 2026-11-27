@@ -62,6 +62,7 @@ fn batch(mesh: crate::MeshHandle, tint: [f32; 4], z: f32) -> WorldBatch {
         tint,
         alpha_cutoff: None,
         instances: vec![at(z)],
+        lightmap: None,
     }
 }
 
@@ -290,6 +291,7 @@ fn upload(r: &mut Renderer, scene: &LevelScene) -> Vec<WorldBatch> {
                 tint: material.base_color,
                 alpha_cutoff: None,
                 instances: instances.clone(),
+                lightmap: None,
             });
         }
     }
@@ -519,6 +521,85 @@ fn the_test_room_under_its_sky_matches_its_golden_image() {
     if let Err(e) = golden::check_golden(
         &dir,
         "world_test_room_sky.png",
+        &img,
+        &Tolerance::default(),
+        &mode,
+    ) {
+        panic!("{e}");
+    }
+}
+
+// ---- lightmaps --------------------------------------------------------------------------------------------------------
+
+use ss2_world::scene::TEST_LIGHTMAP_TEXTURE;
+
+/// The test room's floor alone, drawn with its lightmap, seen from 12 m straight above (the floor fills the view).
+fn lit_floor(r: &mut Renderer) -> ImageRgba8 {
+    let room = LevelScene::test_room();
+    let floor = &room.instances[0];
+    let part = &room.models[floor.model as usize].parts[0];
+    let base = r
+        .create_texture(
+            &room.textures[room.materials[part.material as usize].base_texture.unwrap() as usize],
+        )
+        .unwrap();
+    let lightmap = r
+        .create_texture(&room.textures[TEST_LIGHTMAP_TEXTURE as usize])
+        .unwrap();
+    let mesh = r.create_mesh(&part.mesh).unwrap();
+    r.set_world(vec![WorldBatch {
+        mesh,
+        texture: Some(base),
+        tint: [1.0; 4],
+        alpha_cutoff: None,
+        instances: vec![floor.transform.matrix()],
+        lightmap: Some(lightmap),
+    }])
+    .unwrap();
+    let above = Camera {
+        position: Vec3::new(0.0, 12.0, 0.0),
+        rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+        ..Camera::default()
+    };
+    r.render_world_to_image(&above, None, SKY).unwrap()
+}
+
+#[test]
+fn a_lightmapped_floor_is_full_bright_with_its_shadow_in_the_middle() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((128, 128)) else {
+        return;
+    };
+    let img = lit_floor(&mut r);
+    // From this high the floor's checker is minified to its average grey; the lightmap's shadow (60) and light (200)
+    // multiply it with no light term, so the middle is 60/200 = 0.3 of the edge.
+    let centre = px(&img, 64, 64);
+    let edge = px(&img, 3, 64);
+    let ratio = f32::from(centre[0]) / f32::from(edge[0]);
+    assert!(
+        (ratio - 0.3).abs() < 0.04,
+        "shadow/light ratio {ratio}: {centre:?} vs {edge:?}"
+    );
+    assert!(
+        edge[0] > 100,
+        "the lit edge is bright (full bright, not the flat light): {edge:?}"
+    );
+    assert_eq!(centre[0], centre[1], "grey stays grey");
+}
+
+#[test]
+fn the_lightmapped_floor_matches_its_golden_image() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((256, 256)) else {
+        return;
+    };
+    let img = lit_floor(&mut r);
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/golden");
+    let failures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/golden-failures");
+    let mode = Mode::from_env(failures);
+    if let Err(e) = golden::check_golden(
+        &dir,
+        "world_lightmapped_floor.png",
         &img,
         &Tolerance::default(),
         &mode,

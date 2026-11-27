@@ -9,7 +9,8 @@ struct Camera {
 
 struct Material {
     tint: vec4<f32>,
-    // x: alpha cutoff (texels below it are not drawn; 0 keeps all); y: 1 = unlit (the sky), 0 = lit.
+    // x: alpha cutoff (texels below it are not drawn; 0 keeps all); y: 1 = unlit (the sky), 0 = lit;
+    // z: 1 = lightmapped (full bright: base x lightmap, no light term), 0 = not.
     params: vec4<f32>,
 };
 
@@ -17,6 +18,8 @@ struct Material {
 @group(1) @binding(0) var base_texture: texture_2d<f32>;
 @group(1) @binding(1) var base_sampler: sampler;
 @group(1) @binding(2) var<uniform> material: Material;
+@group(1) @binding(3) var lightmap_texture: texture_2d<f32>;
+@group(1) @binding(4) var lightmap_sampler: sampler;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -26,12 +29,14 @@ struct VertexIn {
     @location(4) model_1: vec4<f32>,
     @location(5) model_2: vec4<f32>,
     @location(6) model_3: vec4<f32>,
+    @location(7) lightmap_uv: vec2<f32>,
 };
 
 struct VertexOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) uv: vec2<f32>,
+    @location(2) lightmap_uv: vec2<f32>,
 };
 
 @vertex
@@ -41,6 +46,7 @@ fn vs_main(v: VertexIn) -> VertexOut {
     out.clip = camera.view_proj * model * vec4<f32>(v.position, 1.0);
     out.normal = (model * vec4<f32>(v.normal, 0.0)).xyz;
     out.uv = v.uv;
+    out.lightmap_uv = v.lightmap_uv;
     return out;
 }
 
@@ -53,5 +59,8 @@ fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
     let n = normalize(f.normal);
     let lit = 0.55 + 0.45 * abs(dot(n, -camera.light_dir.xyz));
     let shade = select(lit, 1.0, material.params.y > 0.5);
-    return vec4<f32>(texel.rgb * shade, 1.0);
+    // Sampled for every fragment (uniform control flow); used only when the material is lightmapped.
+    let baked = textureSample(lightmap_texture, lightmap_sampler, f.lightmap_uv).rgb;
+    let light = select(vec3<f32>(shade), baked, material.params.z > 0.5);
+    return vec4<f32>(texel.rgb * light, 1.0);
 }

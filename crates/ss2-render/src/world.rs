@@ -44,6 +44,10 @@ pub struct WorldBatch {
     pub alpha_cutoff: Option<f32>,
     /// Model-to-world matrices, one per place.
     pub instances: Vec<Mat4>,
+    /// A lightmap: the batch is drawn full bright (base colour times the lightmap sampled with the mesh's lightmap
+    /// UVs, no light term; RFC 0013 amendment 2). Each lightmap belongs to one placement, so a lightmapped batch
+    /// normally has one instance. `None`: lit by the flat light as before.
+    pub lightmap: Option<TextureHandle>,
 }
 
 /// The level's sky (RFC 0013 amendment 1): one texture per [`CubeFace`] in its order, each image in the face's
@@ -67,6 +71,8 @@ struct GpuSky {
 
 struct GpuMesh {
     vertices: wgpu::Buffer,
+    /// One lightmap UV per vertex (zeros for a mesh without them).
+    lightmap_uvs: wgpu::Buffer,
     indices: wgpu::Buffer,
     index_count: u32,
 }
@@ -177,6 +183,22 @@ impl WorldGpu {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -202,6 +224,11 @@ impl WorldGpu {
                         array_stride: 64,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &wgpu::vertex_attr_array![3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4],
+                    }),
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 8,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![7 => Float32x2],
                     }),
                 ],
             },
@@ -356,10 +383,13 @@ impl WorldGpu {
             contents: bytemuck::cast_slice(&mesh.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
+        let lightmap_uvs =
+            lightmap_uv_buffer(device, mesh.lightmap_uvs.as_deref(), mesh.vertices.len());
         let index = u32::try_from(self.meshes.len())
             .map_err(|_| RenderError::World("too many meshes".into()))?;
         self.meshes.push(GpuMesh {
             vertices,
+            lightmap_uvs,
             indices,
             index_count,
         });
@@ -475,6 +505,7 @@ impl WorldGpu {
         for (i, b) in batches.iter().enumerate() {
             let mesh = self.mesh_index(b.mesh)?;
             let texture = b.texture.map(|t| self.texture(t)).transpose()?;
+            let lightmap = b.lightmap.map(|t| self.texture(t)).transpose()?;
             let cutoff = b.alpha_cutoff.unwrap_or(0.0);
             if !b.tint.iter().all(|c| c.is_finite()) || !cutoff.is_finite() {
                 return Err(RenderError::World(format!(
@@ -503,7 +534,15 @@ impl WorldGpu {
                 ),
                 None => (&self.white, &self.samplers[3]),
             };
-            let material = self.material(device, view, sampler, b.tint, cutoff, false);
+            let material = self.material(
+                device,
+                view,
+                sampler,
+                b.tint,
+                cutoff,
+                false,
+                lightmap.map(|l| &l.view),
+            );
             planned.push(GpuBatch {
                 mesh,
                 material,
@@ -521,7 +560,9 @@ impl WorldGpu {
         Ok(())
     }
 
-    /// A material bind group: `view` sampled with `sampler`, times `tint`, texels below `cutoff` discarded, lit or not.
+    /// A material bind group: `view` sampled with `sampler`, times `tint`, texels below `cutoff` discarded; unlit,
+    /// lightmapped (full bright with `lightmap`) or lit by the flat light.
+    #[allow(clippy::too_many_arguments)]
     fn material(
         &self,
         device: &wgpu::Device,
@@ -530,11 +571,14 @@ impl WorldGpu {
         tint: [f32; 4],
         cutoff: f32,
         unlit: bool,
+        lightmap: Option<&wgpu::TextureView>,
     ) -> wgpu::BindGroup {
         let mut uniform = [0f32; 8];
         uniform[..4].copy_from_slice(&tint);
         uniform[4] = cutoff;
         uniform[5] = if unlit { 1.0 } else { 0.0 };
+        uniform[6] = if lightmap.is_some() { 1.0 } else { 0.0 };
+        let lightmap = lightmap.unwrap_or(&self.white);
         let params = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("world material"),
             contents: bytemuck::cast_slice(&uniform),
@@ -555,6 +599,15 @@ impl WorldGpu {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: params.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(lightmap),
+                },
+                // A lightmap belongs to one placement and never repeats.
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers[0]),
                 },
             ],
         })
@@ -580,7 +633,7 @@ impl WorldGpu {
                 Some(t) => &self.texture(t)?.view,
                 None => &self.white,
             };
-            faces.push(self.material(device, view, &self.samplers[0], sky.tint, 0.0, true));
+            faces.push(self.material(device, view, &self.samplers[0], sky.tint, 0.0, true, None));
         }
         self.sky = Some(GpuSky { faces });
         Ok(())
@@ -667,6 +720,7 @@ impl WorldGpu {
             pass.set_bind_group(0, &self.camera_group, &[]);
             pass.set_vertex_buffer(0, self.sky_mesh.vertices.slice(..));
             pass.set_vertex_buffer(1, self.sky_instance.slice(..));
+            pass.set_vertex_buffer(2, self.sky_mesh.lightmap_uvs.slice(..));
             pass.set_index_buffer(self.sky_mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             for (i, material) in (0u32..).zip(&sky.faces) {
                 pass.set_bind_group(1, material, &[]);
@@ -683,6 +737,7 @@ impl WorldGpu {
             let mesh = &self.meshes[b.mesh as usize];
             pass.set_bind_group(1, &b.material, &[]);
             pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+            pass.set_vertex_buffer(2, mesh.lightmap_uvs.slice(..));
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.index_count, 0, b.instances.clone());
         }
@@ -708,6 +763,7 @@ fn sky_cube(device: &wgpu::Device) -> GpuMesh {
         indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
     }
     GpuMesh {
+        lightmap_uvs: lightmap_uv_buffer(device, None, vertices.len()),
         vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sky cube vertices"),
             contents: bytemuck::cast_slice(&vertices),
@@ -720,4 +776,25 @@ fn sky_cube(device: &wgpu::Device) -> GpuMesh {
         }),
         index_count: 36,
     }
+}
+
+/// The lightmap UV stream of a mesh: `uvs`, or zeros for `vertex_count` vertices when it has none.
+fn lightmap_uv_buffer(
+    device: &wgpu::Device,
+    uvs: Option<&[[f32; 2]]>,
+    vertex_count: usize,
+) -> wgpu::Buffer {
+    let zeros;
+    let data = match uvs {
+        Some(uvs) => uvs,
+        None => {
+            zeros = vec![[0.0f32; 2]; vertex_count.max(1)];
+            &zeros[..]
+        }
+    };
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("world mesh lightmap UVs"),
+        contents: bytemuck::cast_slice(data),
+        usage: wgpu::BufferUsages::VERTEX,
+    })
 }
