@@ -1,0 +1,4 @@
+LEVEL
+NAME = "Test Level";
+EPISODE = "One"
+MOVIE = "Content/Test/Intro.xmv";

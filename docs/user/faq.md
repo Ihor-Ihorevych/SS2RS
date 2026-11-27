@@ -61,7 +61,7 @@ is a planned test matrix (T12-020).
 **Can I use mods?**
 Not yet. The mod format is documented in [docs/re/mods.md](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/mods.md):
 a mod has a `.mod` descriptor and `.nfo` file, and overlay `.gro` archives that replace or add files.
-The engine does not read mod folders today. Mod loading is planned in T13-001, and the data-only mod
+The game window does not mount mods today; the library that finds, orders and mounts them exists (`docs/MOD_LOADING.md`), and the data-only mod
 Renovation is planned in T13-003.
 
 **Can InSamnity! 2 work?**

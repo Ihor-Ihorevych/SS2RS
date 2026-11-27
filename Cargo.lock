@@ -158,6 +158,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2686,7 +2692,6 @@ name = "ss2-app"
 version = "0.0.0"
 dependencies = [
  "embed-manifest",
- "gilrs",
  "png",
  "puffin",
  "puffin_http",
@@ -2699,7 +2704,6 @@ dependencies = [
  "ss2-vfs",
  "tempfile",
  "tracing",
- "winit",
 ]
 
 [[package]]
@@ -2828,6 +2832,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-mdl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-bmf",
+ "ss2-format-mtr",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-mtr"
 version = "0.0.0"
 dependencies = [
@@ -2863,6 +2880,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-wld"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-fuzzkit"
+version = "0.0.0"
+dependencies = [
+ "arbitrary",
+ "flate2",
+ "ss2-audio",
+ "ss2-audio-api",
+ "ss2-core",
+ "ss2-format-ans",
+ "ss2-format-bmf",
+ "ss2-format-ep",
+ "ss2-format-fnt",
+ "ss2-format-fx",
+ "ss2-format-mat",
+ "ss2-format-mdl",
+ "ss2-format-mtr",
+ "ss2-format-rsc",
+ "ss2-format-tex",
+ "ss2-format-wld",
+ "ss2-game",
+ "ss2-meta",
+ "ss2-net",
+ "ss2-testkit",
+ "ss2-ui",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-game"
 version = "0.0.0"
 dependencies = [
@@ -2875,6 +2931,7 @@ dependencies = [
  "ss2-testkit",
  "ss2-ui",
  "ss2-vfs",
+ "ss2-world",
 ]
 
 [[package]]
@@ -2940,7 +2997,9 @@ dependencies = [
  "png",
  "pollster",
  "ss2-core",
+ "ss2-render-api",
  "ss2-ui",
+ "ss2-world",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
@@ -2950,6 +3009,7 @@ dependencies = [
 name = "ss2-render-api"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "ss2-core",
  "ss2-ui",
 ]
@@ -2999,6 +3059,7 @@ dependencies = [
  "crc32fast",
  "directories",
  "flate2",
+ "proptest",
  "serde",
  "serde_json",
  "ss2-core",
@@ -3022,6 +3083,11 @@ dependencies = [
 [[package]]
 name = "ss2-world"
 version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-physics",
+ "ss2-render-api",
+]
 
 [[package]]
 name = "static_assertions"

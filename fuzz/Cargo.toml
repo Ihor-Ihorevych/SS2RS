@@ -12,6 +12,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 ss2-core = { path = "../crates/ss2-core" }
+ss2-fuzzkit = { path = "../crates/ss2-fuzzkit" }
 ss2-vfs = { path = "../crates/ss2-vfs" }
 ss2-game = { path = "../crates/ss2-game" }
 ss2-net = { path = "../crates/ss2-net" }
@@ -102,6 +103,139 @@ bench = false
 [[bin]]
 name = "session_message"
 path = "fuzz_targets/session_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "meta_container"
+path = "fuzz_targets/meta_container.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_tex"
+path = "fuzz_targets/format_tex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_bmf"
+path = "fuzz_targets/format_bmf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_ans"
+path = "fuzz_targets/format_ans.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_ep"
+path = "fuzz_targets/format_ep.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_fnt"
+path = "fuzz_targets/format_fnt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_fx"
+path = "fuzz_targets/format_fx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_mat"
+path = "fuzz_targets/format_mat.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_mtr"
+path = "fuzz_targets/format_mtr.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_mdl"
+path = "fuzz_targets/format_mdl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_rsc"
+path = "fuzz_targets/format_rsc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_wld"
+path = "fuzz_targets/format_wld.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "audio_decode"
+path = "fuzz_targets/audio_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "audio_event"
+path = "fuzz_targets/audio_event.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "game_state_bytes"
+path = "fuzz_targets/game_state_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mods_text"
+path = "fuzz_targets/mods_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "locate_text"
+path = "fuzz_targets/locate_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lobby_text"
+path = "fuzz_targets/lobby_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "net_chunks"
+path = "fuzz_targets/net_chunks.rs"
 test = false
 doc = false
 bench = false

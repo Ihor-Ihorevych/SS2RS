@@ -30,6 +30,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87a0cf66fd1eb2fb7b822cb78370d82303750809bc6ba855f3f58e517d3238db"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "cc"
 version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -197,6 +223,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
+name = "lewton"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "777b48df9aaab155475a83a7df3070395ea1ac6902f5cd062b8f2b028075c030"
+dependencies = [
+ "byteorder",
+ "ogg",
+ "tinyvec",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -250,9 +287,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "nix"
-version = "0.31.4"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bc81ce8148d3b4f3274da811f11cdd824ae661ee4ef732cdb229825cf5be7f7"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -267,6 +304,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
  "windows-sys",
+]
+
+[[package]]
+name = "ogg"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6951b4e8bf21c8193da321bcce9c9dd2e13c858fe078bf9054a288b419ae5d6e"
+dependencies = [
+ "byteorder",
 ]
 
 [[package]]
@@ -431,6 +477,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
 
 [[package]]
+name = "ss2-assets"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-vfs",
+ "tracing",
+]
+
+[[package]]
+name = "ss2-audio"
+version = "0.0.0"
+dependencies = [
+ "lewton",
+ "ss2-audio-api",
+ "ss2-core",
+]
+
+[[package]]
 name = "ss2-audio-api"
 version = "0.0.0"
 dependencies = [
@@ -451,15 +515,147 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-ans"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-bmf"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-ep"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-fnt"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-tex",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-fx"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-mat"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-mdl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-bmf",
+ "ss2-format-mtr",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-mtr"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-rsc"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-ep",
+]
+
+[[package]]
+name = "ss2-format-tex"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
+name = "ss2-format-wld"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
 name = "ss2-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "ss2-core",
+ "ss2-fuzzkit",
  "ss2-game",
  "ss2-net",
  "ss2-platform-api",
  "ss2-sim",
+ "ss2-vfs",
+]
+
+[[package]]
+name = "ss2-fuzzkit"
+version = "0.0.0"
+dependencies = [
+ "arbitrary",
+ "flate2",
+ "ss2-audio",
+ "ss2-audio-api",
+ "ss2-core",
+ "ss2-format-ans",
+ "ss2-format-bmf",
+ "ss2-format-ep",
+ "ss2-format-fnt",
+ "ss2-format-fx",
+ "ss2-format-mat",
+ "ss2-format-mdl",
+ "ss2-format-mtr",
+ "ss2-format-rsc",
+ "ss2-format-tex",
+ "ss2-format-wld",
+ "ss2-game",
+ "ss2-meta",
+ "ss2-net",
+ "ss2-testkit",
+ "ss2-ui",
  "ss2-vfs",
 ]
 
@@ -473,6 +669,24 @@ dependencies = [
  "ss2-platform-api",
  "ss2-render-api",
  "ss2-ui",
+ "ss2-world",
+]
+
+[[package]]
+name = "ss2-meta"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-meta-derive",
+]
+
+[[package]]
+name = "ss2-meta-derive"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -500,12 +714,17 @@ dependencies = [
 name = "ss2-render-api"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "ss2-core",
  "ss2-ui",
 ]
 
 [[package]]
 name = "ss2-sim"
+version = "0.0.0"
+
+[[package]]
+name = "ss2-testkit"
 version = "0.0.0"
 
 [[package]]
@@ -529,6 +748,15 @@ dependencies = [
  "toml",
  "windows-sys",
  "zip",
+]
+
+[[package]]
+name = "ss2-world"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-physics",
+ "ss2-render-api",
 ]
 
 [[package]]
@@ -594,6 +822,12 @@ checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "toml"

@@ -44,7 +44,9 @@ found, 2 wrong command line. More: [meta-dump](../META_DUMP.md), [asset-export](
 | `.fnt` | bitmap font | CTSEMETA | `ss2-format-fnt` | no |
 | `.ans` | animation set | CTSEMETA | `ss2-format-ans` | no |
 | `.pfx`, `.lfx`, `.tfx`, `.vfx` | particle effect, lens flare, text effect, vibration | CTSEMETA | `ss2-format-fx` | no |
-| `.mdl`, `.skl`, `.wld` | model, skeleton, world (level) | CTSEMETA | not yet (specified only) | no |
+| `.mdl` | model | CTSEMETA | `ss2-format-mdl` (static mesh and materials only) | no |
+| `.skl` | skeleton | CTSEMETA | not yet (specified only) | no |
+| `.wld` | world (level) | CTSEMETA | `ss2-format-wld` (minimal: gravity, static model placements, spawn markers) | no |
 | `.wav`, `.ogg` | sound | RIFF, Ogg Vorbis | `ss2-audio::decode` | any audio tool |
 | `.ogv` | movie | Ogg Theora/Vorbis | not yet (T06-010) | any video tool |
 | `.xmv` | Xbox movie | proprietary | **ignored by design** | no |
@@ -123,7 +125,10 @@ member layout. **Unknown:** what each shader computes (the shader programs are n
 members; the role of a texture slot is inferred from the textures that fill it. [Spec](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/mtr.md).
 
 **`.mdl`** is a model: a mesh reference, materials, attachments, animation host, physics and destruction parts (3,707 files).
-**`.skl`** is a skeleton (31 files, 564 bones). **No reader exists in the repository yet**; `meta-dump` prints both.
+`ss2-format-mdl` reads the part a static renderer needs: the bounding box, the mesh of each mesh instance (embedded in the model
+in 3,517 instances, an external `.bmf` in 127) and the material presets its surfaces use, with the base colour texture of each.
+**Verified:** all 3,707 models read, with the spec's counts. **Not read:** skeleton, animation, attachment children, physics,
+destruction and custom data. **`.skl`** is a skeleton (31 files, 564 bones); no reader exists yet, `meta-dump` prints it.
 [mdl](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/mdl.md), [skl](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/skl.md).
 
 ## `.mat`, `.scs`, `.scp`, `.sca`, `.mas`: what a surface is made of
@@ -168,7 +173,9 @@ yet (T13-009b).
 ## `.wld`: levels
 
 A world holds entities (73,098 in the 59 worlds), aspects, lighting, navigation, physics, visibility and the level's macro
-program. It is **read by nobody in the repository yet** (`ss2-world` is a placeholder) and there is **no level editor**. A
+program. `ss2-format-wld` reads the minimum needed to show and walk a level: the gravity, every placed static model (the
+`.mdl` path, world placement, per-axis scale, whether it has a collision hull), the spawn markers and the chapter info
+entities; the rest is not read yet, and there is **no level editor**. A
 level in a mod is a `.wld` plus its description `.nfo` in the same folder (the checker warns about a level `.nfo` with no `.wld`,
 `MOD035`). [Overview](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/wld-root.md).
 

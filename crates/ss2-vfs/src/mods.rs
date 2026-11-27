@@ -306,7 +306,7 @@ pub fn discover_mods(vfs: &dyn Vfs) -> Result<Vec<ModInfo>> {
 }
 
 /// The folder `Content/<mod_id>/` of the install, found case-insensitively.
-fn mod_folder(install_dir: &Path, mod_id: &str) -> Result<PathBuf> {
+pub(crate) fn mod_folder(install_dir: &Path, mod_id: &str) -> Result<PathBuf> {
     let content = install_dir.join("Content");
     for entry in std::fs::read_dir(&content).map_err(|e| Error::io(&content, e))? {
         let entry = entry.map_err(|e| Error::io(&content, e))?;

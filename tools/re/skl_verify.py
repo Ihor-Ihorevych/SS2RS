@@ -1,8 +1,7 @@
 """Re-runs the measurements behind docs/re/skl.md on an install (read-only).
 
-For every format-8 `.skl`: the LOD and bone lists, the id/parent rules, and (numerically) that
-member 5 of every bone is the inverse of the bone's world transform composed from the local
-transforms (member 4) down the hierarchy, and that member 6 is the length of the local translation.
+For every format-8 `.skl`: inventory the LODs and bones, compare stored and reconstructed inverse
+bind matrices, check the parent-offset lengths, and count signed angle bounds by IK flag state.
 
 Usage: python -I tools/re/skl_verify.py [DATA_DIR]      (DATA_DIR defaults to $SS2_DATA_DIR)
 """
@@ -88,6 +87,7 @@ def main():
         sys.exit("pass the install folder (the one containing All_PC_01.gro) or set SS2_DATA_DIR")
     st = collections.Counter(); worst = {False: 0.0, True: 0.0}; qerr = 0.0; lenrule = collections.Counter(); limits = collections.Counter(); m3 = []; bad_inv = []
     ik = collections.Counter(); plat = collections.Counter(); lodn = collections.Counter(); roots = collections.Counter()
+    residuals = []
     for name, d in sorted(merged_files(install, ".skl").items()):
         r = parse(d); objs, _ = TreeDec(d, r).objects(); st["files"] += 1
         sk = next(o for o in objs.values() if isinstance(o, Obj) and o.type == "CSkeleton")
@@ -110,22 +110,32 @@ def main():
                     worst[conj] = max(worst[conj], err)
                     if not conj:
                         st["bones whose member 5 is the inverse of the composed member 4 (< 1e-4)"] += err < 1e-4
-                        if err >= 1e-4: bad_inv.append((name.rsplit("/", 1)[-1], g(b, "SkeletonBone.1")))
+                        if err >= 1e-4:
+                            key = (name.rsplit("/", 1)[-1], g(b, "SkeletonBone.1"))
+                            bad_inv.append(key)
+                            residual = compose(w[g(b, "SkeletonBone.1")], sv)
+                            residuals.append((key, [[round(value, 6) for value in row] for row in residual]))
             for b in bones:
                 _, q, t = local_matrix(b)
                 qerr = max(qerr, abs(math.sqrt(sum(c * c for c in q)) - 1))
                 length = g(b, "SkeletonBone.6"); norm = math.sqrt(sum(c * c for c in t))
                 lenrule["member 6 = |translation|" if abs(norm - length) < 1e-4 else
-                        "member 6 = 1.0 and translation is zero" if norm < 1e-6 and length == 1.0 else "other"] += 1
+                        "member 6 = 1.0 and translation is zero" if norm == 0.0 and length == 1.0 else "other"] += 1
                 m3.append(g(b, "SkeletonBone.3"))
-                ik[hex(g(b, "SkeletonBone.9").v)] += 1
+                mask = g(b, "SkeletonBone.9").v
+                ik[hex(mask)] += 1
                 lo = g(b, "SkeletonBone.7"); hi = g(b, "SkeletonBone.8")
-                limits["all six limits are -pi/+pi" if all(abs(abs(g(v, f"Vector3f.{i}")) - 3.14159) < 1e-4 for v in (lo, hi) for i in (1, 2, 3)) else "other"] += 1
+                for component in range(3):
+                    member = f"Vector3f.{component + 1}"
+                    limits[g(lo, member), g(hi, member), bool(mask & (1 << component))] += 1
                 st["bones"] += 0
     print(dict(st)); print("LODs per file:", dict(sorted(lodn.items())), "| roots per LOD:", dict(roots), "| platform masks:", dict(plat))
     print(f"max |inverse(world from member 4) - member 5|: quaternion as stored {worst[False]:.2e}, conjugated {worst[True]:.2e}")
     print("bones that do not match:", bad_inv); print("member 6:", dict(lenrule)); print(f"max | |quaternion| - 1 | = {qerr:.2e}")
-    print("IK flags (member 9):", dict(ik)); print("angle limits (members 7, 8):", dict(limits))
+    print("rest hierarchy x stored inverse bind for mismatches:", residuals)
+    print("IK flags (member 9):", dict(ik))
+    for (lower, upper, enabled), count in sorted(limits.items()):
+        print(f"angle limit pairs: {lower:.9f} .. {upper:.9f}, enabled={enabled}: {count}")
     print("mesh bone palettes vs the skeleton of the same model folder:", dict(palette_pairing(install)))
     print(f"member 3: min {min(m3):.3f}, max {max(m3):.3f}, distinct values {len(set(m3))}")
 
