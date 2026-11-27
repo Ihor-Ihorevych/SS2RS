@@ -26,6 +26,7 @@ mod check;
 mod directory;
 mod install;
 mod layered;
+pub mod levels;
 mod locate;
 #[cfg(test)]
 mod locate_tests;

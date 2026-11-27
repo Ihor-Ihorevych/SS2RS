@@ -1,33 +1,12 @@
-//! Data-gated: the level list of the real install, built from the `.nfo` files the VFS already reads (`ss2_vfs::Nfo`). Skips without `SS2_DATA_DIR`.
+//! Data-gated: the level list of the real install, built from the levels `ss2_vfs::levels::discover_levels` finds. Skips without `SS2_DATA_DIR`.
 //!
-//! `build_entries` is also the reference for how a caller turns `.nfo` files into a list: the id is the level's folder name (the file stem of the
-//! `.nfo` differs in places, for example `1_5_city_suburbs/1_5_mdigbo_citysuburbs.nfo`), the episode is the folder above it, the order is the
-//! numbering `N_M` of the id, and the last level ends the campaign.
+//! `build_entries` is also the reference for how a caller turns discovered levels into a campaign list: the single-player levels, the
+//! episode is the level's group (its folder above), the order is the numbering `N_M` of the id, and the last level ends the campaign.
 
 use super::*;
 use crate::difficulty::CampaignDifficulty;
-use ss2_vfs::{EntryKind, Nfo, Vfs, VfsPath};
-
-const LEVELS_DIR: &str = "content/serioussam2/levels";
-
-fn nfo_files(v: &dyn Vfs, dir: &VfsPath, out: &mut Vec<VfsPath>) {
-    let Ok(entries) = v.list(dir) else { return };
-    for e in entries {
-        let Ok(p) = dir.join(&e.name) else { continue };
-        if e.kind == EntryKind::Dir {
-            nfo_files(v, &p, out);
-        } else if e.name.ends_with(".nfo") {
-            out.push(p);
-        }
-    }
-}
-
-/// The folder name and the folder above it, from a path such as `.../01_mdigbo/1_1_jungle/1_1_jungle.nfo`.
-fn id_and_episode(p: &VfsPath) -> (String, String) {
-    let parts: Vec<&str> = p.as_str().split('/').collect();
-    let n = parts.len();
-    (parts[n - 2].to_string(), parts[n - 3].to_string())
-}
+use ss2_vfs::levels::discover_levels;
+use ss2_vfs::{Nfo, Vfs, VfsPath};
 
 /// `1_5_city_suburbs` -> (1, 5).
 fn number(id: &str) -> (u32, u32) {
@@ -42,26 +21,16 @@ struct Built {
 }
 
 fn build_entries(v: &dyn Vfs) -> Built {
-    let mut files = Vec::new();
-    nfo_files(v, &VfsPath::new(LEVELS_DIR).unwrap(), &mut files);
     let mut singles: Vec<LevelEntry> = Vec::new();
     let mut other_levels = 0;
-    for p in files {
-        let nfo = Nfo::parse(&v.read(&p).unwrap()).unwrap();
-        if nfo.kind.as_deref() != Some("LEVEL") {
-            continue; // an episode description
-        }
-        let map_type = nfo.get("MAP_TYPE").unwrap_or("");
-        let single = map_type
-            .split(';')
-            .any(|t| t.trim().eq_ignore_ascii_case("SINGLE"));
-        if !single {
+    for level in discover_levels(v).unwrap() {
+        if !level.has_map_type("SINGLE") {
             other_levels += 1;
             continue;
         }
-        let (id, episode) = id_and_episode(&p);
+        let nfo = Nfo::parse(&v.read(&level.nfo).unwrap()).unwrap();
         let movie = |key| nfo.get(key).filter(|m| !m.is_empty()).map(str::to_string);
-        let mut entry = LevelEntry::new(&id, &episode, nfo.get("NAME").unwrap_or(""));
+        let mut entry = LevelEntry::new(&level.id, &level.group, &level.name);
         entry.episode_movie = movie("EPISODE_MOVIE");
         entry.intro_movie = movie("INTRO_MOVIE");
         entry.outro_movie = movie("OUTRO_MOVIE");
