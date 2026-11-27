@@ -1,6 +1,7 @@
 //! Data-gated tests on the worlds of the retail install (skip without `SS2_DATA_DIR`).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::f32::consts::FRAC_1_SQRT_2;
 
 use ss2_core::math::{Quat, Vec3};
 use ss2_format_wld::{ModelRef, World};
@@ -67,8 +68,10 @@ fn the_docking_bay_example() {
     assert_eq!(c.serial, 2);
     assert!(close(c.translation, [22.4866, 0.0, 30.4261]), "{c:?}");
     assert!(
-        c.rotation
-            .abs_diff_eq(Quat::from_xyzw(0.0, -0.7071, 0.0, 0.7071), 1e-3),
+        c.rotation.abs_diff_eq(
+            Quat::from_xyzw(0.0, -FRAC_1_SQRT_2, 0.0, FRAC_1_SQRT_2),
+            1e-3
+        ),
         "{c:?}"
     );
 }
