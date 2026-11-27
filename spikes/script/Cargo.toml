@@ -1,0 +1,33 @@
+[package]
+name = "ss2-spike-script"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "Throwaway benchmark for RFC 0012 (mod gameplay strategy, T13-002). Not part of the main workspace."
+
+[features]
+default = []
+rhai = ["dep:rhai"]
+lua = ["dep:mlua"]
+wasmi = ["dep:wasmi"]
+wasmtime = ["dep:wasmtime"]
+dylib = ["dep:libloading"]
+
+[dependencies]
+rhai = { version = "1.27", optional = true, default-features = false, features = ["std", "no_module", "no_closure", "no_time"] }
+mlua = { version = "0.12", optional = true, features = ["lua54", "vendored"] }
+wasmi = { version = "2.0.3", optional = true }
+wasmtime = { version = "51", optional = true, default-features = false, features = ["runtime", "cranelift", "std", "pulley"] }
+libloading = { version = "0.8", optional = true }
+
+# Not part of the main workspace (see spikes/ecs): a spike must not slow down or constrain the real build, and
+# its dependencies are not meant to ship.
+[workspace]
+
+[profile.release]
+debug = false
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

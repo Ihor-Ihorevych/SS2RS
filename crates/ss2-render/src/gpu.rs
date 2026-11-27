@@ -591,6 +591,8 @@ pub(crate) async fn request_gpu(
         for tier in LimitTier::ORDER {
             let descriptor = wgpu::DeviceDescriptor {
                 label: Some("ss2 device"),
+                // Block-compressed textures (the game's DXT data) when the adapter has them.
+                required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
                 required_limits: tier.limits(&adapter_limits),
                 ..Default::default()
             };

@@ -323,22 +323,87 @@ Weapon classes (docs/re/weapon-classes.md):
 python -I tools/re/weapon_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 83 exported weapon classes are in the data and under which name, the member order of 14 data classes against the names the binary declares (the rule that names the numbered weapon members), the weapon files per class and their base members by name (about 4 minutes; the class and member names it checks were read from the binary, the script reads data only)
 ```
 
+Hitscan shot (docs/re/hitscan-shot.md):
+
+```
+python -I tools/re/hitscan_shot_verify.py "C:\path\to\Serious Sam 2"    # the six hitscan weapons' scatter, range, damage and pellet members (single player and deathmatch), the scatter angles, and the bullet descriptions of the enemy attacks by bullet type (about 2 minutes; the formulas it prints come from the spec, the script reads data only)
+```
+
+Projectile launch (docs/re/projectile-launch.md):
+
+```
+python -I tools/re/projectile_launch_verify.py "C:\path\to\Serious Sam 2"    # the charging, recoil and launch-velocity members of the seven projectile weapons, the projectile files they name with the pairs at fire power 0 and 1, the launch speed per charge, the zap gun's bullet count, the player's hand grenade and which of the 94 projectile files a player weapon names (about 1 minute; the formulas come from the spec, the script reads data only)
+```
+
+Weapon view (docs/re/weapon-view.md):
+
+```
+python -I tools/re/weapon_view_verify.py "C:\path\to\Serious Sam 2"    # the six sway members and the double-weapon fire delay of the 17 weapons, the eight members of the 16 rendering files (with the field of view in degrees), the sniper zoom curve and the player's view-spring numbers (about 1 minute; the formulas come from the spec, the script reads data only)
+```
+
+Weapon pickups (docs/re/weapon-pickups.md):
+
+```
+python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
+```
+
+Mounted tools and throw descriptions (docs/re/mounted-tools.md):
+
+```
+python -I tools/re/tools_throw_verify.py "C:\path\to\Serious Sam 2"    # the CMountedTool records of the puppet files (identifier or pointer, the named .ctl files), the CThrowDescription identifiers and speed windows, and the throw behaviour actions of the .cb files (about 3 minutes; the lookup and mounting rules come from the spec, the script reads data only)
+```
+
+Character tools, carried objects and rides (docs/re/puppet-tools.md and docs/re/puppet-carry-rides.md):
+
+```
+python -I tools/re/tools_state_verify.py "C:\path\to\Serious Sam 2"    # the 68 .ctl character tools (empty animation terms, limbs, flags, stretch, health), the shield descriptions of the puppet files (the two files that have any) and the default riders (the one CCharacterMount) (about 1 minute)
+```
+
+Puppet parameter file loading (docs/re/puppet-params-loading.md):
+
+```
+python -I tools/re/puppet_params_verify.py "C:\path\to\Serious Sam 2" [--no-worlds] [LIMIT]    # the .ep files of the Puppets and EntityParams folders (counts, identifiers, duplicates, the _DM files) and the placed puppets' parameter pointers and en_idPuppet against the pointed file's stem (about 12 minutes with the worlds, 20 seconds with --no-worlds)
+```
+
+The dummy foe (docs/re/puppet-dummy-foe.md):
+
+```
+python -I tools/re/dummy_foe_verify.py "C:\path\to\Serious Sam 2" [--grep-all]    # the files and editor palette entries that name the dummy foe, the Puppets/Objects folder (about 20 seconds, 70 seconds with --grep-all, which reads every file of the install for the text DummyFoe)
+```
+
 Brain classes (docs/re/brain-classes.md):
 
 ```
 python -I tools/re/brain_classes_verify.py "C:\path\to\Serious Sam 2"    # that none of the 61 exported brain classes is in any type table, the data classes with a member named after a brain (and in how many files), which puppet entity kinds are in the data, and the AI moment names of the 82 .cb files against the moment names the brain code raises (about 3 minutes; the class and moment names it checks were read from the binary, the script reads data only)
+python -I tools/re/brain_assignment_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # docs/re/brain-assignment.md: the puppet entity classes the worlds place, which carry a character behavior (.cb), the behavior against the parameter file, the default state against the behavior, the spawner links and the seats (about 20 minutes; LIMIT reads only the smallest worlds)
+python -I tools/re/brain_mover_verify.py "C:\path\to\Serious Sam 2" [--cb-only] [LIMIT]    # docs/re/brain-movement.md: the distance band lists of the 82 .cb files (counts, order, last distance, velocity adjuster) and the tactic and patrol data of the worlds (about 1 minute with --cb-only, about 20 minutes with the worlds)
+python -I tools/re/brain_senses_verify.py "C:\path\to\Serious Sam 2" [--cb-only] [LIMIT]    # docs/re/brain-senses.md: the three ranges and the alignment of the 82 .cb files, the threat sensitivities and sense overrides of the placed puppets, the alignment table (about 1 minute with --cb-only, about 25 minutes with the worlds)
+python -I tools/re/brain_rides_verify.py "C:\path\to\Serious Sam 2" [--ep-only] [LIMIT]    # docs/re/brain-rides.md: the seat data of the puppet parameter files (names, flags, ways) and the instance mounts and ride links of the placed puppets (about 2 minutes with --ep-only, about 25 minutes with the worlds)
 ```
 
 AI behaviour and action classes (docs/re/behavior-classes.md and its three companion pages):
 
 ```
 python -I tools/re/behavior_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 95 exported AI behaviour and action classes are in the data (45 by own name or S twin), their base, members and files, the member order of 14 classes against the binary's declared names, the objects of every class in the 82 .cb, 322 .ep and 59 .wld files with the stored value of every member, the term class on each action class and the movers of the bands (about 10 minutes; the class names it checks come from the binary's export table)
+python -I tools/re/action_choice_verify.py "C:\path\to\Serious Sam 2"    # docs/re/behavior-action-choice.md: the 597 handlers (behaviour-wide, state, band) of the 82 .cb files, moment lists per level, weights, terms and vt_bNotTrue, CBADefaultAction / CBANoAction per band, the band period graph (under a second)
+python -I tools/re/behavior_generic_verify.py "C:\path\to\Serious Sam 2"    # docs/re/behavior-generic-puppet.md: the 13 run-over records and the 10 run-over actions, the 7 local-move actions, the other generic actions, the foe-change chance of the 82 behaviours (under a second)
+python -I tools/re/mover_steering_verify.py "C:\path\to\Serious Sam 2" [--no-wld]    # docs/re/behavior-mover-steering.md: where the circle, stay-in-area, pattern, diamond, mellon and air-attack movers are stored, every member value, the pattern and air-attack graphs and the behaviours' altitude graphs (about 5 minutes with the worlds, 15 seconds with --no-wld)
+python -I tools/re/marker_movers_verify.py "C:\path	o\Serious Sam 2" [LIMIT]    # docs/re/behavior-marker-movers.md: the position of the path markers (primitive = record + 0.25 up), the next-link segment lengths, the single paths, and every stored value of the ordered, random and closest-to-foe movers against the chain the tactic marker lies on (about 15 minutes for all 59 worlds)
+python -I tools/re/validity_terms_verify.py "C:\path\to\Serious Sam 2"    # docs/re/behavior-validity-terms.md: the validity-term objects by class, the 6 foe-angle objects, the 51 health terms by mode (with the puppets health), the 12 foe-assigning objects, the unused classes (0), the puppets armor, the test vectors
+python -I tools/re/line_of_sight_verify.py "C:\path\to\Serious Sam 2"    # docs/re/brain-line-of-sight.md: the 124 puppet .ep files: stretch, the eye-point and target vectors of the body record, the sitting variant and the legged puppets pose heights
+python -I tools/re/foe_manager_verify.py "C:\path\to\Serious Sam 2" [--no-worlds] [LIMIT]    # docs/re/foe-manager-numbers.md: the (active, threat) range pairs of the 82 .cb files with the foe manager sleep time, the reaction periods and auto-change chances, the 124 empty foe-assigning tables, the placed puppets own-alignment flag (worlds about 20 min), the test vectors
 ```
 
 Puppet classes (docs/re/puppet-classes.md and its four companion pages):
 
 ```
 python -I tools/re/puppet_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 101 exported puppet classes are in the data (50), the member-order rule against the declared member tables (16 classes), the root classes of the 124 puppet parameter files, and what the install does not contain (about 5 minutes)
+python -I tools/re/puppet_attacks_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-attacks.md: the 123 shooting processes, 168 blasts, 71 melee attacks, 75 melee blasts, 13 run-over and 30 throw-description records of the 322 .ep files (value tables, graphs, projectile flags of the blasts), and the formulas of the page evaluated for its test vectors (melee direction, free-fall launch, tool throw); under a second
+python -I tools/re/moving_anim_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-moving-anim.md: the 20 .mas files and 40 embedded moving-animation schemes (167 all / 90 body / 58 pose-transition records, value tables, base chains, models per scheme) and a reference implementation of the chooser run over the whole selector grid, with the page's test vectors; under a second
+python -I tools/re/legged_ko_leap_ride_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-legged-sequences.md: the knock-out parameters of the 82 legged parameter files (10 can be knocked out), the 9 leap attacks, the 22 seats / ways to seat / 33 ride-and-rider pairs, and the formulas of the page for its test vectors; under a second
+python -I tools/re/legged_diving_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-legged-diving.md: the breath period of the 86 legged parameter files (5 s in 84, 60 s in the two player files) and the periodic dive and drowning events of the page for its test vectors; under a second
+python -I tools/re/puppet_record_members_verify.py "C:\path\to\Serious Sam 2"    # T01-151 (docs/re/puppet-record-members.md): the declared names of the 25 numbered members of the seven puppet record classes against the data order and types of the 126 puppet files (258 environment, 86 knock-out records), the class defaults against the data, the stated relations, the healing triples, the explosion thresholds and the falling-damage graph
+python -I tools/re/puppet_spawning_verify.py "C:\path\to\Serious Sam 2"    # docs/re/puppet-spawning.md: the 835 spawn effect configurations (11 .sfc + 824 in worlds): stop chance, throw-direction flag, prepare / spawn-source / spawnee animations, and the formulas of the page; about 6 minutes (parses all worlds)
 Projectile classes (docs/re/projectile-classes.md):
 
 ```
@@ -355,6 +420,11 @@ Level mechanism, spawner and info entity classes (docs/re/mechanism-classes.md a
 
 ```
 python -I tools/re/mechanism_classes_verify.py "C:\path\to\Serious Sam 2"    # which of the 82 exported classes are in the data (70) and under which name, the member order of 23 data classes against the binary's declared names, the census of the 59 worlds (7,651 placed entities and their records: member value tables, the spawner limit type against the spawnee class, the chapter links), the two spawner tweak files and ChapterMaxes.txt (about 12 minutes; --no-worlds skips the census, --short prints fewer values)
+python -I tools/re/spawner_spawn_verify.py "C:\path	o\Serious Sam 2" [--worlds N]    # T01-165 (docs/re/spawner-spawn-side.md): the 11 external `.sfc` spawn effect configurations member by member and the branch each takes, and a census of the 59 worlds: spawner record count/group/delay combinations, spawn effect configurations by branch, launchers, the five formation classes (kind number, flags, sizes, weighted marker lists) and the multi-spawner template lists; about 10 minutes
+python -I tools/re/door_mover_verify.py "C:\path	o\Serious Sam 2" [--worlds N]    # T01-167 (docs/re/door-mover-rules.md): the doors (animation names, closing delays, lock and detector flags, stored state), the animations of every door model with the two length formulas, the animation sets of the animated movers and the portals; about 10 minutes
+python -I tools/re/trigger_area_verify.py "C:\path	o\Serious Sam 2" [--worlds N] [--jobs J]    # T01-169 (docs/re/trigger-area-rules.md): detector areas (custom and players-only flags, targets, parents), the killer cross-table with the branch the code takes for each row, the environment damagers' boxes and healing flags, locators, and the freezing numbers of the player parameter files; about 25 minutes with four jobs
+python -I tools/re/chapter_restore_verify.py "C:\path\to\Serious Sam 2" [--worlds N]    # T01-172 (docs/re/chapter-restore.md): the chapter chains of all worlds (lengths, names, chapters off every chain, next level paths, EndGameChapter), the entities that carry a chapter link by class and by chapter position, the placed treasure and extra life items; about 10 minutes
+python -I tools/re/secrets_objectives_verify.py "C:\path\to\Serious Sam 2" [--worlds N]    # T01-170 (docs/re/secrets-objectives-beacons.md): secrets, mission objectives and navigation beacons member by member (states, texts, notify flags, scanner flag, chapter links) and the per-world counts; about 10 minutes
 ```
 
 World content entity classes (docs/re/worldcontent-classes.md and its four companion pages):

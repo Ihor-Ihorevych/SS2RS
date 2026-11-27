@@ -1,0 +1,19 @@
+[package]
+name = "ss2-spike-script-guest-wasm"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "The spike's hook written in Rust and compiled to wasm32-unknown-unknown (RFC 0012)."
+
+[lib]
+crate-type = ["cdylib"]
+
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

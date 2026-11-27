@@ -50,34 +50,7 @@ When **all** checks on your pull request have passed (skipped checks are fine), 
 2. Merge with a **merge commit** (`gh pr merge <n> --merge`), never squash or rebase: every signed-off commit must survive.
 3. Then `git switch main && git pull --ff-only origin main`.
 
-Limits: never merge while a check is red or pending, never merge a PR with conflicts (merge `origin/main` into your branch, push, wait again), never merge a PR somebody else opened unless the owner asked you to, and never use admin overrides to get around a failing check (while Actions cannot start jobs, see §1c). If a failure is not yours (for example another PR broke `main`), say so and stop instead of merging.
-
-## 1c. While GitHub Actions cannot run: build and test locally (temporary rule)
-
-Since 2026-11-22 the repository's Actions jobs do not start: GitHub reports every job as failed after 1 to 3 seconds with the annotation *"The job was not started because recent account payments have failed or your spending limit needs to be increased"* (a billing problem, not a code problem). A check that never started proves nothing, so **until this section is removed you run what CI would run yourself, on your own machine**.
-
-**Before every push of code, and again before every merge**, on the tree *after* you merged `origin/main` into your branch:
-
-```
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked                 # on Windows and, if you can, also on Linux/WSL (CI runs both)
-cargo deny check
-cargo xtask guard
-cargo xtask check-claims
-# docs or roadmap changes:
-mdbook build docs && python .github/scripts/check_book_links.py target/book
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
-# every commit of the branch must carry a sign-off (the dco job):
-for c in $(git rev-list --no-merges origin/main..HEAD); do git show -s --format=%B $c | grep -qE '^Signed-off-by: .+ <.+>' || echo "no sign-off: $c"; done
-# if you touched platform code (the portability job, informational): cargo check --target aarch64-linux-android -p ss2-core -p ss2-vfs -p ss2-meta -p ss2-assets -p ss2-sim -p ss2-net
-```
-
-- Tools you do not have (`cargo-deny` and `mdbook` are listed in `docs/DEV_TOOLS.md`): install them; `gitleaks` (the CI secrets job) is optional locally. If you cannot run something, say so in the PR and do not claim it passed. Never commit keys, tokens or personal data.
-- Put the result in the **PR description** (one line per command: passed, or the failure). "Not run" is an honest answer; "passed" without having run it is not.
-- Data-gated tests skip without `SS2_DATA_DIR`; run them with it set to your own install when you change a loader or a spec tool.
-- **Merging (§1b)** still needs every check that *ran* to be green. While the only red checks are jobs that *did not start* (the billing annotation above; look at `gh run view <id> --json jobs` and the check annotations), your local results, posted in the PR as above, take their place. Never merge over a check that ran and failed, and never merge when a local command failed.
-- Remove this section when a pull request's jobs run their steps again (a run of `ci.yml` on `main` with steps, not an instant failure).
+Limits: never merge while a check is red or pending, never merge a PR with conflicts (merge `origin/main` into your branch, push, wait again), never merge a PR somebody else opened unless the owner asked you to, and never use admin overrides to get around a failing check. If a failure is not yours (for example another PR broke `main`), say so and stop instead of merging.
 
 ## 2. Hard rules (violations get the PR rejected)
 

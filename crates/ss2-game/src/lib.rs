@@ -7,5 +7,6 @@ pub mod difficulty;
 pub mod freefly;
 pub mod level_progress;
 pub mod physics_debug;
+pub mod play;
 pub mod settings;
 pub mod spectate;
