@@ -126,6 +126,53 @@ pub fn format_bmf(data: &[u8]) {
             assert_eq!(s.is_skinned(), s.bone_weights.is_some());
         }
     }
+    if let Some(c) = &mesh.collision {
+        collision_mesh(c);
+    }
+}
+
+/// A collision mesh that reads is consistent: triangles inside the vertices, one surface id per triangle, the tree's
+/// ranges inside the reference list, the references inside the triangles, and a walk from the root that ends.
+fn collision_mesh(c: &ss2_format_bmf::CollisionMesh) {
+    let n = c.positions.len();
+    assert!(c.normals.is_empty() || c.normals.len() == n);
+    assert!(
+        c.triangles.iter().flatten().all(|&i| (i as usize) < n),
+        "a collision index outside the vertices"
+    );
+    assert_eq!(c.surface_ids.len(), c.triangle_count());
+    assert!(c.edge_flags.is_empty() || c.edge_flags.len() == c.triangle_count());
+    for t in 0..c.triangle_count() {
+        let _ = c.surface_of(t);
+    }
+    assert!(
+        c.node_triangles
+            .iter()
+            .all(|&t| (t as usize) < c.triangle_count())
+    );
+    let mut stack = if c.nodes.is_empty() {
+        vec![]
+    } else {
+        vec![0usize]
+    };
+    let mut visited = 0usize;
+    while let Some(i) = stack.pop() {
+        visited += 1;
+        assert!(
+            visited <= c.nodes.len(),
+            "the collision tree walk does not end"
+        );
+        let node = c.nodes[i];
+        assert_eq!(
+            c.node_triangles_of(i).len(),
+            usize::from(node.triangle_count)
+        );
+        let _ = node.split_plane(&c.bounds);
+        if let Some((below, above)) = node.children() {
+            assert!(below > i && above < c.nodes.len());
+            stack.extend([below, above]);
+        }
+    }
 }
 
 /// `ss2-format-mdl`: whatever reads has the materials its embedded surfaces name, each once and in id order, and

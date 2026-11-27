@@ -189,7 +189,7 @@ python -I tools/asset-export/scripts/validate_png.py OUTDIR
 ## Not covered
 
 * **Skeletons and animation** (T11-014b): bone weights, bone indices and the palette are read but not exported (no `.skl` reader, so no glTF skin or joints); `.ans` animations are not exported.
-* **`.mdl` models** (the files that name a `.bmf` mesh, LODs and materials): no reader exists; only `.bmf` meshes are exported. Morph maps and the collision mesh are not read by the mesh reader.
+* **`.mdl` models** (the files that name a `.bmf` mesh, LODs and materials): no reader exists; only `.bmf` meshes are exported. Morph maps are not read by the mesh reader; the collision mesh is read (T02-042) but not exported.
 * **Conventions:** handedness, triangle winding and the UV v axis are written as stored and **not verified** against the engine (`bmf.md` leaves them open); `--flip-winding` is a workaround, not a fix.
 * **Materials** are only partly translated: one base colour texture chosen by shader class (shade, reflection, pixel-light, specular only), the texture list in `extras`; tints, blend modes, normal
   maps, modifiers and animated parameters are not. Embedded textures (8 models) are not handled; only external `.tex` references become images.

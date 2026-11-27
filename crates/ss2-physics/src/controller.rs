@@ -1,7 +1,10 @@
 //! A **provisional** walking controller (slice of T07-005 for the playable MVP; RFC 0013).
 //!
-//! The numbers in [`WalkConfig::PROVISIONAL`] are tuned by feel. They are not measurements of
-//! the original game; those come from T01-024, and this controller is then replaced or retuned.
+//! The numbers in [`WalkConfig::PROVISIONAL`] are the original's stored single-player movement
+//! constants where `docs/re/player-movement-constants.md` (T01-410) has them, and guesses where it does not
+//! (each field says which). They are not measurements of the running game: those come from T01-024, and this
+//! controller is then replaced or retuned. The original also has a short air-control window after leaving the
+//! ground and a separate movement formula; neither is modelled here.
 //!
 //! The body is three spheres stacked along +Y (capsule casts are not available yet, T07-004b),
 //! swept against the static world of a [`SpatialQuery`]. [`Walker::step`] is a pure function of
@@ -69,18 +72,29 @@ pub struct WalkConfig {
 }
 
 impl WalkConfig {
-    /// Numbers tuned by feel for the playable MVP; **not** the original game's (T01-024).
+    /// The single-player player's stored constants (T01-410, `docs/re/player-movement-constants.md`; confidence as
+    /// that page gives it) with guesses where it has none; **not** measurements of the running game (T01-024).
     pub const PROVISIONAL: Self = Self {
+        // Guess: the collision body is not resolved (T01-057).
         radius: 0.4,
-        height: 1.8,
-        eye_height: 1.65,
-        step_height: 0.5,
+        // Guess, chosen to stay above the eyes.
+        height: 2.1,
+        // Stored standing view height (high); whether the model stretch of 0.9 applies on top is open.
+        eye_height: 1.95,
+        // Stored step-up height (high for the value; it is shared with most enemies, so its exact use is open).
+        step_height: 2.0,
+        // Guess: no general walkable-slope limit was found (the stored 60 degrees is only for starting a jump).
         max_slope_cos: 0.707,
-        speed: 10.0,
-        accel: 80.0,
-        friction: 60.0,
-        air_accel: 15.0,
-        jump_speed: 9.0,
+        // Stored nominal ground speed, one for all directions (high).
+        speed: 7.5,
+        // Stored ground acceleration (high).
+        accel: 75.0,
+        // Stored ground deceleration (high).
+        friction: 45.0,
+        // The original keeps the ground acceleration in the air (high); its short air-control window is not modelled.
+        air_accel: 75.0,
+        // Stored jump speed (high).
+        jump_speed: 10.0,
     };
 }
 

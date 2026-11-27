@@ -87,6 +87,7 @@ The 121 methods are in the table at the end of this page (`Basis`: `R` read, `P`
 3. **Knock-out, leap and ride sequences**: **specified in [`puppet-legged-sequences.md`](puppet-legged-sequences.md)** (T01-147); the numbers of the unnamed `SPuppetEnvironmentParams` members: T01-214 (the slow limit and the move-speed pair are in `puppet-moving-anim.md`).
 4. **Diving and drowning**: **specified in [`puppet-legged-diving.md`](puppet-legged-diving.md)** (T01-149; follow-ups T01-269, T01-270).
 5. **Run-time checks** of the walking characters on the running original (speeds per pose, knock-out timings): T01-146.
+6. **The player's own numbers** (ground speed, acceleration/deceleration, jump, step heights, eye heights, air control defaults, and what is still missing — collision shape, a general walkable-slope limit, crouch speed) are collected in [`player-movement-constants.md`](player-movement-constants.md) (T01-410).
 
 ## Test vectors
 

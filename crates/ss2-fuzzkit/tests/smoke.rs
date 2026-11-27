@@ -233,6 +233,17 @@ fn the_format_seeds_are_valid_files() {
             ss2_format_bmf::Mesh::from_bytes(&seed("format_bmf", name)).map(drop),
         );
     }
+    for name in ["collision", "collision_own"] {
+        ok(
+            name,
+            ss2_format_bmf::Mesh::from_bytes(&seed("format_bmf", name)).and_then(|m| {
+                m.collision
+                    .filter(|c| !c.is_empty())
+                    .map(drop)
+                    .ok_or_else(|| ss2_core::Error::invalid("seed", "no collision triangles"))
+            }),
+        );
+    }
     ok(
         "ans",
         ss2_format_ans::AnimSet::from_bytes(&seed("format_ans", "walk")).map(drop),

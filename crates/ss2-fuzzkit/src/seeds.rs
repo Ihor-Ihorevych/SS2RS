@@ -100,11 +100,14 @@ pub fn format_tex() -> Vec<Seed> {
 }
 
 /// The seeds of `format_bmf`: the two hand-made meshes of `testdata/asset-export` (one quad; two LODs with a skinned
-/// surface).
+/// surface), and the crate's quad with a collision mesh (on the render vertices with a tree; 32-bit indices on its own
+/// positions).
 pub fn format_bmf() -> Vec<Seed> {
     vec![
         seed("quad", BMF_QUAD.to_vec()),
         seed("rich", BMF_RICH.to_vec()),
+        seed("collision", builders::bmf::quad_with_collision()),
+        seed("collision_own", builders::bmf::quad_with_own_collision()),
     ]
 }
 

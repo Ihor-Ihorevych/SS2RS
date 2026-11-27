@@ -69,6 +69,17 @@ fn world_file(with_spawn: bool) -> Vec<u8> {
 /// `north.tex`, West `body.tex` (the material's texture too), South a missing file, no East and
 /// no Floor, Ceiling `up.tex`; colour [`SKY_COLOR`].
 fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
+    world_file_full(with_spawn, with_sky, None)
+}
+
+/// [`world_file`] whose first `Box.mdl` placement (entity 3, instance 13) is lit: its modifier
+/// list 100 holds an oven modifier (101) naming the world's own `CStaticTexture` 110, a 4 x 4
+/// texture of format `code` with `blob` as its pixel data (`wld-lighting.md`).
+fn world_file_lit(code: u32, blob: &[u8]) -> Vec<u8> {
+    world_file_full(true, false, Some((code, blob)))
+}
+
+fn world_file_full(with_spawn: bool, with_sky: bool, lit: Option<(u32, &[u8])>) -> Vec<u8> {
     let mut b = MetaBuilder::new();
     let module = b.file_ref("Bin/Sam2Game.module", 0);
     let mdl = b.file_ref(BOX_MDL, 0);
@@ -128,7 +139,7 @@ fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
     let aspect_members = [("1", 15), ("4", 6), ("7", 6), ("5", 8)];
     b.type_block(TypeBlock::class(14, "CAspect", 3, 5, None, &aspect_members));
     b.type_block(TypeBlock::pointer(17, "Ptr<CModelConfiguration>", 101));
-    let instance_members = [("1", 4), ("3", 17)];
+    let instance_members = [("1", 4), ("3", 17), ("4", 54)];
     b.type_block(TypeBlock::class(
         16,
         "CModelInstance",
@@ -214,6 +225,72 @@ fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
         &[],
     ));
     b.type_block(TypeBlock::class(33, "CModelConfiguration", 3, 5, None, &[]));
+    // The lightmap classes (`wld-lighting.md`; the texture as in `tex.md`).
+    b.type_block(TypeBlock::primitive(49, "IDENT", 4, 4));
+    b.type_block(TypeBlock::class(53, "CShaderModifier", 1, 5, Some(3), &[]));
+    b.type_block(TypeBlock::dynamic_container(
+        55,
+        "CDynamicContainer<CShaderModifier>",
+        53,
+    ));
+    b.type_block(TypeBlock::class(
+        56,
+        "CShaderModifierList",
+        1,
+        5,
+        None,
+        &[("1", 55)],
+    ));
+    b.type_block(TypeBlock::pointer(54, "CShaderModifierList*", 56));
+    b.type_block(TypeBlock::pointer(57, "Ptr<CTexture>", 71));
+    b.type_block(TypeBlock::class(
+        58,
+        "CShaderArgValTexture",
+        1,
+        5,
+        None,
+        &[("1", 57)],
+    ));
+    b.type_block(TypeBlock::class(
+        59,
+        "CShaderArgValUVMap",
+        1,
+        5,
+        None,
+        &[("1", 49)],
+    ));
+    b.type_block(TypeBlock::class(
+        60,
+        "CTextureOvenShaderModifier",
+        4,
+        5,
+        Some(53),
+        &[("4", 58), ("1", 49), ("3", 59), ("2", 49)],
+    ));
+    b.type_block(TypeBlock::primitive(62, "SLONG", 4, 4));
+    b.type_block(TypeBlock::primitive(63, "UBYTE", 1, 1));
+    b.type_block(TypeBlock::enumeration(64, "TexFlags", 4));
+    b.type_block(TypeBlock::enumeration(65, "TexFormat", 4));
+    b.type_block(TypeBlock::enumeration(66, "GfxTexWrap", 4));
+    b.type_block(TypeBlock::short(67, "CStaticArray<UBYTE>", 0, 6, 63));
+    b.type_block(TypeBlock::class(
+        69,
+        "CBaseTexture",
+        8,
+        5,
+        None,
+        &[
+            ("1", 62),
+            ("2", 62),
+            ("4", 64),
+            ("6", 65),
+            ("18", 67),
+            ("9", 66),
+            ("10", 66),
+            ("14", 0),
+        ],
+    ));
+    b.type_block(TypeBlock::class(71, "CStaticTexture", 1, 5, Some(69), &[]));
     b.external_object(50, module, 10, 100);
     b.external_object(51, mdl, 1, 101);
     b.external_object(52, missing, 1, 101);
@@ -327,6 +404,7 @@ fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
         if let Some(m) = mechanism {
             b.object(m, 23, Vec::new());
         }
+        let list = (lit.is_some() && instance == 13).then_some(100);
         b.object(
             instance,
             16,
@@ -335,9 +413,42 @@ fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
                 .f32(scale[1])
                 .f32(scale[2])
                 .object_ref(Some(model))
+                .object_ref(list)
                 .finish(),
         );
     };
+    if let Some((code, blob)) = lit {
+        b.object(
+            100,
+            56,
+            ObjectBytes::new().dynamic_container(&[101]).finish(),
+        );
+        b.object(
+            101,
+            60,
+            ObjectBytes::new()
+                .object_ref(Some(110))
+                .u32(0)
+                .u32(0)
+                .u32(0)
+                .finish(),
+        );
+        b.object(
+            110,
+            71,
+            ObjectBytes::new()
+                .i32(4)
+                .i32(4)
+                .u32(0x71)
+                .u32(code)
+                .array_header(b"STAR", blob.len() as u32)
+                .raw(blob)
+                .u32(0x51)
+                .u32(0x51)
+                .u32(0)
+                .finish(),
+        );
+    }
     static_model(
         &mut b,
         3,
@@ -1164,6 +1275,116 @@ fn a_world_places_one_model_twice_once_mirrored() {
     for path in [WLD, BOX_MDL, BOX_MTR, BODY_TEX] {
         assert_eq!(vfs.reads(path), 1, "{path}");
     }
+}
+
+/// The lightmap of the lit placement: 4 x 4 BGR, each texel's blue byte its index.
+fn lightmap_pixels() -> Vec<u8> {
+    (0..16u8).flat_map(|i| [i, 100, 200]).collect()
+}
+
+fn zlib(bytes: &[u8]) -> Vec<u8> {
+    let mut z = ZlibEncoder::new(Vec::new(), Compression::default());
+    z.write_all(bytes).unwrap();
+    z.finish().unwrap()
+}
+
+fn lit_files(blob: &[u8]) -> Vec<(&'static str, Vec<u8>)> {
+    let mut files = without(WLD);
+    files.push((WLD, world_file_lit(0, blob)));
+    files
+}
+
+#[test]
+fn a_lit_placement_gets_its_lightmap_and_the_model_its_lightmap_uvs() {
+    let vfs = CountingVfs::new(&lit_files(&zlib(&lightmap_pixels())));
+    let (scene, report) =
+        load_level_with_report(&vfs, &VfsPath::new(WLD).unwrap(), &OPTIONS, &mut |_| {}).unwrap();
+    scene.validate().unwrap();
+    assert!(
+        scene.skipped.iter().all(|l| !l.contains("lightmap")),
+        "{:?}",
+        scene.skipped
+    );
+    // Instance 0 (entity 3) is lit; instance 1 (entity 7) places the same model unlit.
+    let [a, b] = [scene.instances[0], scene.instances[1]];
+    let lightmap = a.lightmap.expect("the lit placement has a lightmap") as usize;
+    assert_eq!(b.lightmap, None);
+    // After the material's texture; BGR became RGBA8, clamped as the wrap code 0x51 says.
+    assert_eq!(lightmap, 1);
+    let t = &scene.textures[lightmap];
+    assert_eq!((t.width, t.height, t.format), (4, 4, TexelFormat::Rgba8));
+    assert_eq!(&t.mips[0][..8], &[200, 100, 0, 255, 200, 100, 1, 255]);
+    assert!(!t.repeat_u && !t.repeat_v);
+    // The quad's one UV stream lies in [0, 1] without overlap: it is the lightmap's.
+    let mesh = &scene.models[0].parts[0].mesh;
+    let uvs = mesh.lightmap_uvs.as_ref().expect("lightmap UVs");
+    let base: Vec<[f32; 2]> = mesh.vertices.iter().map(|v| v.uv).collect();
+    assert_eq!(uvs, &base);
+    assert_eq!(
+        report,
+        LightmapReport {
+            lit_placements: 1,
+            lightmapped: 1,
+            lit_models: 1,
+            one_candidate: BTreeMap::from([(0, 1)]),
+            ..LightmapReport::default()
+        }
+    );
+}
+
+#[test]
+fn a_lightmap_that_cannot_be_read_leaves_the_placement_unlit_with_a_line() {
+    let vfs = CountingVfs::new(&lit_files(b"not zlib"));
+    let (scene, report) =
+        load_level_with_report(&vfs, &VfsPath::new(WLD).unwrap(), &OPTIONS, &mut |_| {}).unwrap();
+    scene.validate().unwrap();
+    assert_eq!(scene.instances[0].lightmap, None);
+    assert_eq!(skipped_mentions(&scene, "lightmap (oven modifier 101)"), 1);
+    assert_eq!((report.lightmapped, report.unlit_texture), (0, 1));
+    // The model still has its lightmap UVs (another placement could use them).
+    assert!(scene.models[0].parts[0].mesh.lightmap_uvs.is_some());
+}
+
+#[test]
+fn an_unlit_world_has_no_lightmap_uvs() {
+    let vfs = CountingVfs::new(&all_files());
+    let (scene, _) = load(&vfs);
+    assert!(scene.instances.iter().all(|i| i.lightmap.is_none()));
+    assert!(
+        scene
+            .models
+            .iter()
+            .flat_map(|m| &m.parts)
+            .all(|p| p.mesh.lightmap_uvs.is_none())
+    );
+}
+
+#[test]
+fn append_surface_keeps_lightmap_uvs_in_step_with_the_vertices() {
+    use ss2_format_bmf::MaterialRef;
+    let surface = |n: usize, streams: usize| Surface {
+        indices: vec![0, 1, 2],
+        positions: vec![[0.0; 3]; n],
+        normals: vec![[0.0, 1.0, 0.0]; n],
+        tangents: None,
+        uv_sets: (0..streams)
+            .map(|k| (0..n).map(|i| [k as f32, i as f32 / 10.0]).collect())
+            .collect(),
+        uv_map_ids: (0..streams as u32).collect(),
+        bone_weights: None,
+        bone_indices: None,
+        bone_palette: Vec::new(),
+        material: MaterialRef::None,
+    };
+    let mut mesh = MeshData::default();
+    append_surface(&mut mesh, &surface(3, 2), None, Some(1));
+    // A surface without that stream gets zeros.
+    append_surface(&mut mesh, &surface(4, 1), None, Some(1));
+    let uvs = mesh.lightmap_uvs.as_ref().unwrap();
+    assert_eq!(uvs.len(), mesh.vertices.len());
+    assert_eq!(&uvs[..3], &[[1.0, 0.0], [1.0, 0.1], [1.0, 0.2]]);
+    assert_eq!(&uvs[3..], &[[0.0, 0.0]; 4]);
+    mesh.validate().unwrap();
 }
 
 #[test]
