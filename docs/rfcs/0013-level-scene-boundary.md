@@ -93,8 +93,8 @@ Rules:
 
 - `Instance::transform.scale` may be **negative** on any axis (mirrored placements). Mesh winding stays as
   authored; consumers that cull handle the mirror (the MVP renderer does not cull).
-- `ModelData::collision` is the coarsest render LOD for now; it is replaced by the real collision mesh once
-  its layout is specified (T01-055). `None` means the model does not collide.
+- `ModelData::collision` is the model's own collision mesh where it has one, else its coarsest PC render LOD
+  (Amendment 4). `None` means the model does not collide.
 - A loader that cannot read one model, material or texture **does not fail the load**: it records a line in
   `skipped` and uses a grey material, a white texture, or drops the instance.
 
@@ -246,6 +246,14 @@ and drops them with the world.
 relative to its centre, in the units of `size`; the sign is the open question of `docs/re/environment.md`). The
 renderer keeps the cube centred on the camera, turned by `rotation`, and shifted by `viewer_height` scaled to its own
 draw size (T04-041).
+
+### Amendment 4: collision meshes (T07-036)
+
+`CollisionData` gains `pub from_collision_mesh: bool`. The loader fills `ModelData::collision` from the model's own
+collision mesh (`docs/re/bmf.md`, "Collision mesh", read by `ss2_format_bmf::CollisionMesh`, T02-042), in model space
+like the render parts, and sets the flag; a model without a collision mesh, or with an empty one, keeps the coarsest
+PC render LOD with the flag clear (procedural geometry such as the test room also has it clear). Consumers that only
+need triangles ignore the flag.
 
 ## Alternatives considered
 
