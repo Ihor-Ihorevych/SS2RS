@@ -15,7 +15,7 @@ use ss2_physics::query::{QueryFilter, SpatialQuery};
 use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{DirEntry, ReadSeek, Stat, Vfs, VfsPath};
 use ss2_world::collision::build_static;
-use ss2_world::load::{LoadOptions, load_level};
+use ss2_world::load::{LightmapReport, LoadOptions, load_level, load_level_with_report};
 use ss2_world::scene::{CubeFace, LevelScene, LoadStage};
 
 fn level<'a>(levels: &'a [LevelInfo], id: &str) -> &'a LevelInfo {
@@ -449,4 +449,122 @@ fn reason(line: &str) -> String {
         }
     }
     out
+}
+
+/// The lightmap test vector of `wld-lighting.md` is `dm_stadium`: its lit placements get their
+/// lightmaps, `Fence.mdl` (whose lightmap stream is its first, UV id 3) among them.
+#[test]
+fn dm_stadium_is_lightmapped() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let info = level(&levels, "dm_stadium");
+    let (scene, report) =
+        load_level_with_report(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+    scene.validate().unwrap();
+    eprintln!("dm_stadium: {report:?}");
+    let fence = scene
+        .models
+        .iter()
+        .position(|m| m.name.to_ascii_lowercase().ends_with("/fence.mdl"))
+        .expect("Fence.mdl is loaded");
+    assert!(
+        scene.models[fence]
+            .parts
+            .iter()
+            .all(|p| p.mesh.lightmap_uvs.is_some())
+    );
+    let lit_fences = scene
+        .instances
+        .iter()
+        .filter(|i| i.model as usize == fence && i.lightmap.is_some())
+        .count();
+    assert!(lit_fences > 0);
+    assert_eq!(report.lit_placements, 133);
+    assert!(
+        report.lightmapped * 10 >= report.lit_placements * 8,
+        "{report:?}"
+    );
+    assert_eq!(report.unlit_texture, 0, "{report:?}");
+}
+
+/// With `SS2_LOAD_ALL=1` (release build): every level loads with its lightmaps; prints, per
+/// level and in all, the lit placements, how many got a lightmap and why the others did not, and
+/// which UV stream the lit models' lightmaps use.
+#[test]
+fn every_level_is_lightmapped() {
+    let dir = ss2_testkit::require_game_data!();
+    if std::env::var_os("SS2_LOAD_ALL").is_none_or(|v| v.is_empty() || v == "0") {
+        eprintln!("SKIPPED: set SS2_LOAD_ALL=1 (release build) to load every level");
+        return;
+    }
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut all = LightmapReport::default();
+    let mut lit_instances = 0;
+    let mut failures = Vec::new();
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes) {
+            continue;
+        }
+        let (scene, r) =
+            load_level_with_report(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        let lit = scene
+            .instances
+            .iter()
+            .filter(|i| i.lightmap.is_some())
+            .count();
+        if lit != r.lightmapped {
+            failures.push(format!("{}: {lit} lit instances, report {r:?}", info.id));
+        }
+        lit_instances += lit;
+        eprintln!(
+            "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
+             models {:>3}: one {:?}, none {}, several {}",
+            info.id,
+            r.lightmapped,
+            r.lit_placements,
+            r.unlit_no_uvs,
+            r.unlit_texture,
+            r.dropped,
+            r.lit_models,
+            r.one_candidate,
+            r.no_candidate,
+            r.several_candidates
+        );
+        all.lit_placements += r.lit_placements;
+        all.lightmapped += r.lightmapped;
+        all.unlit_no_uvs += r.unlit_no_uvs;
+        all.unlit_texture += r.unlit_texture;
+        all.dropped += r.dropped;
+        all.lit_models += r.lit_models;
+        all.no_candidate += r.no_candidate;
+        all.several_candidates += r.several_candidates;
+        for (k, n) in r.one_candidate {
+            *all.one_candidate.entry(k).or_default() += n;
+        }
+    }
+    eprintln!("{} worlds, in all: {all:?}", seen.len());
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert_eq!(lit_instances, all.lightmapped);
+    // Most lit placements are drawn with their lightmap (the spec: 86.6 % of lit instances
+    // have exactly one candidate stream).
+    assert!(all.lightmapped * 10 >= all.lit_placements * 8, "{all:?}");
+    assert_eq!(all.unlit_texture, 0, "{all:?}");
+    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels), 15,976 drawn
+    // with their lightmap, 2,182 whose model has no single candidate, 37 not in the scene.
+    assert_eq!(
+        (
+            all.lit_placements,
+            all.lightmapped,
+            all.unlit_no_uvs,
+            all.dropped
+        ),
+        (18_195, 15_976, 2_182, 37)
+    );
 }

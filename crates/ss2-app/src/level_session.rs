@@ -217,6 +217,9 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
     let sky = scene.sky.map(|sky| SkyBatch {
         faces: sky.faces.map(|f| f.map(|t| textures[t as usize])),
         tint: sky.tint,
+        rotation: sky.rotation,
+        size: sky.size,
+        viewer_height: sky.viewer_height,
     });
     report.sky = sky.is_some();
     renderer.set_sky(sky).map_err(|e| e.to_string())?;
