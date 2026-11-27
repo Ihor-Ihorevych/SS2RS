@@ -7,10 +7,14 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
+use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_wld::World;
+use ss2_physics::geometry::Ray;
+use ss2_physics::query::{QueryFilter, SpatialQuery};
 use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{DirEntry, ReadSeek, Stat, Vfs, VfsPath};
+use ss2_world::collision::build_static;
 use ss2_world::load::{LoadOptions, load_level};
 use ss2_world::scene::{CubeFace, LevelScene, LoadStage};
 
@@ -201,6 +205,7 @@ fn every_sky_loads() {
     let mut tints = std::collections::BTreeSet::new();
     let mut unreadable = Vec::new();
     let mut failures = Vec::new();
+    let mut turned = 0;
     for info in &levels {
         let bytes = vfs.read(&info.wld).unwrap();
         if !seen.insert(bytes.clone()) {
@@ -225,6 +230,27 @@ fn every_sky_loads() {
             continue;
         };
         skies += 1;
+        // The placement (`environment.md`, T01-409): the entity's rotation, normalised, never
+        // its position; the size and the viewer height as stored.
+        if !got.rotation.abs_diff_eq(want.rotation.normalize(), 1e-6)
+            || (got.size, got.viewer_height) != (want.size, want.viewer_y)
+        {
+            failures.push(format!(
+                "{}: placement {:?} {} {} of {want:?}",
+                info.id, got.rotation, got.size, got.viewer_height
+            ));
+        }
+        if !got.rotation.abs_diff_eq(Quat::IDENTITY, 1e-6) {
+            turned += 1;
+            // A pure heading: the up axis is never tilted.
+            let up = got.rotation * Vec3::Y;
+            if !up.abs_diff_eq(Vec3::Y, 1e-3) {
+                failures.push(format!(
+                    "{}: sky turned off +Y: {:?}",
+                    info.id, got.rotation
+                ));
+            }
+        }
         let loaded = got.faces.iter().flatten().count();
         if loaded != want.face_count() {
             failures.push(format!(
@@ -251,6 +277,9 @@ fn every_sky_loads() {
         tints.len()
     );
     assert!(failures.is_empty(), "{failures:#?}");
+    // 44 of the 58 skies are turned, all about +Y (`environment.md`, T01-409).
+    eprintln!("{turned} turned skies");
+    assert_eq!(turned, 44);
     // `discover_levels` lists the 58 playable worlds, all with a sky (the 59th world of the
     // install, `dockingbay`, has none and is not a level).
     assert_eq!((worlds, skies), (58, 58));
@@ -268,6 +297,128 @@ fn every_sky_loads() {
     assert_eq!(per_face, [55, 55, 55, 11, 55, 55]);
     assert_eq!(faces, 55 * 5 + 11);
 }
+
+/// The heading of a rotation in degrees: the angle about +Y of its rotated -Z.
+fn heading(rotation: Quat) -> f32 {
+    let forward = rotation.normalize() * Vec3::NEG_Z;
+    (-forward.x).atan2(-forward.z).to_degrees()
+}
+
+/// Every single-player level starts at its chapter chain's first chapter
+/// (`chapter-restore-players.md` sections 2.8 and 2.9), not at the first chapter of the entity
+/// list, and the scene's start is that chapter's placement.
+#[test]
+fn every_single_player_level_starts_at_its_chains_first_chapter() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let without_models = WithoutModels(&vfs);
+    let mut failures = Vec::new();
+    let (mut single, mut not_first_in_list) = (0, 0);
+    for info in levels.iter().filter(|l| l.has_map_type("SINGLE")) {
+        single += 1;
+        let world = World::from_bytes(&vfs.read(&info.wld).unwrap()).unwrap();
+        let scene = load_level(
+            &without_models,
+            &info.wld,
+            &LoadOptions::default(),
+            &mut |_| {},
+        )
+        .unwrap();
+        let chain = world.chapter_chain();
+        if !world.spawn_markers.is_empty() || chain.is_empty() {
+            failures.push(format!(
+                "{}: {} spawn markers, chain {chain:?}",
+                info.id,
+                world.spawn_markers.len()
+            ));
+            continue;
+        }
+        not_first_in_list += usize::from(chain[0] != 0);
+        let first = &world.chapters[chain[0]];
+        let start = scene.start();
+        if scene.spawns.len() != chain.len()
+            || start.position != first.translation
+            || (start.yaw.to_degrees() - heading(first.rotation)).abs() > 1e-3
+        {
+            failures.push(format!(
+                "{}: start {start:?} of {} spawns, chain's first chapter {first:?}",
+                info.id,
+                scene.spawns.len()
+            ));
+        }
+    }
+    eprintln!(
+        "{single} single-player levels, {not_first_in_list} start off the list's first chapter"
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert!(single > 30, "{single}");
+}
+
+/// The two worked starts of `chapter-restore-players.md` section 2.9, and the walker's ground:
+/// straight below the start (raised 2 m, as the chapter's fall-down search does), within
+/// [`GROUND_REACH`], there is static collision.
+///
+/// `SS2_LOAD_ALL=1` checks every single-player level (use a release build). Two starts have no
+/// static ground within reach in the retail data: `5_1_village` (53 m above the static collision)
+/// and `5_2_seasidetownapproaching` (none below at all). The start rule itself is satisfied there
+/// (the previous test); what the player stands on is presumably not a static model (a chapter can
+/// follow a parent entity, `mechanism-classes-world-info.md`), which this loader does not read.
+#[test]
+fn the_worked_starts_stand_on_ground() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let all = std::env::var_os("SS2_LOAD_ALL").is_some_and(|v| !v.is_empty() && v != "0");
+    let worked = [
+        ("1_1_jungle", Vec3::new(263.2, -0.6, -242.0), 104.5),
+        ("7_1_city_part_i", Vec3::new(-54.7, 3.4, 39.6), 0.0),
+    ];
+    let mut failures = Vec::new();
+    let mut no_ground = Vec::new();
+    let mut checked = 0;
+    for info in levels.iter().filter(|l| l.has_map_type("SINGLE")) {
+        let example = worked.iter().find(|w| w.0 == info.id);
+        if example.is_none() && !all {
+            continue;
+        }
+        let scene = load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        let start = scene.start();
+        if let Some((_, position, yaw)) = example
+            && (!start.position.abs_diff_eq(*position, 0.06)
+                || (start.yaw.to_degrees() - yaw).abs() > 0.1)
+        {
+            failures.push(format!("{}: start {start:?}", info.id));
+        }
+        let world = build_static(&scene).unwrap();
+        let down = Ray::new(start.position + Vec3::Y * 2.0, Vec3::NEG_Y).unwrap();
+        let ground = world.raycast(&down, 2.0 + GROUND_REACH, &QueryFilter::default());
+        checked += 1;
+        match ground {
+            Some(hit) => eprintln!(
+                "{}: start {:?}, ground {:.2} m below",
+                info.id,
+                start.position,
+                start.position.y - hit.point.y
+            ),
+            None => {
+                eprintln!("{}: no ground below {start:?}", info.id);
+                no_ground.push(info.id.as_str());
+            }
+        }
+    }
+    eprintln!("{checked} starts checked for ground (SS2_LOAD_ALL=1: every single-player level)");
+    assert!(failures.is_empty(), "{failures:#?}");
+    let expected: &[&str] = if all {
+        &["5_1_village", "5_2_seasidetownapproaching"]
+    } else {
+        &[]
+    };
+    assert_eq!(no_ground, expected);
+}
+
+/// How far below a start the walker may fall to the ground, metres.
+const GROUND_REACH: f32 = 10.0;
 
 /// A skipped line without its paths, names and numbers, to group similar lines.
 fn reason(line: &str) -> String {
