@@ -227,6 +227,18 @@ The loader rotates or mirrors the game's face images into this convention (`docs
 renderer (`Renderer::set_sky(Option<SkyBatch>)`, T04-039) draws the faces unlit around the camera behind everything
 and drops them with the world.
 
+### Amendment 2: lightmaps (T00-037)
+
+- `ss2_render_api::scene_data::MeshData` gains `pub lightmap_uvs: Option<Vec<[f32; 2]>>`: the lightmap UV of each
+  vertex (same length as `vertices`, finite), present only on meshes that are lightmapped; `MeshVertex` is unchanged.
+- `ss2_world::scene::Instance` gains `pub lightmap: Option<u32>`: index into `LevelScene::textures` of this
+  placement's own lightmap (each lightmap belongs to one instance). It is used only with parts that carry
+  `lightmap_uvs`.
+- `ss2_render::WorldBatch` gains `pub lightmap: Option<TextureHandle>`. A batch with a lightmap is drawn **full
+  bright**: base colour times the lightmap sampled with the mesh's lightmap UVs, no run-time light term
+  (`docs/re/lighting.md`); a mesh without lightmap UVs reads them as zero.
+- The loader picks the lightmap UV stream of a mesh by the rule of `docs/re/wld-lighting.md` (T01-407).
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
