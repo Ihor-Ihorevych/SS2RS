@@ -2982,6 +2982,7 @@ dependencies = [
 name = "ss2-render-api"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "ss2-core",
  "ss2-ui",
 ]
