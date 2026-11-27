@@ -18,8 +18,6 @@ ss2-render = { path = "../ss2-render" }
 ss2-platform = { path = "../ss2-platform" }
 ss2-platform-api = { path = "../ss2-platform-api" }
 ss2-vfs = { path = "../ss2-vfs" }
-winit.workspace = true
-gilrs.workspace = true
 png.workspace = true
 tracing.workspace = true
 # Optional frame profiler (T11-011): `cargo run -p ss2-app --features profile`, see docs/PROFILING.md.
