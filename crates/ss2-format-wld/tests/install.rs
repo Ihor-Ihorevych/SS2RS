@@ -88,6 +88,7 @@ fn every_world_of_the_install_reads() {
     let mut failures = Vec::new();
     let (mut worlds, mut entities, mut models, mut hulls, mut embedded) = (0, 0, 0, 0, 0);
     let (mut spawn_markers, mut spawn_worlds, mut chapters) = (0, 0, 0);
+    let (mut chain_worlds, mut chain_not_first_in_list, mut next_links) = (0, 0, 0);
     let mut scales: BTreeMap<&str, usize> = BTreeMap::new();
     let mut distinct_models = BTreeSet::new();
     let mut odd = Vec::new();
@@ -138,6 +139,12 @@ fn every_world_of_the_install_reads() {
         spawn_markers += world.spawn_markers.len();
         spawn_worlds += usize::from(!world.spawn_markers.is_empty());
         chapters += world.chapters.len();
+        next_links += world.chapters.iter().filter(|c| c.next.is_some()).count();
+        let chain = world.chapter_chain();
+        if !chain.is_empty() {
+            chain_worlds += 1;
+            chain_not_first_in_list += usize::from(chain[0] != 0);
+        }
     }
     eprintln!(
         "{} .wld paths, {worlds} distinct worlds read, {entities} entities; {models} static models \
@@ -170,6 +177,51 @@ fn every_world_of_the_install_reads() {
     assert_eq!(scales["uniform"] + scales["non-uniform"], 16_377 + 5_057);
     // wld-entities.md: 177 spawn markers in 16 worlds, 307 chapter info entities.
     assert_eq!((spawn_markers, spawn_worlds, chapters), (177, 16, 307));
+    // mechanism-classes-world-info.md / wld-entity-schema.md: 51 worlds name a first chapter,
+    // 245 chapters a next chapter; chapter-restore-players.md section 2.9: in 31 of the 51 the
+    // chain's first chapter is not the first chapter of the entity list.
+    eprintln!(
+        "{chain_worlds} worlds with a chain, {chain_not_first_in_list} not starting at the first chapter of the list; {next_links} next-chapter links"
+    );
+    assert_eq!(
+        (chain_worlds, chain_not_first_in_list, next_links),
+        (51, 31, 245)
+    );
+}
+
+/// The two single-player starts of `chapter-restore-players.md` section 2.9: the chain's first
+/// chapter, its placement and heading.
+#[test]
+fn the_chain_starts_of_the_start_rule_examples() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let paths = files_with_extension(&vfs, "wld");
+    // (file, first chapter serial, its rank in the list, chain length, position, heading)
+    let cases = [
+        ("1_1_jungle.wld", 3619, 3, 5, [263.2, -0.6, -242.0], 104.5),
+        ("7_1_city_part_i.wld", 3250, 7, 8, [-54.7, 3.4, 39.6], 0.0),
+    ];
+    for (file, serial, rank, length, position, heading) in cases {
+        let path = paths
+            .iter()
+            .find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case(file)))
+            .unwrap_or_else(|| panic!("no {file}"));
+        let world = World::from_bytes(&vfs.read(path).unwrap()).unwrap();
+        let chain = world.chapter_chain();
+        assert_eq!(chain.len(), length, "{file}");
+        assert_eq!(chain[0], rank, "{file}");
+        let first = &world.chapters[chain[0]];
+        assert_eq!((first.serial, first.name.as_str()), (serial, "Chapter001"));
+        assert!(
+            first.translation.abs_diff_eq(Vec3::from(position), 0.06),
+            "{file}: {}",
+            first.translation
+        );
+        let forward = first.rotation.normalize() * Vec3::NEG_Z;
+        let yaw = (-forward.x).atan2(-forward.z).to_degrees();
+        assert!((yaw - heading).abs() < 0.1, "{file}: heading {yaw}");
+        assert!(world.spawn_markers.is_empty(), "{file}");
+    }
 }
 
 /// The sky test vector of `environment.md`: `1_3_Village`, a five-face sky.

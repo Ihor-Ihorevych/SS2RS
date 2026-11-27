@@ -12,7 +12,10 @@
 //!   `CAspect.7`, so child entities need no recomputation), the instance scale (which may be
 //!   negative on an axis: a mirrored model) and whether it has a collision hull,
 //! - the spawn markers (`CSpawnMarkerEntity`) and the chapter info entities
-//!   (`CChapterInfoEntity`) with their placements and editor names,
+//!   (`CChapterInfoEntity`) with their placements and editor names, and the chapter chain: the
+//!   first chapter the world info entity names (`CWorldInfoEntity.2`) and each chapter's next
+//!   chapter (`CChapterInfoEntity.2`; `mechanism-classes-world-info.md`, the single-player start
+//!   of `chapter-restore-players.md` section 2.8),
 //! - the sky (`CCubeBackgroundEntity`, T02-039; spec `docs/re/environment.md`, section "Sky"):
 //!   its face textures by face member, colour, size and viewer height ([`Sky`]),
 //! - each static model's **baked lightmap** (T02-040; spec `docs/re/wld-lighting.md`, section
@@ -164,6 +167,10 @@ pub struct Marker {
     pub rotation: Quat,
     /// World position.
     pub translation: Vec3,
+    /// For a chapter info entity, the next chapter of the chain (`CChapterInfoEntity.2`) as an
+    /// index into [`World::chapters`]; `None` at the end of the chain, when the handle names no
+    /// chapter of the entity list, and always for a spawn marker.
+    pub next: Option<usize>,
 }
 
 /// One face of the sky cube: the `CCubeRenderable` face members `.10` to `.15`, in that order
@@ -249,10 +256,11 @@ pub struct Sky {
     /// The viewer renderable's `.1` (5.22 or 55.68 in the retail data; meaning not
     /// established), `None` when the entity has no viewer renderable.
     pub viewer_value: Option<f32>,
-    /// The entity's rotation (`en_qvPlacement`). The spec gives the faces fixed engine axes and
-    /// says nothing about this placement; it is read so that users can see it.
+    /// The entity's rotation (`en_qvPlacement`): the renderer turns the whole cube by it, in
+    /// full (`environment.md`, T01-409; 44 of the 58 retail skies are turned, all about +y).
     pub rotation: Quat,
-    /// The entity's position (`en_qvPlacement`); the cube is drawn around the viewer, not here.
+    /// The entity's position (`en_qvPlacement`); never used by the renderer: the cube is drawn
+    /// around the viewer, not here (T01-409).
     pub translation: Vec3,
 }
 
@@ -277,14 +285,19 @@ pub struct World {
     pub entity_count: usize,
     /// Every `CStaticModelEntity`, in entity-list order.
     pub static_models: Vec<StaticModel>,
-    /// Every `CSpawnMarkerEntity`, in entity-list order. The specs only describe how deathmatch
-    /// picks among them (`helper-classes-iterators.md`); single player and co-op starts are open
-    /// (T01-210).
+    /// Every `CSpawnMarkerEntity`, in entity-list order. Only deathmatch worlds have them, and
+    /// only deathmatch places players at them (`helper-classes-iterators.md` section 2.5,
+    /// `chapter-restore-players.md` section 2.9).
     pub spawn_markers: Vec<Marker>,
     /// Every `CChapterInfoEntity` (what the player starts a chapter with), in entity-list order.
-    /// Whether a player is placed at a chapter's placement is not specified yet (T01-210); it is
-    /// read because it is cheap and a level without spawn markers usually has chapters.
+    /// That order is not the order of the chain: follow [`World::first_chapter`] and
+    /// [`Marker::next`], or use [`World::chapter_chain`].
     pub chapters: Vec<Marker>,
+    /// The world's first chapter (`CWorldInfoEntity.2`, the handle a new game starts at) as an
+    /// index into [`World::chapters`]; `None` when the world has no world info entity, its
+    /// handle is null (8 retail worlds) or names no chapter of the entity list. With several
+    /// world info entities (none in the retail data) the first in entity-list order counts.
+    pub first_chapter: Option<usize>,
     /// The sky (`CCubeBackgroundEntity`), `None` when the world has none (one retail world,
     /// `dockingbay`). Retail worlds have at most one; if a world had several, this is the first
     /// in entity-list order.
@@ -362,6 +375,20 @@ struct Record {
 struct Entity {
     #[meta(owner = "CEntity", name = "1")]
     serial: u32,
+}
+
+/// Read on its own: a chapter that lacks the member just has no next chapter.
+#[derive(MetaDeserialize)]
+struct ChapterLink {
+    #[meta(owner = "CChapterInfoEntity", name = "2")]
+    next: ObjectRef,
+}
+
+/// Read on its own: a world info that lacks the member just names no first chapter.
+#[derive(MetaDeserialize)]
+struct WorldInfoLink {
+    #[meta(owner = "CWorldInfoEntity", name = "2")]
+    first_chapter: ObjectRef,
 }
 
 #[derive(MetaDeserialize)]
@@ -698,6 +725,7 @@ impl World {
             static_models: Vec::new(),
             spawn_markers: Vec::new(),
             chapters: Vec::new(),
+            first_chapter: None,
             sky: None,
             lightmap_counts: LightmapCounts::default(),
         };
@@ -711,9 +739,23 @@ impl World {
             c.lit_instances += usize::from(n > 0);
             c.several += usize::from(n > 1);
         }
+        // The chain's handles (entity object ids), resolved to chapter indices at the end.
+        let mut first_chapter: Option<Option<u32>> = None;
+        let mut chapter_ids: Vec<u32> = Vec::new();
+        let mut next_ids: Vec<Option<u32>> = Vec::new();
         for e in &root.entities {
             let o = g.object(e.0, "an entity of CWorld.1")?;
             let class = g.class_of(o);
+            if class == "CWorldInfoEntity" {
+                if first_chapter.is_none() {
+                    first_chapter = Some(
+                        g.typed::<WorldInfoLink>(o, "")
+                            .ok()
+                            .and_then(|w| w.first_chapter.0),
+                    );
+                }
+                continue;
+            }
             if !matches!(
                 class,
                 "CStaticModelEntity"
@@ -748,16 +790,41 @@ impl World {
                         name,
                         rotation,
                         translation,
+                        next: None,
                     };
                     if class == "CSpawnMarkerEntity" {
                         world.spawn_markers.push(marker);
                     } else {
                         world.chapters.push(marker);
+                        chapter_ids.push(o.id);
+                        next_ids.push(g.typed::<ChapterLink>(o, "").ok().and_then(|c| c.next.0));
                     }
                 }
             }
         }
+        let chapter_index =
+            |id: Option<u32>| id.and_then(|id| chapter_ids.iter().position(|c| *c == id));
+        for (chapter, next) in world.chapters.iter_mut().zip(next_ids) {
+            chapter.next = chapter_index(next);
+        }
+        world.first_chapter = chapter_index(first_chapter.flatten());
         Ok(world)
+    }
+
+    /// The chapter chain as indices into [`World::chapters`]: [`World::first_chapter`], then each
+    /// chapter's [`Marker::next`], until a chapter has none or the chain would come back to a
+    /// chapter it already holds (the engine forbids such a link). Empty without a first chapter.
+    pub fn chapter_chain(&self) -> Vec<usize> {
+        let mut chain = Vec::new();
+        let mut at = self.first_chapter;
+        while let Some(i) = at {
+            if i >= self.chapters.len() || chain.contains(&i) {
+                break;
+            }
+            chain.push(i);
+            at = self.chapters[i].next;
+        }
+        chain
     }
 }
 
