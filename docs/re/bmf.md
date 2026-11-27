@@ -1,8 +1,8 @@
 # `.bmf` binary meshes
 
-- **Roadmap task:** T01-007
+- **Roadmap tasks:** T01-007 (mesh layout), T01-055 (platforms, winding, morphs, collision and materials)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the object layout, the buffer and stream layout, the index format, the bounds, the skinning data and the LOD list (all checked on every mesh, see "Evidence"); **medium** for what the stream slots and the bone palette mean; **low** for the morph maps, the collision mesh and several scalar fields (listed under "Open questions"). Scope: all **76** distinct format-8 `.bmf` files of the retail install with patches.
+- **Confidence:** **high** for object and stream layout, triangle indices, the observed morph streams, collision index widths, and collision-tree framing. Engine field names agree with the serialized shapes. **Low** for runtime behavior inferred only from the static trace, including the material fallback. Data scope is all **76** effective format-8 `.bmf` files of the retail install with patches.
 
 Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.md`.
 
@@ -15,6 +15,13 @@ The files hold 125 LODs, 353 surfaces, 213,294 triangles and 216,784 vertices in
 ## Evidence
 
 `tools/re/bmf_verify.py` (read-only, `SS2_DATA_DIR`) over the retail install with all patches. For **every** one of the 353 surfaces: all streams and the index list fit inside their buffers; positions lie inside the LOD's bounding box; normals have unit length (within 0.02, in at least 99 % of the vertices); every index is smaller than the surface's vertex count; the number of UV streams equals surface member 4. For **every** buffer (125 index buffers, 125 vertex buffers) the streams of its surfaces **tile the buffer exactly**, with no gap and no byte left over, using the element sizes given below. 120 surfaces have a tangent stream whose fourth component is exactly ±1. For all 333 skinned surfaces the largest bone index is smaller than the surface's palette. `tools/re/edob_verify.py` checks the data after `EDOB` (below).
+
+`python -I tools/re/bmf_details_verify.py` with `SS2_DATA_DIR` set reproduces the
+T01-055 data measurements. Field names and runtime paths were checked against the
+installed 32-bit `Engine.dll` (SHA-256
+`da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851`).
+The script reads archives only. An offscreen Direct3D 9 render tested winding and UV
+row selection with synthetic geometry and a two-color texture.
 
 ## Object graph
 
@@ -53,8 +60,8 @@ Buffer numbers used by element paths are positions in the `.12` / `.13` lists. A
 | `.1`, `.2` | always 0 |
 | `.3`, `.4` | always empty lists |
 | `.6` | always null |
-| `.7`, `.8`, `.9` | three floats; in all 76 files `0 ≤ .7 < .8` and `.8 = .9` (values such as 0/990/190/90 and 1000/200/100/150/160). In 69 of 76 files `.8` equals the last LOD's distance. Probably fade/view distances: **meaning unconfirmed** |
-| `.11` | always 10.0 |
+| `.7`, `.8`, `.9` | Float fields `rm_fFadeOutStart`, `rm_fFadeOutEnd`, and `rm_fCullDistance`. All 76 files have `0 ≤ .7 < .8` and `.8 = .9`. In 69 files `.8` also equals the last LOD's max distance |
+| `.11` | `rm_fFadeLength`, always 10.0 |
 
 ### `CRenderMeshLOD`
 
@@ -65,10 +72,14 @@ Buffer numbers used by element paths are positions in the `.12` / `.13` lists. A
 | `.4` | reference | always null |
 | `.5` | list of `CRenderMeshSection` | exactly **one** section per LOD |
 | `.6` | float | switch distance; ascending with the LOD number in all 76 files (for example 150, 300, 500) |
-| `.7` | `EPlatform` | platform mask: `0xFFFFFFFF` (83 LODs: all platforms), `0xFFFFFFFD` (32: all but the Xbox), `0x3` (4: PC and Xbox only), `0xFFFFFFFE` (4: all but the PC) and `0x1` (2: PC only). **Bit 0 is the PC and bit 1 the Xbox** (decoded from the platform masks of the menu gadgets in `gui.md`), so **a PC draws 121 of the 125 LODs**: every LOD with bit 0 set; the 4 `0xFFFFFFFE` LODs are for the other platform only |
-| `.8` | int | 1 in 74 LODs; 31 distinct values between 0 and 64 in all: **unknown** |
+| `.7` | `EPlatform` | Platform mask. Bit 0 is PC and bit 1 is Xbox (see `gui.md`). Counts are `0xFFFFFFFF` 83, `0xFFFFFFFD` 32, `0x3` 4, `0xFFFFFFFE` 4, and `0x1` 2 |
+| `.8` | `IDENT` | `rml_idName`, the LOD's identifier in the file |
 
 `CRenderMeshSection.1` is the list of `CRenderMeshSurface`.
+
+The original `CMesh::Finalize` filters LODs by intersection with the target platform
+mask. On PC 121 LODs are eligible for distance selection. Four have the PC bit clear.
+Eligibility and the LOD selected for a particular draw are separate.
 
 ### `CRenderMeshSurface`
 
@@ -86,15 +97,15 @@ Buffer numbers used by element paths are positions in the `.12` / `.13` lists. A
 | `.10` | element path of the **bone weights** (present in 333 surfaces, absent otherwise) |
 | `.11` | element path of the **bone indices** (present exactly when `.10` is) |
 | `.12` | 8 words: for each UV slot the UV map id (for example 3, 4, 5, 6, or 2); 0 for unused slots |
-| `.13` | 8 words, all 0 in all 353 surfaces |
+| `.13` | Eight color-map identifiers, one per `.15` slot. All are 0 in these meshes, which have zero color streams (`.5`) |
 | `.14` | 8 element paths: the **UV streams** (slot order as in `.12`); unused slots have buffer 255 |
 | `.15` | 8 element paths: always all absent |
 | `.16` | reference: the surface's **material** (a `CShaderPreset`), or null (88 surfaces), see below |
 | `.17` | reference, always null |
 | `.18` | list of ints: the **bone palette** (empty for the 20 static surfaces, 1 to 20 entries for skinned ones) |
-| `.20` | int: −1 in 319 surfaces, otherwise 0 to 5 (a material or slot index?): unknown |
+| `.20` | `rms_iMasterSurface`, a zero-based index into the same section's surface list. −1 means no master. The runtime link is `.21` |
 | `.22` | list of `CSurfaceMorphMap` (empty in 339 surfaces, 1 to 10 maps in 14) |
-| `.23` | int, 32 distinct values from 1 to 55: unknown. In `Grass_14.bmf` it is 2 |
+| `.23` | `rms_idName`, the surface's file-local `IDENT`. In `Grass_14.bmf` it is 2 |
 
 An **element path** (`CRenderMeshElementPath`) is three words:
 
@@ -122,6 +133,23 @@ The sizes are the only ones for which **all** buffers tile exactly. The names (f
 2. Each vertex stream is an array of `V` elements of the code's size, **starting at the path's offset** (planar layout: all positions, then all normals, and so on, never interleaved). The streams of all surfaces of a LOD together fill the vertex buffer exactly (no gap, no byte left over); the order of the streams inside the buffer was not analysed.
 3. Positions are in the mesh's own object space (inside the LOD box). Normals are unit length.
 
+### Winding and UV orientation
+
+The stored index order usually gives a counterclockwise front face in a right-handed
+mesh basis. The cross product of edges from the first vertex points with the average
+stored normal in 212,719 of 213,294 triangles and against it in 567. The cross
+product is zero in 8 triangles.
+Preserve the index order. An importer that reflects an axis to change basis must
+account for the reflection when selecting front-face winding. The data check is in
+mesh space and does not establish the title's camera or projection handedness.
+
+The upright grass card in the test vector has local Y=1 at V=0.02 and Y=0 at V=0.98.
+In the offscreen Direct3D 9 comparison, a counterclockwise synthetic quad with this
+UV assignment sampled the first texture row above the last row. Culling clockwise
+faces retained the quad and culling counterclockwise faces removed it. Use the stored V
+with the top-down texture rows in `tex.md`. Shader-specific UV transforms in the game
+remain unmeasured. [Direct3D 9 texture coordinates](https://learn.microsoft.com/en-us/windows/desktop/direct3d9/directly-mapping-texels-to-pixels)
+
 ## Skinning
 
 A skinned surface has bone weights (`.10`) and bone indices (`.11`): 4 bytes per vertex each.
@@ -131,15 +159,63 @@ A skinned surface has bone weights (`.10`) and bone indices (`.11`): 4 bytes per
 
 ## Materials
 
-`CRenderMeshSurface.16` is one of: an **embedded `CShaderPreset`** object in the main object section (258 surfaces); an **external reference** to a `.mtr` file listed in `RFIL`/`EXOB` (7 surfaces in 3 files, for example `Minigun/Sources/Display.mtr`); or **null** (88 surfaces; what the engine draws then is unknown). A preset holds a list of `CShaderConfig` (shader arguments object + `EPlatform` mask); the argument classes (`CShadeShaderArgs`, `CPixelightShaderArgs`, `CReflectionShaderArgs`, `CSpecularShaderArgs`) carry texture references and parameters. Their meaning belongs to the material and shader specs (T01-011, T01-020).
+`CRenderMeshSurface.16` refers to an embedded `CShaderPreset` (258 surfaces), to an external
+`.mtr` through `RFIL`/`EXOB` (7 surfaces), or is null (88 surfaces). A preset holds a list of
+`CShaderConfig` objects with shader arguments and an `EPlatform` mask (T01-011, T01-020).
 
-## Morph maps (low confidence)
+The engine validates the section-local master index in `.20` and resolves it to `.21`.
+`mdlGetSurfaceMaterial` reads the master's preset when that link exists. Of the 88 null
+fields, 23 point to a master with a preset, 11 point to a master with no preset, and 54
+have no master. A null result entering `shaExecutePreset` uses the default shader and
+arguments in the ordinary shader path. A forced shader can override that selection.
+These runtime rules come from a static trace.
 
-`CSurfaceMorphMap` has six members: `.1` (an id), `.2` (a small number), `.3` (a list of vertex indices), `.4` (a list of `Vector3f`, one entry per listed vertex, apparently position offsets), `.5` (another list of the same length, not decoded further), `.6` (a list, empty in the sample). It is a **sparse** morph target: only the listed vertices move. 14 surfaces carry morph maps (character faces such as `Female_Ingame.bmf`). The exact semantics are open.
+## Morph maps
 
-## Collision mesh (low confidence)
+`CSurfaceMorphMap` is sparse. Member `.1` is the map `IDENT`, `.2` is the relative flag,
+and `.3` is a list of unique surface-local `ULONG` vertex indices. Members `.4` and `.5`
+have one `Vector3f` position and normal entry per index. Member `.6` is an optional
+`Vector4f` tangent array. It is empty in 28 maps and has the same count as `.3` in 12.
 
-34 meshes have a `CCollisionMesh` object. It carries an index list (`.13`, 3 per triangle), a list `.17` (the entries 0 to 7 in the sample: one per triangle), a bounding box (`.18`), a list of `CCollisionMeshNode` (`.16`; the one node in the sample has the fields 65535, 65535, 8, 0) and two counts (`.22`, `.23`); in `Grass_14.bmf` they are 16 and 192 = 16 × 12, equal to the render surface's vertex count and position bytes. The collision mesh therefore seems to **reuse the render positions**. The full layout is left to a follow-up (T01-055).
+All 40 maps across 14 surfaces have the relative flag set. The vertex-index order
+matches the order of the entries. Adding the normal entry to its base normal produces a
+result closer to unit length than treating the entry as a normal in 15,868 of 15,969
+cases. Absolute morphs and tangent W behavior were outside the observed cases.
+
+## Collision mesh
+
+31 of 34 collision objects use render geometry (`.19=1`). Member `.20` selects a holder
+from `CRenderMesh.13`. Members `.21` and `.23` are **byte offsets** of the positions
+and normals, and `.22` is the vertex count. Each selected stream contains `.22` triples
+of floats. Member `.12` is the own-position array. It is empty even in the three objects
+with `.19=0`, which have no collision triangles or tree nodes.
+
+Member `.13` stores a `u16` index list (30 populated objects). Member `.14` stores a
+`u32` alternative (one populated object, `KlodovikLogo.bmf`). Three indices make a
+triangle. Member `.9` has one collision surface ID per triangle, referencing the table
+in `.11`. That table pairs a double-sided flag with a material-attributes pointer.
+The IDs are in range in 30 meshes. `KlodovikLogo.bmf` has out-of-table entries, so a
+reader needs a bounds check. Member `.26` has one byte of packed edge/vertex flags per
+triangle.
+
+### Collision tree
+
+Member `.16` is a flat array of four-`u16` nodes, rooted at index 0. Each node has a
+triangle count in `.3` and a starting index in `.4` into the triangle-ID list `.17`.
+Internal nodes can hold triangles as well as children. Ranges cover the reference list
+without overlap in all 31 populated objects. A triangle ID can occur in several ranges.
+
+The 217 leaves have `.1` and `.2` set to `0xFFFF`. In the 186 internal nodes, the upper
+two bits of `.1` give the axis (0=X, 1=Y, 2=Z). The lower 14 bits are the position in
+units of 1/16,384 of the mesh box (`.18`) extent on that axis. Add that scaled offset to
+the mesh box minimum to get the split. The below and above children are at `.2` and
+`.2 + 1` respectively. The recursive traversal clips its current box at that split.
+The decode uses the full mesh box as the quantization domain at every depth.
+
+The verifier found 67,327 triangles and 77,378 references. In 77,336 references the
+triangle's bounding box overlaps the reconstructed node box at a tolerance of 0.0001.
+That comparison is evidence for split decoding and child order. It is unsuitable as
+a file-validity condition.
 
 ## The data after `EDOB`
 
@@ -173,9 +249,7 @@ A skinned surface has bone weights (`.10`) and bone indices (`.11`): 4 bytes per
 
 ## Open questions
 
-- Winding order of the triangles, handedness and units of the coordinate system, and the orientation of the UV `v` axis: **not tested** (they need a rendered comparison or the engine's conventions).
-- Meaning of `CRenderMeshLOD.8` (the `EPlatform` bits of `CRenderMeshLOD.7` are decoded: bit 0 PC, bit 1 Xbox, see the table above and `gui.md`), of `CRenderMesh.7`/`.8`/`.9`, and of surface `.13`, `.20`, `.23` → **T01-055**.
-- What the engine uses for the 88 surfaces without a preset.
-- Morph map semantics and the collision mesh layout → **T01-055**.
+- Confirm camera-space handedness, shader-specific UV transforms, and absolute morphs in the original runtime if a consumer needs those conventions.
+- Remaining collision questions include the individual edge flag bits and the out-of-table collision surface IDs.
 - Whether the bone palette holds skeleton bone indices (needs T01-009).
 - The `.mdl` model files point to `.bmf` meshes; how a model selects LODs and materials is T01-008.

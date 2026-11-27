@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-006
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for the class layout, the pixel-data encoding (zlib + raw layouts), mip/cube arrangement, channel order and orientation; **medium** for the cube face order and for the meaning of `TexFlags`/`GfxTexWrap` bits; **low** for the meaning of the format *codes* that share a layout. Scope: format-8 files (2,610 textures); the 155 older-format files (4–7) are not covered (T01-051).
+- **Confidence:** **high** for the class layout, the pixel-data encoding (zlib + raw layouts), mip/cube arrangement, channel order and orientation; **medium** for the cube face order and for the meaning of `TexFlags`/`GfxTexWrap` bits; **low** for the meaning of the format *codes* that share a layout. Scope: format-8 files (2,610 textures). T01-083 covers the 155 [legacy texture entries](tex-legacy.md).
 
 Prerequisites: `ctsemeta-container.md`, `ctsemeta-types.md`, `ctsemeta-objects.md`.
 
@@ -79,7 +79,6 @@ Flag bit `0x02` (set in exactly the 32 textures with flags `0x23`, all format 7)
 
 ## Open questions
 
-- Formats 4–7 (155 files) → T01-051.
 - Exact meaning of the format codes within a layout group, of `TexFlags` bits other than `0x02`, and of the `GfxTexWrap` values: the data-side answer is in `tex-flags.md` (T01-054: bit `0x10` = baked lightmap, wrap `0x50` repeat and `0x51` clamp, the format codes as content classes); the rest needs code analysis (T01-080).
 - Gamma/sRGB treatment (no flag was identified for it).
 - How the 31 files whose `CResource` lacks member 5 differ (probably a newer class version).
