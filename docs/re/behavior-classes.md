@@ -194,7 +194,7 @@ Reading the tables: `CBAFoeAssigning` is saved as `CBAPlayerAssigning` (inferenc
 
 ### 3. How the pieces work together (**medium**, assembled from the detail pages)
 
-1. A **moment** (`Action`, `Damage`, `FoeAssigned`, ... `brain-classes.md` 4.3) selects a `CBehaviorActionList` of the `.cb` behaviour for the current state, distance band and medium. The brain's `StartCharacterAction` chooses one action by weight and validity (the formula is open, T01-153) and calls its `Execute(brain)`.
+1. A **moment** (`Action`, `Damage`, `FoeAssigned`, ... `brain-classes.md` 4.3) selects a `CBehaviorActionList` of the `.cb` behaviour for the current state, distance band and medium. The brain's `StartCharacterAction` chooses one action by weight and validity (the formula: [`behavior-action-choice.md`](behavior-action-choice.md), T01-153) and calls its `Execute(brain)`.
 2. **Direct actions** (change state, play sound, die ...) act at once. **Behaviour-spawning actions** build a generic behaviour entity (`CGBA*BehaviorEntity`) and hand it to `StartGenericBehavior`; the behaviour asks the puppet to do the thing (shoot, melee, play an animation, step, wait, leap, run over) and, when it ends, tells the brain `OnBehaviorFinished`, which returns the brain to its think loop (the think-point oscillator, `CThinkPointOscilatorEntity`, calls `ThinkPoint` at a computed period).
 3. The **mover** of the current distance band (`cba_pmcMoveCharacter`) or of a **tactic** (`STacticEntity`) is copied into the brain and `MoveCharacter` is called once per move period. A mover can ask for the **navigation moving type**, which the brain builds at run time.
 4. The **foe manager** keeps the foe (`FoeHostility` ranks, the 60 s loss rule); `CBAFoeAssigning`, `CBAForcePlayerFoe` and `CBALoseFoe` act on it through the brain.
@@ -226,7 +226,7 @@ None of the 36 entity and property classes overrides `GetNetBehavior`, `GetRelev
 ### 6. Relation to `.cb`, `.wld` and `.ep` (counts from the data, script sections 1 to 5)
 
 - **`.cb`** (82 files): 853 action objects of 25 classes, 381 bands (324 with a mover, 57 without), 110 term objects (104 attached to actions: `SBAAnimation` 50, `SBAChangeState` 18, `CBALoseFoe` 12, `SBAShoot` 7, `CBAForcePlayerFoe` 6, `CBAPlaySound` 4, `SBAMelee` 4, `SBAList` 3; 6 are operands of the 3 combiners). Term classes used: `SBAVTHealth` 51, `CBAVTFoeIsPlayer` 29, `CBAVTHasTool` 9, `CBAVTPlayerDistance` 9, `CBAVTFoeAngle` 6, `CBAVTCurrentStateDuration` 3, `CBAVTTermCombiner` 3 (operands: 3 `CBAVTPlayerDistance`, 3 `CBAVTFoeIsPlayer`).
-- **`.wld`** (59 worlds): 993 tactics with 990 movers (755 ordered patrols); 614 `SBAShoot` and 16 `SBAAnimation` inside the moment handlers of 23 worlds (the owning object class was not determined, T01-159).
+- **`.wld`** (59 worlds): 993 tactics with 990 movers (755 ordered patrols); 614 `SBAShoot` and 16 `SBAAnimation` inside the moment handlers of 23 worlds (owned by the puppet's own concrete character record — `S{Aircraft,Legged}Character{Entity,Properties}` — not by `SPuppetEntity`/`SPuppetProperties`; [`behavior-leftovers.md`](behavior-leftovers.md), T01-159).
 - **`.ep`** (322 files): 17 movers in 9 files (12 `CMCAirAttack`); no behaviour, action or term. `CFoeAssigning` (126 `.ep` files) is the puppet parameter that configures the foe assignment (`ai.md`; not a class of this family).
 - **Matching schema pages**: movers in `ep-schema.md` (`CMCAirAttack`, `CMCCircleAroundFoe`, `CMCDontMove`, `CMCTowardsFoe`), actions and terms in `misc-schema.md`, the tactic in `wld-entity-schema.md`.
 
@@ -247,13 +247,13 @@ None of the 36 entity and property classes overrides `GetNetBehavior`, `GetRelev
 Each has a roadmap task (appended after T01-151):
 
 1. **T01-152**: the generic-behaviour protocol on the puppet side (`CanPerformGenericShooting`, `DoGenericShooting`, `DoGenericMeleeAttack`, `DoGenericAnimation`, `DoLocalMove`, the leap and run-over states) and the numbers inside the run-over-foe states.
-2. **T01-153**: the choice among actions: weights, validity (`vt_bNotTrue`, the combiner), the frequency graphs, the behaviour-wide list, `CBADefaultAction` and `CBANoAction`.
+2. **T01-153** (answered, [`behavior-action-choice.md`](behavior-action-choice.md)): the choice among actions: weights, validity (`vt_bNotTrue`, the combiner), the frequency graphs, the behaviour-wide list, `CBADefaultAction` and `CBANoAction`.
 3. **T01-154**: the steering numbers of the movers (circle, stay-in-area, pattern, diamond, mellon, air attack), the base `MoveCharacter` returns, the `ValidateAndSetGoalPoint` limits.
 4. **T01-155**: the marker movers and the navigation moving type in full (path length, waits, `CachePath`, `RecheckWaypoints`, failure).
 5. **T01-156**: the foe manager's periods and constants, the line-of-sight request, the sorting key, the world-info "may be foes" test, the oscillator's think period.
 6. **T01-157**: the exact semantics of the validity terms (angle convention, health modes 2, 3 and 5, the five terms the data does not use) and of the seven actions no file uses (`CBATryRiding`, `CBAChangeAligment`, `CBASetActionSet`, `CBAForceMovingType`, `CBAStopTactic`, `CBAUnforceMovingType`, and `CBAFoeAssigning` by its other name).
 7. **T01-158**: run-time checks of the behaviours on the running original: which classes exist in a running level, the order of action start and finish for one enemy (`Kleer`, `Albino`), mover results, patrol macro events; numbers only.
-8. **T01-159**: data leftovers: which object class owns the 564 world-stored `CAIMomentHandler`s (614 `SBAShoot`), whether any mod data creates the obsolete classes, and how a tactic without a marker gets one.
+8. **T01-159** (answered, [`behavior-leftovers.md`](behavior-leftovers.md)): data leftovers: which object class owns the 564 world-stored `CAIMomentHandler`s (614 `SBAShoot`), whether any mod data creates the obsolete classes, and how a tactic without a marker gets one.
 
 ## Test vectors
 

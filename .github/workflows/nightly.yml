@@ -1,7 +1,8 @@
 name: nightly
 
 # Nightly robustness runs (T12-007; docs/FUZZING.md):
-#  - fuzz: every cargo-fuzz target in fuzz/ runs for a few minutes (libFuzzer with AddressSanitizer);
+#  - fuzz: every cargo-fuzz target in fuzz/ runs for a few minutes (libFuzzer with AddressSanitizer), starting from the
+#    synthetic seeds in fuzz/seeds/ (T02-030);
 #    a crash uploads the input that caused it as an artifact and fails the job, which notifies the
 #    repository owner through GitHub.
 #  - miri: the unit tests of the pure crates under Miri (undefined-behaviour detector). The
@@ -45,6 +46,24 @@ jobs:
           - replay_parse
           - save_parse
           - session_message
+          - meta_container
+          - format_tex
+          - format_bmf
+          - format_ans
+          - format_ep
+          - format_fnt
+          - format_fx
+          - format_mat
+          - format_mtr
+          - format_mdl
+          - format_rsc
+          - audio_decode
+          - audio_event
+          - game_state_bytes
+          - mods_text
+          - locate_text
+          - lobby_text
+          - net_chunks
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -55,11 +74,17 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
+      - name: Start from the synthetic seeds
+        # fuzz/seeds/<target>/ holds the committed, hand-made inputs (docs/FUZZING.md); libFuzzer reads and extends fuzz/corpus/<target>/.
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          if [ -d fuzz/seeds/${{ matrix.target }} ]; then cp fuzz/seeds/${{ matrix.target }}/* fuzz/corpus/${{ matrix.target }}/; fi
       - name: Fuzz ${{ matrix.target }}
         working-directory: fuzz
+        # -timeout: an input that takes more than 20 s is a hang; -rss_limit_mb and -malloc_limit_mb: an input must not make a
+        # parser allocate gigabytes (the largest legitimate single allocation is a 256 MiB texture buffer).
         run: |
-          cargo +nightly fuzz run ${{ matrix.target }} -- \
-            -max_total_time=${{ github.event.inputs.seconds || '300' }} -max_len=4096
+          cargo +nightly fuzz run ${{ matrix.target }} --             -max_total_time=${{ github.event.inputs.seconds || '300' }} -max_len=8192             -timeout=20 -rss_limit_mb=2048 -malloc_limit_mb=1024
       - name: Upload the crashing input
         if: failure()
         uses: actions/upload-artifact@v7
