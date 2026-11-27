@@ -96,6 +96,12 @@ pub const TARGETS: &[Target] = &[
         seeds: seeds::format_mtr,
     },
     Target {
+        name: "format_mdl",
+        parsers: "ss2_format_mdl::Model::from_bytes",
+        run: format_mdl,
+        seeds: seeds::format_mdl,
+    },
+    Target {
         name: "format_rsc",
         parsers: "ss2_format_rsc::{ResourceDatabase, CharacterTool}::from_bytes",
         run: format_rsc,

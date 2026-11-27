@@ -55,6 +55,7 @@ jobs:
           - format_fx
           - format_mat
           - format_mtr
+          - format_mdl
           - format_rsc
           - format_wld
           - audio_decode

@@ -78,6 +78,8 @@ pub struct Surface {
     /// Four bone indices per vertex into [`Surface::bone_palette`], skinned surfaces only.
     pub bone_indices: Option<Vec<[u8; 4]>>,
     /// The bone palette: presumably skeleton bone numbers (needs the `.skl` loader to confirm).
+    /// Empty for static surfaces, and for a few skinned surfaces of models, whose bone indices
+    /// then address no bone.
     pub bone_palette: Vec<i64>,
     /// The material.
     pub material: MaterialRef,
@@ -336,7 +338,7 @@ impl Mesh {
     ///
     /// Checks the rules of `bmf.md`: every stream and the index list fit inside their buffers, the
     /// element codes are the known ones, every index is smaller than the vertex count, the number
-    /// of UV streams matches, bone indices stay inside the palette. Counts are bounded by the
+    /// of UV streams matches, bone indices stay inside a non-empty palette. Counts are bounded by the
     /// buffer sizes before anything is allocated.
     ///
     /// # Errors
@@ -355,15 +357,25 @@ impl Mesh {
             .iter()
             .find(|o| decoded.types.type_name(o.type_id) == Some("CMesh"))
             .ok_or_else(|| bad("the file has no CMesh object"))?;
-        let raw_mesh: RawMesh =
-            ss2_meta::FromValue::from_value(&mesh_object.value, &decoded.types)?;
+        Self::from_object(&container, &decoded, mesh_object.id)
+    }
+
+    /// Read the `CMesh` object `id` of an already decoded container: the mesh of a `.bmf`, or
+    /// one embedded in another file (a `.mdl` model's mesh instance, `mdl.md`). The same checks
+    /// as [`Mesh::from_bytes`] apply.
+    ///
+    /// # Errors
+    /// [`Error::NotFound`] if there is no object `id`; [`Error::Invalid`] if it is not a `CMesh`
+    /// or the mesh breaks a rule of `bmf.md`.
+    pub fn from_object(container: &Container<'_>, decoded: &Decoded, id: u32) -> Result<Self> {
+        let raw_mesh: RawMesh = decoded.typed(id)?;
         let render_id = raw_mesh
             .render
             .0
             .ok_or_else(|| bad("the mesh has no render mesh"))?;
         let render: RawRenderMesh = decoded.typed(render_id)?;
-        let index_buffers = Buffers::new(&decoded, &render.index_buffers, "index")?;
-        let vertex_buffers = Buffers::new(&decoded, &render.vertex_buffers, "vertex")?;
+        let index_buffers = Buffers::new(decoded, &render.index_buffers, "index")?;
+        let vertex_buffers = Buffers::new(decoded, &render.vertex_buffers, "vertex")?;
 
         let mut lods = Vec::with_capacity(render.lods.len());
         for raw_lod in &render.lods {
@@ -371,8 +383,8 @@ impl Mesh {
             for section in &raw_lod.sections {
                 for s in &section.surfaces {
                     surfaces.push(Self::surface(
-                        &container,
-                        &decoded,
+                        container,
+                        decoded,
                         &index_buffers,
                         &vertex_buffers,
                         s,
@@ -472,7 +484,11 @@ impl Mesh {
         if bone_weights.is_some() != bone_indices.is_some() {
             return Err(bad("bone weights and bone indices must come together"));
         }
+        // An empty palette is accepted: 36 skinned surfaces embedded in `.mdl` models have one
+        // (`mdl.md`, "Bone palettes in models"); their bone indices then address no bone, and
+        // `mdl.md` asks readers to treat such ids as "no bone" rather than fail.
         if let Some(bi) = &bone_indices
+            && !s.bone_palette.is_empty()
             && let Some(max) = bi.iter().flatten().max()
             && usize::from(*max) >= s.bone_palette.len()
         {
@@ -859,6 +875,19 @@ mod tests {
     }
 
     #[test]
+    fn a_mesh_object_can_be_read_from_a_decoded_container() {
+        let (spec, idx, vtx) = quad();
+        let bytes = mesh_file(&spec, 0xFFFF_FFFF, &idx, &vtx);
+        let container = Container::parse(&bytes).unwrap();
+        let decoded = container.decode_objects().unwrap();
+        let mesh = Mesh::from_object(&container, &decoded, 1).unwrap();
+        assert_eq!(mesh, Mesh::from_bytes(&bytes).unwrap());
+        // Object 5 is the material, not a mesh; object 77 does not exist.
+        assert!(Mesh::from_object(&container, &decoded, 5).is_err());
+        assert!(Mesh::from_object(&container, &decoded, 77).is_err());
+    }
+
+    #[test]
     fn the_platform_mask_decides_whether_a_pc_draws_the_lod() {
         let (spec, idx, vtx) = quad();
         for (mask, pc) in [
@@ -893,6 +922,18 @@ mod tests {
             "all zero is allowed"
         );
         assert_eq!(s.bone_indices.as_ref().unwrap()[1], [1, 2, 0, 0]);
+    }
+
+    #[test]
+    fn a_skinned_surface_may_have_an_empty_palette() {
+        // mdl.md: 36 skinned surfaces of the models carry bone streams and an empty palette.
+        let (mut spec, idx, mut vtx) = quad();
+        spec.skin = Some((128, 144, vec![]));
+        vtx.extend([255u8; 16]);
+        vtx.extend([0u8, 1, 0, 0].repeat(4));
+        let mesh = Mesh::from_bytes(&mesh_file(&spec, 0xFFFF_FFFF, &idx, &vtx)).unwrap();
+        let s = &mesh.lods[0].surfaces[0];
+        assert!(s.is_skinned() && s.bone_palette.is_empty());
     }
 
     #[test]

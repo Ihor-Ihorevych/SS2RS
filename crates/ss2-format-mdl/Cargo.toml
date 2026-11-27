@@ -1,0 +1,23 @@
+[package]
+name = "ss2-format-mdl"
+description = ".mdl model reader (minimal): the model's static mesh and its embedded materials (track T02)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ss2-core = { path = "../ss2-core" }
+ss2-assets = { path = "../ss2-assets" }
+ss2-meta = { path = "../ss2-meta" }
+ss2-format-bmf = { path = "../ss2-format-bmf" }
+ss2-format-mtr = { path = "../ss2-format-mtr" }
+
+[dev-dependencies]
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-vfs = { path = "../ss2-vfs" }

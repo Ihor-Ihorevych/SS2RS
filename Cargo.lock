@@ -2834,6 +2834,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-mdl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-format-bmf",
+ "ss2-format-mtr",
+ "ss2-meta",
+ "ss2-testkit",
+ "ss2-vfs",
+]
+
+[[package]]
 name = "ss2-format-mtr"
 version = "0.0.0"
 dependencies = [
@@ -2894,6 +2907,7 @@ dependencies = [
  "ss2-format-fnt",
  "ss2-format-fx",
  "ss2-format-mat",
+ "ss2-format-mdl",
  "ss2-format-mtr",
  "ss2-format-rsc",
  "ss2-format-tex",

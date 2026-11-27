@@ -32,6 +32,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `format_fx` | `ss2_format_fx` `pfx::Effect`, `lfx::FlareConfiguration`, `tfx::TextEffectConfiguration`, `vfx::VibrationEffect` on the same bytes | read or refused |
 | `format_mat` | `ss2_format_mat` `PhysicalMaterial`, `SoundScheme`, `ParticleScheme` on the same bytes | read or refused |
 | `format_mtr` | `ss2_format_mtr::MaterialFile::from_bytes` | read or refused |
+| `format_mdl` | `ss2_format_mdl::Model::from_bytes` | read or refused; every embedded material a surface names is listed once, in id order |
 | `format_rsc` | `ss2_format_rsc::ResourceDatabase::from_bytes`, `CharacterTool::from_bytes` | read or refused |
 | `format_wld` | `ss2_format_wld::World::from_bytes` | read or refused; a world that reads has no more models and markers than entities, and every model transform builds |
 | `audio_decode` | `ss2_audio::decode` (`sniff`, `probe`, `decode`, `decode_wav`, `VorbisStream`, `last_granule`) and `ss2_audio::wav::decode` | decoded or refused, **no panic even one the decoder catches itself**; decoded sound has whole frames and finite samples |
@@ -52,7 +53,7 @@ seeds in `seeds.rs`, a file in `fuzz/fuzz_targets/` calling it, a `[[bin]]` in `
 `cargo test -p ss2-fuzzkit` fails when the crate, the fuzz folder and the committed seeds differ.
 
 Every CTSEMETA reader is fuzzed through its own target and, underneath, `meta_container`: all the formats of the game that
-have a loader today are containers (`.tex`, `.bmf`, `.ans`, `.ep`, `.fnt`, `.pfx .lfx .tfx .vfx`, `.mat .scs`, `.mtr`, `.rsc .ctl`, `.wld`).
+have a loader today are containers (`.tex`, `.bmf`, `.ans`, `.ep`, `.fnt`, `.pfx .lfx .tfx .vfx`, `.mat .scs`, `.mtr`, `.rsc .ctl`, `.mdl`, `.wld`).
 
 ### What is not fuzzed, and why
 
