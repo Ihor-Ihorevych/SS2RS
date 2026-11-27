@@ -17,3 +17,4 @@ pub mod fx_vfx;
 pub mod mat;
 pub mod mtr;
 pub mod rsc;
+pub mod wld;

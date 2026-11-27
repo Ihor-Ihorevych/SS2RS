@@ -33,6 +33,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `format_mat` | `ss2_format_mat` `PhysicalMaterial`, `SoundScheme`, `ParticleScheme` on the same bytes | read or refused |
 | `format_mtr` | `ss2_format_mtr::MaterialFile::from_bytes` | read or refused |
 | `format_rsc` | `ss2_format_rsc::ResourceDatabase::from_bytes`, `CharacterTool::from_bytes` | read or refused |
+| `format_wld` | `ss2_format_wld::World::from_bytes` | read or refused; a world that reads has no more models and markers than entities, and every model transform builds |
 | `audio_decode` | `ss2_audio::decode` (`sniff`, `probe`, `decode`, `decode_wav`, `VorbisStream`, `last_granule`) and `ss2_audio::wav::decode` | decoded or refused, **no panic even one the decoder catches itself**; decoded sound has whole frames and finite samples |
 | `audio_event` | `ss2_audio_api::replication::AudioEvent::decode` | decoded or refused; what decodes encodes to the same bytes again |
 | `game_state_bytes` | `ss2_game` `CarryOver`, `UnlockSet`, `CampaignNote`, `CampaignDifficulty`, `LevelProgress` `from_bytes` (the last also with a corrected checksum) | read or refused; what reads writes and reads again to the same bytes |
@@ -41,7 +42,7 @@ because it needs nightly Rust). Each target is one file in `fuzz/fuzz_targets/` 
 | `lobby_text` | `ss2_ui::lobby::parse_address`, `normalize_invite` | read or refused; normalizing an invite twice changes nothing |
 | `net_chunks` | `ss2_net::join::ChunkSender` and `ChunkReceiver`, driven by `arbitrary` | an honest transfer (random order, repeats, drops) always delivers the blob intact; chunks with any header never panic or grow the receiver past its limit |
 
-The first twelve targets (T12-007) keep their property in the file of the target; the other seventeen (T02-030) are one line
+The first twelve targets (T12-007) keep their property in the file of the target; the others (seventeen from T02-030, then one per reader added since) are one line
 each, `fuzz_target!(|data: &[u8]| ss2_fuzzkit::format_tex(data))`, and their property lives in the workspace crate
 `crates/ss2-fuzzkit`. That split is deliberate: **the same properties also run on stable**, in the normal test suite
 (`cargo test -p ss2-fuzzkit`, next section), so a parser that breaks one is caught on the pull request and not a night
@@ -51,7 +52,7 @@ seeds in `seeds.rs`, a file in `fuzz/fuzz_targets/` calling it, a `[[bin]]` in `
 `cargo test -p ss2-fuzzkit` fails when the crate, the fuzz folder and the committed seeds differ.
 
 Every CTSEMETA reader is fuzzed through its own target and, underneath, `meta_container`: all the formats of the game that
-have a loader today are containers (`.tex`, `.bmf`, `.ans`, `.ep`, `.fnt`, `.pfx .lfx .tfx .vfx`, `.mat .scs`, `.mtr`, `.rsc .ctl`).
+have a loader today are containers (`.tex`, `.bmf`, `.ans`, `.ep`, `.fnt`, `.pfx .lfx .tfx .vfx`, `.mat .scs`, `.mtr`, `.rsc .ctl`, `.wld`).
 
 ### What is not fuzzed, and why
 
@@ -60,7 +61,7 @@ pull request that adds the reader (the definition of done of every reader task s
 
 | Reader | Why not yet |
 |---|---|
-| `.wld` world (T02-020), `.mdl` model (T02-017), `.skl` skeleton (T02-015) | the loader does not exist (`ss2-world` is an empty crate) |
+| the full `.wld` world (T02-020; the minimal reader of T02-035 is `format_wld`), `.mdl` model (T02-017), `.skl` skeleton (T02-015) | the loader does not exist (`ss2-world` is an empty crate) |
 | `.srt .dsc` and string tables (T02-027), `.preload` (T02-028), `.cfg .mac .scp` (T02-029) | the loaders do not exist |
 | `ss2-server` configuration (`ServerSettings::from_toml`), `ss2-app` command line (`parse_args`) and the remembered data location | these live in binary crates with no library target, so a fuzz crate cannot call them; moving them into a library is a change in another crate |
 | `ss2-render` golden-image PNG decoder, `ss2-render` GPU name parsing | test and diagnostics code behind `wgpu` (a large dependency for a fuzz binary); the PNG decoding itself is the `png` crate |

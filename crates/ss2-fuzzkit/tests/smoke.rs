@@ -273,6 +273,10 @@ fn the_format_seeds_are_valid_files() {
         ss2_format_mtr::MaterialFile::from_bytes(&seed("format_mtr", "preset")).map(drop),
     );
     ok(
+        "wld",
+        ss2_format_wld::World::from_bytes(&seed("format_wld", "world")).map(drop),
+    );
+    ok(
         "rsc",
         ss2_format_rsc::ResourceDatabase::from_bytes(&seed("format_rsc", "menu")).map(drop),
     );

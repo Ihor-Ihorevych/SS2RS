@@ -44,7 +44,8 @@ found, 2 wrong command line. More: [meta-dump](../META_DUMP.md), [asset-export](
 | `.fnt` | bitmap font | CTSEMETA | `ss2-format-fnt` | no |
 | `.ans` | animation set | CTSEMETA | `ss2-format-ans` | no |
 | `.pfx`, `.lfx`, `.tfx`, `.vfx` | particle effect, lens flare, text effect, vibration | CTSEMETA | `ss2-format-fx` | no |
-| `.mdl`, `.skl`, `.wld` | model, skeleton, world (level) | CTSEMETA | not yet (specified only) | no |
+| `.mdl`, `.skl` | model, skeleton | CTSEMETA | not yet (specified only) | no |
+| `.wld` | world (level) | CTSEMETA | `ss2-format-wld` (minimal: gravity, static model placements, spawn markers) | no |
 | `.wav`, `.ogg` | sound | RIFF, Ogg Vorbis | `ss2-audio::decode` | any audio tool |
 | `.ogv` | movie | Ogg Theora/Vorbis | not yet (T06-010) | any video tool |
 | `.xmv` | Xbox movie | proprietary | **ignored by design** | no |
@@ -168,7 +169,9 @@ yet (T13-009b).
 ## `.wld`: levels
 
 A world holds entities (73,098 in the 59 worlds), aspects, lighting, navigation, physics, visibility and the level's macro
-program. It is **read by nobody in the repository yet** (`ss2-world` is a placeholder) and there is **no level editor**. A
+program. `ss2-format-wld` reads the minimum needed to show and walk a level: the gravity, every placed static model (the
+`.mdl` path, world placement, per-axis scale, whether it has a collision hull), the spawn markers and the chapter info
+entities; the rest is not read yet, and there is **no level editor**. A
 level in a mod is a `.wld` plus its description `.nfo` in the same folder (the checker warns about a level `.nfo` with no `.wld`,
 `MOD035`). [Overview](https://github.com/Ihor-Ihorevych/SS2RS/blob/main/docs/re/wld-root.md).
 

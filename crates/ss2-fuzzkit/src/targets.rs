@@ -247,6 +247,19 @@ pub fn format_mtr(data: &[u8]) {
     }
 }
 
+/// `ss2-format-wld`: a world that reads has finite-sized lists and every model transform can be built.
+pub fn format_wld(data: &[u8]) {
+    let Ok(world) = ss2_format_wld::World::from_bytes(cap(data)) else {
+        return;
+    };
+    assert!(world.static_models.len() <= world.entity_count);
+    assert!(world.spawn_markers.len() + world.chapters.len() <= world.entity_count);
+    for m in &world.static_models {
+        let _ = m.transform();
+        let _ = m.model.path();
+    }
+}
+
 /// `ss2-format-rsc`: resource databases (`.rsc`) and character tools (`.ctl`).
 pub fn format_rsc(data: &[u8]) {
     let data = cap(data);

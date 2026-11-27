@@ -25,6 +25,7 @@ ss2-format-mat = { path = "../ss2-format-mat" }
 ss2-format-mtr = { path = "../ss2-format-mtr" }
 ss2-format-rsc = { path = "../ss2-format-rsc" }
 ss2-format-tex = { path = "../ss2-format-tex" }
+ss2-format-wld = { path = "../ss2-format-wld" }
 ss2-audio = { path = "../ss2-audio" }
 ss2-audio-api = { path = "../ss2-audio-api" }
 ss2-game = { path = "../ss2-game" }

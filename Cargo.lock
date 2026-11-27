@@ -2897,6 +2897,7 @@ dependencies = [
  "ss2-format-mtr",
  "ss2-format-rsc",
  "ss2-format-tex",
+ "ss2-format-wld",
  "ss2-game",
  "ss2-meta",
  "ss2-net",

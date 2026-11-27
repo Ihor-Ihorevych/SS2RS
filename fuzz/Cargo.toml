@@ -178,6 +178,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "format_wld"
+path = "fuzz_targets/format_wld.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "audio_decode"
 path = "fuzz_targets/audio_decode.rs"
 test = false
