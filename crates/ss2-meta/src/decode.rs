@@ -18,6 +18,13 @@ const MAX_DEPTH: usize = 64;
 const MAX_EMPTY_ELEMENTS: usize = 1_000_000;
 const NULL_ID: u32 = 0xFFFF_FFFF;
 
+fn decode_work_limit(input_bytes: usize) -> usize {
+    // Bound the number of decoded values even when nested classes occupy no bytes.
+    input_bytes
+        .saturating_mul(2)
+        .saturating_add(MAX_EMPTY_ELEMENTS)
+}
+
 /// A scalar stored as `1`, `2`, `4` or `8` raw little-endian bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Prim {
@@ -142,10 +149,16 @@ impl TypeSystem {
         for t in &container.external_types {
             ts.names.entry(t.id).or_insert_with(|| t.name.to_string());
         }
-        // Struct layouts first (they only depend on parents).
+        // Struct layouts first. Inheritance duplicates member storage, so bound its
+        // amplification relative to the header, including the type table.
+        let mut layout_budget = container
+            .object_data
+            .start
+            .saturating_mul(32)
+            .saturating_add(64 * 1024);
         for t in &container.types {
             if matches!(t.shape, TypeShape::Struct { .. }) {
-                match Self::flatten(container, t.id) {
+                match Self::flatten(container, t.id, &mut layout_budget) {
                     Ok(layout) => {
                         ts.layouts.insert(t.id, layout);
                     }
@@ -171,12 +184,12 @@ impl TypeSystem {
             };
             ts.codecs.entry(t.id).or_insert(codec);
         }
-        let ids: Vec<u32> = ts.codecs.keys().copied().collect();
-        for id in ids {
-            let mut stack = Vec::new();
-            let size = ts.compute_min_size(id, &mut stack);
-            ts.min_sizes.insert(id, size);
-        }
+        let mut sizes = HashMap::new();
+        ts.min_sizes = ts
+            .codecs
+            .keys()
+            .map(|&id| (id, ts.compute_min_size(id, 0, &mut sizes)))
+            .collect();
         ts
     }
 
@@ -200,7 +213,11 @@ impl TypeSystem {
         s.values.get(i)
     }
 
-    fn flatten(c: &Container<'_>, type_id: u32) -> std::result::Result<Vec<FlatMember>, String> {
+    fn flatten(
+        c: &Container<'_>,
+        type_id: u32,
+        layout_budget: &mut usize,
+    ) -> std::result::Result<Vec<FlatMember>, String> {
         let mut chain = Vec::new();
         let mut cursor = Some(type_id);
         while let Some(id) = cursor {
@@ -220,6 +237,12 @@ impl TypeSystem {
         for t in chain.iter().rev() {
             if let TypeShape::Struct { members, .. } = &t.shape {
                 for m in members {
+                    let cost = std::mem::size_of::<FlatMember>()
+                        .saturating_add(t.name.len())
+                        .saturating_add(m.name.len());
+                    *layout_budget = layout_budget
+                        .checked_sub(cost)
+                        .ok_or_else(|| "class layout budget exceeded".to_string())?;
                     out.push(FlatMember {
                         owner: t.id,
                         owner_name: t.name.to_string(),
@@ -299,35 +322,38 @@ impl TypeSystem {
         }
     }
 
-    fn compute_min_size(&self, id: u32, stack: &mut Vec<u32>) -> usize {
-        if let Some(&s) = self.min_sizes.get(&id) {
-            return s;
-        }
-        if stack.contains(&id) || stack.len() > MAX_DEPTH {
+    fn compute_min_size(
+        &self,
+        id: u32,
+        depth: usize,
+        sizes: &mut HashMap<(u32, usize), usize>,
+    ) -> usize {
+        if depth > MAX_DEPTH {
             return 0;
         }
-        stack.push(id);
+        // Deeper traversals can stop earlier, so their sizes cannot stand in for shallow ones.
+        // The depth limit also terminates by-value cycles.
+        if let Some(&s) = sizes.get(&(id, depth)) {
+            return s;
+        }
         let size = match self.codecs.get(&id) {
             Some(Codec::Prim(p)) => p.size(),
             Some(Codec::Enum { size }) => *size,
             Some(Codec::Ref | Codec::String) => 4,
             Some(Codec::List { .. } | Codec::Objects) => 8,
-            Some(Codec::Fixed { n, elem }) => n.saturating_mul(self.compute_min_size(*elem, stack)),
-            Some(Codec::Struct { marker }) => {
-                let members: Vec<u32> = self
-                    .layouts
-                    .get(&id)
-                    .map(|l| l.iter().map(|m| m.type_id).collect())
-                    .unwrap_or_default();
-                let body: usize = members
-                    .iter()
-                    .map(|&m| self.compute_min_size(m, stack))
-                    .sum();
-                body + marker.map_or(0, |m| m.len())
+            Some(Codec::Fixed { n: 0, .. }) => 0,
+            Some(Codec::Fixed { n, elem }) => {
+                n.saturating_mul(self.compute_min_size(*elem, depth + 1, sizes))
             }
+            Some(Codec::Struct { marker }) => self.layouts.get(&id).into_iter().flatten().fold(
+                marker.map_or(0, |m| m.len()),
+                |size, member| {
+                    size.saturating_add(self.compute_min_size(member.type_id, depth + 1, sizes))
+                },
+            ),
             Some(Codec::Unsupported(_)) | None => 0,
         };
-        stack.pop();
+        sizes.insert((id, depth), size);
         size
     }
 
@@ -353,12 +379,8 @@ impl TypeSystem {
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
 
-    /// An element count, checked against the bytes left so a hostile count cannot allocate.
-    fn read_count(&self, data: &[u8], pos: &mut usize, elem: u32) -> Result<usize> {
-        let at = *pos;
-        let n = Self::read_u32(data, pos)? as usize;
+    fn check_count(&self, n: usize, elem: u32, remaining: usize, at: usize) -> Result<()> {
         let min = self.min_sizes.get(&elem).copied().unwrap_or(0);
-        let remaining = data.len().saturating_sub(*pos);
         let ok = if min == 0 {
             n <= MAX_EMPTY_ELEMENTS
         } else {
@@ -370,7 +392,14 @@ impl TypeSystem {
                 format!("element count {n} does not fit in the {remaining} bytes left"),
             );
         }
-        Ok(n)
+        Ok(())
+    }
+
+    fn spend_work(work: &mut usize, values: usize, at: usize) -> Result<()> {
+        *work = work.checked_sub(values).ok_or_else(|| {
+            Error::invalid(WHAT, format!("at byte {at}: decoded value limit exceeded"))
+        })?;
+        Ok(())
     }
 
     fn prim(p: Prim, data: &[u8], pos: &mut usize) -> Result<Value> {
@@ -397,15 +426,27 @@ impl TypeSystem {
 
     /// Decode one value of type `type_id` from `data` at `*pos`, advancing `*pos` past it.
     ///
+    /// The value count is bounded by the remaining input size. A sufficiently large or deeply
+    /// wrapped value tree can exceed the limit even when its encodings fit in `data`.
+    ///
     /// # Errors
     /// [`Error::Invalid`] on truncated data, an unknown type shape, a container marker that does
-    /// not match the type (a sign that alignment was lost), an implausible count, or nesting deeper
-    /// than 64 levels.
+    /// not match the type (a sign that alignment was lost), an implausible count, nesting deeper
+    /// than 64 levels, or excessive decoded work.
     pub fn decode_value(&self, data: &[u8], type_id: u32, pos: &mut usize) -> Result<Value> {
-        self.decode_at(data, type_id, pos, 0)
+        let mut work = decode_work_limit(data.len().saturating_sub(*pos));
+        self.decode_at(data, type_id, pos, 0, &mut work)
     }
 
-    fn decode_at(&self, data: &[u8], type_id: u32, pos: &mut usize, depth: usize) -> Result<Value> {
+    fn decode_at(
+        &self,
+        data: &[u8],
+        type_id: u32,
+        pos: &mut usize,
+        depth: usize,
+        work: &mut usize,
+    ) -> Result<Value> {
+        Self::spend_work(work, 1, *pos)?;
         if depth > MAX_DEPTH {
             return Self::fail(*pos, "values are nested too deeply");
         }
@@ -453,9 +494,9 @@ impl TypeSystem {
                         ),
                     );
                 };
-                let mut values = Vec::with_capacity(layout.len());
+                let mut values = Vec::with_capacity(layout.len().min(4096));
                 for m in layout {
-                    values.push(self.decode_at(data, m.type_id, pos, depth + 1)?);
+                    values.push(self.decode_at(data, m.type_id, pos, depth + 1, work)?);
                 }
                 Ok(Value::Struct(Struct { type_id, values }))
             }
@@ -467,13 +508,15 @@ impl TypeSystem {
                         format!("expected marker `{}`", String::from_utf8_lossy(marker)),
                     );
                 }
-                let n = self.read_count(data, pos, *elem)?;
+                let count_at = *pos;
+                let n = Self::read_u32(data, pos)? as usize;
+                self.check_count(n, *elem, data.len().saturating_sub(*pos), count_at)?;
                 if matches!(self.codecs.get(elem), Some(Codec::Prim(Prim::U8))) {
                     return Ok(Value::Bytes(Self::take(data, pos, n)?.to_vec()));
                 }
-                let mut items = Vec::with_capacity(n);
+                let mut items = Vec::with_capacity(n.min(4096));
                 for _ in 0..n {
-                    items.push(self.decode_at(data, *elem, pos, depth + 1)?);
+                    items.push(self.decode_at(data, *elem, pos, depth + 1, work)?);
                 }
                 Ok(Value::List(items))
             }
@@ -483,6 +526,7 @@ impl TypeSystem {
                     return Self::fail(at, "expected marker `DCON`");
                 }
                 let n = self.read_count_of(data, pos, 4)?;
+                Self::spend_work(work, n, *pos)?;
                 let mut items = Vec::with_capacity(n);
                 for _ in 0..n {
                     let id = Self::read_u32(data, pos)?;
@@ -491,9 +535,10 @@ impl TypeSystem {
                 Ok(Value::List(items))
             }
             Codec::Fixed { n, elem } => {
+                self.check_count(*n, *elem, data.len().saturating_sub(*pos), *pos)?;
                 let mut items = Vec::with_capacity((*n).min(4096));
                 for _ in 0..*n {
-                    items.push(self.decode_at(data, *elem, pos, depth + 1)?);
+                    items.push(self.decode_at(data, *elem, pos, depth + 1, work)?);
                 }
                 Ok(Value::List(items))
             }
@@ -691,7 +736,7 @@ impl Container<'_> {
     ///
     /// Checks the rules of the spec: each record header equals its `OBTY` (or `EDTY`) entry, the
     /// main records end exactly at the `EDOB` tag, and the extra records end exactly at the
-    /// footer.
+    /// footer. All records share a decoded value budget based on the object data size.
     ///
     /// # Errors
     /// [`Error::Invalid`] naming the byte offset of the first problem.
@@ -699,6 +744,7 @@ impl Container<'_> {
         let types = TypeSystem::new(self);
         let data = self.data;
         let mut pos = self.object_data.start;
+        let mut work = decode_work_limit(data.len().saturating_sub(pos));
         let mut objects = Vec::with_capacity(self.object_table.len());
         for entry in &self.object_table {
             objects.push(Self::record(
@@ -707,6 +753,7 @@ impl Container<'_> {
                 &mut pos,
                 entry.object_id,
                 entry.type_id,
+                &mut work,
             )?);
         }
         let edob_at = pos;
@@ -735,6 +782,7 @@ impl Container<'_> {
                 &mut pos,
                 entry.object_id,
                 entry.type_id,
+                &mut work,
             )?);
         }
         if data.get(pos..) != Some(b"METAEND ") {
@@ -753,6 +801,7 @@ impl Container<'_> {
         pos: &mut usize,
         id: u32,
         type_id: u32,
+        work: &mut usize,
     ) -> Result<Object> {
         let at = *pos;
         let got_id = TypeSystem::read_u32(data, pos)?;
@@ -765,7 +814,7 @@ impl Container<'_> {
                 ),
             );
         }
-        let value = types.decode_value(data, type_id, pos)?;
+        let value = types.decode_at(data, type_id, pos, 0, work)?;
         Ok(Object { id, type_id, value })
     }
 }
@@ -777,6 +826,106 @@ mod tests {
 
     fn decode(bytes: &[u8]) -> Result<Decoded> {
         Container::parse(bytes)?.decode_objects()
+    }
+
+    #[test]
+    fn class_layouts_share_one_budget() {
+        let bytes = MetaBuilder::sample().build().unwrap();
+        let container = Container::parse(&bytes).unwrap();
+        let class = SampleIds::ITEM;
+        let ty = container.type_def(class).unwrap();
+        let TypeShape::Struct { members, .. } = &ty.shape else {
+            panic!("sample item must be a class");
+        };
+        let mut budget = members
+            .iter()
+            .map(|m| std::mem::size_of::<FlatMember>() + ty.name.len() + m.name.len())
+            .sum();
+        assert_eq!(
+            TypeSystem::flatten(&container, class, &mut budget)
+                .unwrap()
+                .len(),
+            members.len()
+        );
+        assert_eq!(budget, 0);
+        let error = TypeSystem::flatten(&container, class, &mut budget).unwrap_err();
+        assert_eq!(error, "class layout budget exceeded");
+    }
+
+    #[test]
+    fn minimum_class_size_saturates_at_the_address_space_limit() {
+        let mut types = TypeSystem::default();
+        types.codecs.insert(1, Codec::Prim(Prim::U32));
+        types.codecs.insert(
+            2,
+            Codec::Fixed {
+                n: usize::MAX,
+                elem: 1,
+            },
+        );
+        types.codecs.insert(3, Codec::Struct { marker: None });
+        types.layouts.insert(
+            3,
+            [2, 1]
+                .into_iter()
+                .map(|type_id| FlatMember {
+                    owner: 3,
+                    owner_name: "CTest".into(),
+                    name: type_id.to_string(),
+                    type_id,
+                })
+                .collect(),
+        );
+        assert_eq!(
+            types.compute_min_size(3, 0, &mut HashMap::new()),
+            usize::MAX
+        );
+    }
+
+    #[test]
+    fn depth_limited_size_does_not_replace_the_full_size() {
+        let mut types = TypeSystem::default();
+        types.codecs.insert(1, Codec::Prim(Prim::U32));
+        types.codecs.insert(2, Codec::Fixed { n: 1, elem: 1 });
+        let root = MAX_DEPTH as u32 + 2;
+        for id in 3..=root {
+            types.codecs.insert(id, Codec::Fixed { n: 1, elem: id - 1 });
+        }
+
+        let mut sizes = HashMap::new();
+        assert_eq!(types.compute_min_size(root, 0, &mut sizes), 0);
+        assert_eq!(types.compute_min_size(2, 0, &mut sizes), 4);
+    }
+
+    #[test]
+    fn oversized_zero_byte_fixed_array_is_an_error() {
+        let mut types = TypeSystem::default();
+        types.codecs.insert(1, Codec::Struct { marker: None });
+        types.layouts.insert(1, Vec::new());
+        types.codecs.insert(
+            2,
+            Codec::Fixed {
+                n: MAX_EMPTY_ELEMENTS + 1,
+                elem: 1,
+            },
+        );
+        assert!(types.decode_value(&[], 2, &mut 0).is_err());
+    }
+
+    #[test]
+    fn nested_zero_byte_values_share_one_work_budget() {
+        let mut types = TypeSystem::default();
+        types.codecs.insert(1, Codec::Struct { marker: None });
+        types.layouts.insert(1, Vec::new());
+        types.codecs.insert(2, Codec::Fixed { n: 2, elem: 1 });
+        types.codecs.insert(3, Codec::Fixed { n: 2, elem: 2 });
+
+        let mut budget = 7;
+        assert!(types.decode_at(&[], 3, &mut 0, 0, &mut budget).is_ok());
+        assert_eq!(budget, 0);
+
+        let error = types.decode_at(&[], 3, &mut 0, 0, &mut 6).unwrap_err();
+        assert!(error.to_string().contains("decoded value limit exceeded"));
     }
 
     #[test]

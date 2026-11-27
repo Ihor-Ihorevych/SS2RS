@@ -30,6 +30,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87a0cf66fd1eb2fb7b822cb78370d82303750809bc6ba855f3f58e517d3238db"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -525,6 +545,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ss2-format-skl"
+version = "0.0.0"
+dependencies = [
+ "ss2-assets",
+ "ss2-core",
+ "ss2-meta",
+]
+
+[[package]]
 name = "ss2-format-tex"
 version = "0.0.0"
 dependencies = [
@@ -549,6 +578,7 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "ss2-core",
+ "ss2-format-skl",
  "ss2-fuzzkit",
  "ss2-game",
  "ss2-net",
@@ -595,6 +625,7 @@ dependencies = [
  "ss2-platform-api",
  "ss2-render-api",
  "ss2-ui",
+ "ss2-world",
 ]
 
 [[package]]
@@ -639,6 +670,7 @@ dependencies = [
 name = "ss2-render-api"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "ss2-core",
  "ss2-ui",
 ]
@@ -666,6 +698,15 @@ dependencies = [
  "ss2-core",
  "toml",
  "zip",
+]
+
+[[package]]
+name = "ss2-world"
+version = "0.0.0"
+dependencies = [
+ "ss2-core",
+ "ss2-physics",
+ "ss2-render-api",
 ]
 
 [[package]]
