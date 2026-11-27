@@ -56,3 +56,17 @@ without overlap; none or several: no lightmap UVs for that mesh, a `skipped` lin
 Unit and golden tests on `test_room()` with a procedural lightmap on the floor; data-gated: every world loads with
 lightmaps on most lit instances (counts against `wld-lighting.md`); real levels by eye (`1_1_jungle`, `dm_stadium`,
 a city level): shadows under objects and along walls where the original has them.
+
+## Result on real levels (T03-039b, 2026-11-28)
+
+Rendered from main with `ss2-app --level <name> --screenshot` (`dm_stadium`, `1_1_jungle`, `1_7_city_metropolis`;
+images kept locally, never committed):
+
+- Shadows sit where the geometry casts them: crossing beams darken the beams below in `dm_stadium`; walls under the
+  awnings and the statue's lower body are darker in the city. No noise, seams or smearing.
+- **UV orientation:** as authored (no V flip). A flipped V breaks the stadium beams into mismatched patches with
+  light seams (the T07-035 experiment).
+- **Brightness:** x1 (the lightmap sampled as sRGB, multiplied once). It reads natural next to the sky; a display
+  space x2 overbright is blown out in the city. The factor stays x1 until T01-408 finds the original's.
+- 87.8 % of lit placements draw their lightmap (T07-035); the rest stay flat-lit until the stream choice learns the
+  cases with no or several candidate streams.

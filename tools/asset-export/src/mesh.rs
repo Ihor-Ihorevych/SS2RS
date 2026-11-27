@@ -755,7 +755,7 @@ pub fn export_mesh(bytes: &[u8], ctx: &MeshContext<'_>, opts: &MeshOptions) -> R
         "source": ctx.name,
         "lods_in_file": mesh.lods.len(),
         "distances": mesh.distances.map(f64::from),
-        "has_collision_mesh": mesh.has_collision_mesh,
+        "has_collision_mesh": mesh.collision.is_some(),
         "winding_flipped": opts.flip_winding,
         "raw_vectors": opts.raw_vectors,
         "notes": [

@@ -1,6 +1,6 @@
 ﻿[package]
 name = "ss2-format-bmf"
-description = ".bmf mesh loader: render meshes with LODs, surfaces and vertex streams (track T02)"
+description = ".bmf mesh loader: render meshes with LODs, surfaces and vertex streams, and collision meshes (track T02)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
