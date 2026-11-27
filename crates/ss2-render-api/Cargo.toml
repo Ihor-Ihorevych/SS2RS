@@ -12,5 +12,6 @@ publish = false
 workspace = true
 
 [dependencies]
+bytemuck.workspace = true
 ss2-core = { path = "../ss2-core" }
 ss2-ui = { path = "../ss2-ui" }
