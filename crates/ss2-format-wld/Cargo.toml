@@ -1,6 +1,6 @@
 [package]
 name = "ss2-format-wld"
-description = ".wld world reader: gravity, static model placements and spawn markers (track T02)"
+description = ".wld world reader: gravity, static model placements and lightmaps, spawn markers, sky (track T02)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,9 @@ workspace = true
 ss2-core = { path = "../ss2-core" }
 ss2-assets = { path = "../ss2-assets" }
 ss2-meta = { path = "../ss2-meta" }
+ss2-format-tex = { path = "../ss2-format-tex" }
 
 [dev-dependencies]
+flate2.workspace = true
 ss2-testkit = { path = "../ss2-testkit" }
 ss2-vfs = { path = "../ss2-vfs" }
