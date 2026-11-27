@@ -1,8 +1,8 @@
 # Environment effects per level: sky, haze, bloom, fluids, shakers (T01-044)
 
-- **Roadmap task:** T01-044 (feeds the renderer tasks T04-012 and T04-015)
+- **Roadmap task:** T01-044 (feeds the renderer tasks T04-012 and T04-015); the sky cube's face directions and image orientation are T01-405 (feeds T04-039)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
-- **Confidence:** **high** for which entities a level uses, how many, their stored values and how each runtime renderable copies its property record (checked on all 59 worlds with `tools/re/wld_env_verify.py`; members from the files' own type tables, see `environment-schema.md`; the per-level values are in `environment-levels.md`); **medium** for the roles of the haze and bloom numbers (they are known to be copied one to one from the record, but their names are numbers); **low** for how the renderer uses them (formulas, blending, order). Scope: all 59 distinct worlds.
+- **Confidence:** **high** for which entities a level uses, how many, their stored values and how each runtime renderable copies its property record (checked on all 59 worlds with `tools/re/wld_env_verify.py`; members from the files' own type tables, see `environment-schema.md`; the per-level values are in `environment-levels.md`); **high** for the sky's face-to-face topology and image orientation (which `CCubeRenderable` face member borders which, and how, from decoded face pixels on every sky, independent of the binary: `tools/re/sky_faces_verify.py`); **medium** for which compass direction, and so which engine axis, each face member is, and for the roles of the haze and bloom numbers (the compass reading is from the decompiled `Engine.dll`, cross-checked against the pixel topology, T01-405; the haze/bloom numbers are known to be copied one to one from the record, but their names are numbers); **low** for how the renderer uses them (formulas, blending, order). Scope: all 59 distinct worlds.
 
 Prerequisites: `wld-lighting.md` (lights, flares, lightmaps), `wld-entities.md`, `wld-physics.md` (fluid and force field hulls), `mtr.md` (water and reflection shaders), `wld-sound-effects.md` (effect entities).
 
@@ -16,8 +16,9 @@ Prerequisites: `wld-lighting.md` (lights, flares, lightmaps), `wld-entities.md`,
 
 `tools/re/wld_env_verify.py` and `wld_entity_schema.py --match …` (read-only, `SS2_DATA_DIR`) over the retail install with all patches:
 
-- **Sky cube:** the record's size equals the renderable's size and its colour equals the renderable's colour in 58 of 58; 55 skies name an external `.tex` and have face textures on the renderable (five faces, a sixth in 11); 3 skies have none.
+- **Sky cube:** the record's size equals the renderable's size and its colour equals the renderable's colour in 58 of 58, and its `.4` equals the renderable's `CCubeRenderable.2` in 58 of 58; 55 skies name an external `.tex` and have face textures on the renderable (five faces, a sixth in 11); 3 skies have none.
 - **Haze:** 65 of 65 records are matched member for member by the renderable (table below); **bloom:** 34 of 34; **fluids:** the record's density and second value equal the hull's in 23 of 23.
+- **Sky cube faces (T01-405):** `tools/re/sky_faces_verify.py` decodes the 53 skies whose face textures are format-8 (two more use pre-format-8 "legacy" textures, `tex-legacy.md`, out of scope here) and compares every pair of face edges. Four members form a consistent four-face ring (edge errors 4.2–5.0 on a 0–255 scale, in 40–41 of 53 skies with both faces, against 17–23 for the two ring diagonals that are not really adjacent); a fifth member borders all four ring faces (errors 2.6–10.7 in 43–44 of 53) and a sixth, present in only 10 of the 53, borders two of the four convincingly (2.7 and 6.0) and is never adjacent to the fifth (55.8): the fifth and sixth members are the cube's top and bottom, the fifth is the one that is (almost) always present.
 
 ## Sky: `CCubeBackgroundEntity`
 
@@ -33,6 +34,63 @@ CSimpleBackgroundViewerRenderable   .1 FLOAT 5.22 or 55.68
 ```
 
 A sky is a **cube of up to six textures drawn around the viewer** at size 64, with a colour tint and a vertical viewer offset: the textures are named per level (`mdigbo_village_bckg_0002.tex`, `kronor_snowmnt_00.tex`, `lavaarena_01.tex`, …). The one world without a sky entity is `dockingbay`.
+
+### Which face member is which direction (T01-405)
+
+| `CCubeRenderable` member | Compass name | Engine axis | Present |
+|---|---|---|---|
+| `.10` | North | **−Z** | 53 of 53 decoded skies |
+| `.11` | West | **−X** | 53 of 53 |
+| `.12` | South | **+Z** | 53 of 53 |
+| `.13` | East | **+X** | 53 of 53 |
+| `.14` | Floor (down) | **−Y** | 10 of 53 (11 of 55 counting the legacy-texture sky below) |
+| `.15` | Ceiling (up) | **+Y** | 53 of 53 |
+
+The compass names (**medium**, from the engine binary) come from `SeriousEngine::CCubeRenderable::AutoSetTextures` and the helper it calls, `txuMakeCubeFileNames` (`Engine.dll`, read-only, never copied into this repo): given one base texture name ending in a recognised letter, it builds six file names by appending the literal suffixes `"N"`, `"W"`, `"S"`, `"E"`, `"C"`, `"F"` (or, for a base name ending in a digit, `"1"`…`"6"`) — the letters stand for **N**orth, **W**est, **S**outh, **E**ast, **C**eiling and **F**loor — and assigns them, in that order, to the renderable's six texture-pointer members in ascending offset, which is member order `.10, .11, .12, .13, .14, .15`.
+
+The **ring order** (N next to W next to S next to E, not N next to S) and the **top/bottom identity** (one member touches all four ring faces and is almost always present; a second member, rarely present, touches two of the four convincingly and is never adjacent to the first) are **high confidence**, found independently from the decoded face pixels (`tools/re/sky_faces_verify.py`, evidence below) without reading the binary at all — and the two results agree exactly: North→West→South→East→North is the ordinary counter-clockwise compass cycle. Which engine axis each compass direction is remains a **convention, not a measurement**: `−Z` for North (forward) and `+X` for East follow the standard right-handed assignment (`GEOMETRY.md`: right-handed, Y up, −Z forward; `Right = Forward × Up`, so facing North along −Z puts East at +X) and match the engine's own documented heading convention elsewhere (`behavior-validity-terms.md`: heading 0 is along −Z, a positive heading turns towards −X, i.e. West — consistent with North = −Z, East = +X in a right-handed frame).
+
+### How the face images tile (the orientation rule)
+
+A face texture decodes as in `tex.md`: rows top to bottom, columns left to right. The renderer draws all six faces with the one identical unit-square UV mapping (`CCubeRenderable::RenderObject`, binary, **medium**: only the bound texture differs per face in the drawing loop), so the only per-sky choice is how the artist drew each image to meet its neighbours; `tools/re/sky_faces_verify.py` finds this **from the pixels**, independent of the binary, by matching every pair of face edges (top, bottom, left, right; read forward or reversed) across every sky that has both faces:
+
+| Faces (member) | Edge of the first | Edge of the second | Mirrored | Agreeing skies | Mean edge error (0–255) |
+|---|---|---|---|---|---|
+| North–West (`.10`–`.11`) | North's left | West's right | no | 41/53 | 4.2 |
+| North–East (`.10`–`.13`) | North's right | East's left | no | 40/53 | 4.3 |
+| West–South (`.11`–`.12`) | West's left | South's right | no | 40/53 | 4.2 |
+| South–East (`.12`–`.13`) | South's left | East's right | no | 40/53 | 5.0 |
+| North–Ceiling (`.10`–`.15`) | North's top | Ceiling's bottom | no | 44/53 | 3.0 |
+| West–Ceiling (`.11`–`.15`) | West's top | Ceiling's left | no | 44/53 | 2.6 |
+| South–Ceiling (`.12`–`.15`) | South's top | Ceiling's top | **yes** | 43/53 | 10.7 |
+| East–Ceiling (`.13`–`.15`) | East's top | Ceiling's right | **yes** | 44/53 | 8.9 |
+| North–Floor (`.10`–`.14`) | North's bottom | Floor's top | no | 7/10 | 2.7 |
+| East–Floor (`.13`–`.14`) | East's bottom | Floor's right | no | 4/10 | 6.0 |
+
+North–South, West–East (the two ring diagonals) and Ceiling–Floor never matched consistently (mean error 17.0–55.8, and the best-matching edges differed from sky to sky instead of agreeing): they are the cube's three **opposite** pairs, which never share an edge, exactly as a cube's geometry requires. West–Floor and South–Floor did not match convincingly either (best errors 27–30, no consistent winner among only 10 skies with a floor face at all) and are **not checked**; by the symmetry of the other three ring faces (each borders the ceiling along its own top edge) they are expected to be West's bottom–Floor's left, no flip, and South's bottom–Floor's bottom, mirrored, the same pattern that the ceiling shows one quarter and one half of the way around the ring from North.
+
+**Reader rule:** place North (`.10`) at −Z, West (`.11`) at −X, South (`.12`) at +Z and East (`.13`) at +X, Floor (`.14`) at −Y and Ceiling (`.15`) at +Y. Going around the horizon the order is North, West, South, East (**not** North, East, South, West); each ring face's left edge continues unflipped into its western neighbour's right edge (so reading the four images in texture-row order, left to right, continues the horizon moving west). Each ring face's top edge continues into the ceiling: unflipped for North and West, mirrored for South and East (and, expected by symmetry, into the floor the same way).
+
+### Worked example: `1_3_village`'s sky
+
+| Member | Direction | File | Size |
+|---|---|---|---|
+| `.10` | North | `mdigbo_village_bckg_0000.tex` | 1024 × 512 |
+| `.11` | West | `mdigbo_village_bckg_0003.tex` | 1024 × 512 |
+| `.12` | South | `mdigbo_village_bckg_0002.tex` | 1024 × 512 |
+| `.13` | East | `mdigbo_village_bckg_0001.tex` | 1024 × 512 |
+| `.14` | Floor | _(none; a 5-face sky)_ | — |
+| `.15` | Ceiling | `mdigbo_village_bckg_0004.tex` | 1024 × 1024 |
+
+(`tools/re/sky_faces_verify.py --dump DIR` writes these five as PNGs for a visual check; the ring faces show a starfield over a cloud horizon and tile seamlessly left to right in North, West, South, East order, and the ceiling shows a planet overhead.)
+
+### `.1`: which face it is
+
+The record's own texture (`CCubeBackgroundProperties.1`, `mdigbo_village_bckg_0002.tex` in the world above) is **not a seventh, separate image**: in all 55 named skies it is byte-identical to one of the renderable's own face textures — North (`.10`) in 38, Ceiling (`.15`) in 13, South (`.12`) or East (`.13`) in 2 each (`tools/re/sky_faces_verify.py` cross-check against `wld_env_verify.py`'s record reader, **high**, 55 of 55). It reads as a left-over "representative" pointer, perhaps what a level editor's sky picker shows; a reader only needs the renderable's own six (or five, or in 3 worlds, zero) face members and can ignore `.1`.
+
+### Size, viewer height and colour
+
+`CCubeBackgroundProperties.2` equals the entity's `en_fSize` (the cube's half-extent: **64** world units in 56 of 58 skies, 32 in one, 6 in one) and `.3` equals `en_fViewerY` (**−6.66 to 4.52**, 0 in most): together they place a cube of that size centred on the viewer but offset vertically by `en_fViewerY`, so the cube moves with the camera horizontally but not (fully) vertically — the usual trick to keep a sky cube's horizon level while letting the player fly without the sky "sliding". `.6` is the ARGB colour tint copied onto the renderable (`0xFFFFFF`, i.e. no tint, in most skies; 6 distinct values across 58 worlds) — multiplied over every face's pixels, by analogy with the bloom colour (`CBloomEntity`, above) which is read the same way. `.4` (FLOAT, 1 in 54 of 58, 0 in 4) equals the renderable's `.2` in all 58 skies (same high-confidence record-to-renderable copy as `.2`→size, `.3`→viewer Y and `.6`→colour); its meaning is not named in the data, but a boolean-looking flag that is almost always 1 and is copied straight through to a plain renderable member is plausibly a **visibility or active flag** rather than anything size- or colour-like — **not established**. `.5` (BOOL, 1 in 16 of 58) does not consistently equal anything on the renderable this task checked and remains **not established** (open question, unchanged from T01-044).
 
 ## Haze: `CHazeEntity`
 
@@ -75,13 +133,16 @@ So a haze is **an axis-aligned box volume with a colour and four numbers**; the 
 3. A haze is a box in world coordinates; several can overlap; their order is the list order (`CRenderingDomain.9` lists the haze renderables).
 4. A fluid's box and density come from the hull; the visual water comes from materials, not from the fluid entity.
 5. Fail on an unknown environment class; the classes in `environment-schema.md` are the complete list of the retail data.
+6. **The sky cube's six face members are fixed directions, not an arbitrary list** (T01-405): `.10` North (−Z), `.11` West (−X), `.12` South (+Z), `.13` East (+X), `.14` Floor (−Y) and `.15` Ceiling (+Y); place each face's quad accordingly and ignore `CCubeBackgroundProperties.1` (it duplicates one of the six, not a seventh texture). A sky with five faces is missing the floor (`.14`); render it as an open bottom (no quad), never a default or repeated texture.
 
 ## Test vector
 
-`Content/SeriousSam2/Levels/01_MDigBo/1_3_Village/1_3_Village.wld`: sky texture `mdigbo_village_bckg_0002.tex`, size 64, viewer offset 0, colour 0xFFFFFF; one haze (colour `0x2a383d`; record members `.2` to `.10`: 300, 100, 400, 0, −150, 1,860, 0) and one bloom (colour `0xff463c26`; members 400, 148, 400, 25). `DM_Yodeller`: sky `kronor_snowmnt_00.tex`; haze `0xffffff` (750 × 750 × 750 box, 0, −100, 500, 0); bloom `0xff1b1b1b` (1,000, 1,000, 1,000, 25).
+`Content/SeriousSam2/Levels/01_MDigBo/1_3_Village/1_3_Village.wld`: sky texture `mdigbo_village_bckg_0002.tex`, size 64, viewer offset 0, colour 0xFFFFFF, faces North `mdigbo_village_bckg_0000.tex`, West `..._0003.tex`, South `..._0002.tex` (the same file as the record's own texture), East `..._0001.tex`, Ceiling `..._0004.tex`, no floor face (a five-face sky); one haze (colour `0x2a383d`; record members `.2` to `.10`: 300, 100, 400, 0, −150, 1,860, 0) and one bloom (colour `0xff463c26`; members 400, 148, 400, 25). `DM_Yodeller`: sky `kronor_snowmnt_00.tex`; haze `0xffffff` (750 × 750 × 750 box, 0, −100, 500, 0); bloom `0xff1b1b1b` (1,000, 1,000, 1,000, 25).
 
 ## Open questions
 
 - The meaning and formulas of the haze members `.5`, `.6`, `.7`, `.10` and of the bloom members; whether the haze colour's alpha byte is used; how the renderer blends several hazes and the bloom (T04-012, T04-015).
 - Where underwater and fog overlays come from, and how the fluid hull switches the underwater state (the game rules or the renderer, not the world).
-- The three skies without textures and the world without a sky.
+- The three skies without any face texture (`1_4_approachingcity`, `dm_cockaleekie`, `dm_hole`: the record's own texture is null too) and the world without a sky entity at all (`dockingbay`) are identified (T01-405) but not explained: whether the renderer falls back to a flat colour, the `.6` tint alone, or simply draws nothing is not in the data. Two further skies (`dm_deserttemple`, `dm_dockingbay`) name face textures that are pre-format-8 "legacy" `.tex` files (`tex-legacy.md`), which `tools/re/sky_faces_verify.py` does not decode.
+- Whether the floor (`.14`) really borders the west and south ring faces the way the geometry requires: only its seams with north and east were confirmed by pixel matching (too few of the 10 full-cube skies have well-matched floor art to confirm the other two, T01-405).
+- The meaning of `CCubeBackgroundProperties.4` and `.5` (`.4` is confirmed copied onto the renderable's `CCubeRenderable.2`, both FLOAT 0 or 1, but nothing in the data says what either controls) and of the viewer renderable's own `.1` (5.22 or 55.68).
