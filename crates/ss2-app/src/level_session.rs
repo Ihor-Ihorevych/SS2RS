@@ -188,6 +188,7 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
                     AlphaMode::Blend => Some(0.5),
                 },
                 instances: instances.clone(),
+                lightmap: None,
             });
         }
     }
