@@ -2898,8 +2898,10 @@ dependencies = [
 name = "ss2-format-wld"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "ss2-assets",
  "ss2-core",
+ "ss2-format-tex",
  "ss2-meta",
  "ss2-testkit",
  "ss2-vfs",

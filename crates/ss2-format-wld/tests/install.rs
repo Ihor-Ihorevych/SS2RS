@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::f32::consts::FRAC_1_SQRT_2;
 
 use ss2_core::math::{Quat, Vec3};
+use ss2_format_tex::PixelFormat;
 use ss2_format_wld::{ModelRef, SkyFace, World};
 use ss2_vfs::{EntryKind, Vfs, VfsPath};
 
@@ -302,4 +303,135 @@ fn every_sky_of_the_install() {
         (min_y + 6.66).abs() < 0.01 && (max_y - 4.52).abs() < 0.01,
         "{min_y} {max_y}"
     );
+}
+
+/// The lightmap test vector of `wld-lighting.md`: `dm_stadium.wld`, instance #2435 (`Fence.mdl`)
+/// with oven modifier #3553: parameter ids 12 and 13, UV map id 10, texture #11 (128 x 128 DXT1,
+/// flags 0x71). The spec's "all 266 oven modifiers use UV map id 10" counts the main section's
+/// 133 and their 133 editor copies in the extra section; the reader sees the main ones.
+#[test]
+fn the_stadium_lightmap() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let path =
+        VfsPath::new("Content/SeriousSam2/Levels/Multiplayer/DM_Stadium/DM_Stadium.wld").unwrap();
+    let world = World::from_bytes(&vfs.read(&path).unwrap()).unwrap();
+    let lm = world
+        .static_models
+        .iter()
+        .filter_map(|m| m.lightmap.as_ref())
+        .find(|l| l.modifier == 3553)
+        .expect("the oven modifier #3553 belongs to a static model");
+    assert_eq!(
+        (lm.texture_param.id, lm.uv_param.id, lm.uv_map.id),
+        (12, 13, 10)
+    );
+    assert_eq!(lm.uv_map.name, "Shadow");
+    assert_eq!(lm.texture_object, Some(11));
+    let t = lm.texture.as_ref().unwrap();
+    assert_eq!(
+        (t.width, t.height, t.format, t.format_code, t.flags),
+        (128, 128, PixelFormat::Dxt1, 7, 0x71)
+    );
+    assert_eq!(world.lightmap_counts.oven_modifiers, 133);
+    assert!(
+        world
+            .static_models
+            .iter()
+            .filter_map(|m| m.lightmap.as_ref())
+            .all(|l| l.uv_map.id == 10)
+    );
+}
+
+/// Every lightmap of the install, with the counts of `wld-lighting.md` ("Baked lightmaps"):
+/// 18,679 oven modifiers on 18,392 lit model instances (18,105 with exactly one), each texture
+/// used once. The texture formats and sizes are counted over the static models' lightmaps, the
+/// part of the spec's 18,676 textures this reader decodes.
+#[test]
+fn every_lightmap_of_the_install() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut seen = HashSet::new();
+    let (mut worlds, mut totals) = (0, ss2_format_wld::LightmapCounts::default());
+    let (mut lit_models, mut models, mut several_models) = (0, 0, 0);
+    let mut formats: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut sizes: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut flags: BTreeMap<u32, usize> = BTreeMap::new();
+    let (mut square, mut decoded) = (0, 0);
+    let mut unreadable: BTreeMap<String, usize> = BTreeMap::new();
+    let mut reused = Vec::new();
+    for path in files_with_extension(&vfs, "wld") {
+        let bytes = vfs.read(&path).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        worlds += 1;
+        let world = World::from_bytes(&bytes).unwrap();
+        let c = world.lightmap_counts;
+        totals.lit_instances += c.lit_instances;
+        totals.oven_modifiers += c.oven_modifiers;
+        totals.several += c.several;
+        let mut textures = HashSet::new();
+        for m in &world.static_models {
+            models += 1;
+            let Some(lm) = &m.lightmap else { continue };
+            lit_models += 1;
+            several_models += usize::from(lm.other_oven_modifiers > 0);
+            if let Some(id) = lm.texture_object
+                && !textures.insert(id)
+            {
+                reused.push(format!("{}: texture {id}", path.as_str()));
+            }
+            match &lm.texture {
+                Ok(t) => {
+                    decoded += 1;
+                    *formats.entry(t.format_code).or_default() += 1;
+                    *sizes.entry(t.width.max(t.height)).or_default() += 1;
+                    *flags.entry(t.flags).or_default() += 1;
+                    square += usize::from(t.width == t.height);
+                }
+                Err(e) => *unreadable.entry(e.clone()).or_default() += 1,
+            }
+        }
+    }
+    eprintln!(
+        "{worlds} worlds; {totals:?}; {lit_models} of {models} static models lit \
+         ({several_models} with several oven modifiers); {decoded} lightmaps decoded: \
+         format codes {formats:?}, largest side {sizes:?}, flags {flags:x?}, {square} square; \
+         unreadable {unreadable:?}"
+    );
+    assert_eq!(worlds, 59);
+    // wld-lighting.md: 18,679 oven modifiers on 18,392 lit instances, 18,105 with exactly one.
+    assert_eq!(totals.oven_modifiers, 18_679);
+    assert_eq!(totals.lit_instances, 18_392);
+    assert_eq!(totals.lit_instances - totals.several, 18_105);
+    // Each lightmap texture is used by exactly one instance.
+    assert!(reused.is_empty(), "{reused:?}");
+    // The static models carry 18,195 of them (the rest are doors' and props'), 286 with a
+    // second oven modifier, and every one of their lightmaps decodes.
+    assert_eq!((lit_models, several_models), (18_195, 286));
+    assert!(unreadable.is_empty(), "{unreadable:?}");
+    assert_eq!(decoded, lit_models);
+    // Formats and sizes are a part of the spec's (DXT1 17,299, 24-bit 1,123, 32-bit 251; sides
+    // 16 to 2,048): as measured on the static models.
+    let formats: Vec<_> = formats.into_iter().collect();
+    assert_eq!(formats, [(0, 1_089), (1, 250), (2, 2), (6, 1), (7, 16_853)]);
+    let sizes: Vec<_> = sizes.into_iter().collect();
+    assert_eq!(
+        sizes,
+        [
+            (16, 111),
+            (32, 787),
+            (64, 7_466),
+            (128, 7_008),
+            (256, 2_243),
+            (512, 444),
+            (1_024, 130),
+            (2_048, 6)
+        ]
+    );
+    assert_eq!(square, 17_791);
+    // Bit 0x10 marks a baked texture: set on every one of them (the spec's one exception,
+    // flags 0x20, is not a static model's).
+    assert!(flags.keys().all(|f| f & 0x10 != 0), "{flags:x?}");
 }

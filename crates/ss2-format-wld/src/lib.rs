@@ -14,7 +14,12 @@
 //! - the spawn markers (`CSpawnMarkerEntity`) and the chapter info entities
 //!   (`CChapterInfoEntity`) with their placements and editor names,
 //! - the sky (`CCubeBackgroundEntity`, T02-039; spec `docs/re/environment.md`, section "Sky"):
-//!   its face textures by face member, colour, size and viewer height ([`Sky`]).
+//!   its face textures by face member, colour, size and viewer height ([`Sky`]),
+//! - each static model's **baked lightmap** (T02-040; spec `docs/re/wld-lighting.md`, section
+//!   "Baked lightmaps"): the `CTextureOvenShaderModifier` in its model instance's modifier list
+//!   and the `CStaticTexture` stored in the world that it names, decoded with `ss2-format-tex`
+//!   ([`Lightmap`]); and, over every model instance of the world, how many are lit
+//!   ([`LightmapCounts`]).
 //!
 //! Everything else (lights, the grids, the physics bodies, scripts, the other entity classes) is
 //! left out; [`World::entity_count`] says how many entities the file has in all.
@@ -35,6 +40,7 @@ use std::collections::HashMap;
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
+use ss2_format_tex::Texture;
 use ss2_meta::{Container, Decoded, FromValue, MetaDeserialize, Object, ObjectRef, TypeSystem};
 
 const WHAT: &str = ".wld world";
@@ -83,6 +89,61 @@ pub struct StaticModel {
     /// Whether the entity has a mechanism and so at least one collision hull (`.10` not null).
     /// The hull is the model's own collision mesh for static level geometry.
     pub has_hull: bool,
+    /// The baked lightmap of this placement, `None` when its model instance has no oven
+    /// modifier, or when the chain to it is broken (no modifier list, a reference to an object
+    /// that is not in the file, a modifier of the wrong shape).
+    pub lightmap: Option<Lightmap>,
+}
+
+/// An identifier as stored (`IDENT`): its index in the file's identifier table and its text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Ident {
+    /// The index in the identifier table (0 is the empty identifier).
+    pub id: u32,
+    /// The text, empty when the index is not in the table.
+    pub name: String,
+}
+
+/// A placement's baked lightmap: the first `CTextureOvenShaderModifier` of its model instance's
+/// modifier list (`CModelInstance.4` → `CShaderModifierList.1`) and the texture it names
+/// (`wld-lighting.md`, "Baked lightmaps").
+///
+/// Which of the mesh's UV streams the lightmap is sampled through is **not** stored here: the
+/// modifier's UV map id is not one of the mesh's ids (reader invariant 3); the spec's rule picks
+/// the mesh's own stream that lies in [0, 1] without overlap, which is the job of the code that
+/// has the mesh.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Lightmap {
+    /// The object id of the oven modifier.
+    pub modifier: u32,
+    /// The shader parameter overridden with the texture (`.1`; "3 texture" in the test vector).
+    pub texture_param: Ident,
+    /// The shader parameter overridden with the UV map (`.2`; "3 uvmap").
+    pub uv_param: Ident,
+    /// The UV map id (`.3` → `CShaderArgValUVMap.1`; "Shadow"): a per-world constant that names
+    /// none of the mesh's streams. For diagnostics only.
+    pub uv_map: Ident,
+    /// The object id of the lightmap texture (`.4` → `CShaderArgValTexture.1`) when it is a
+    /// `CStaticTexture` object of the file, `None` otherwise.
+    pub texture_object: Option<u32>,
+    /// The decoded lightmap ([`Texture::from_object`]), or why it cannot be read (the texture
+    /// is null, not in the file, not a `CStaticTexture`, or breaks a rule of `tex.md`).
+    pub texture: std::result::Result<Texture, String>,
+    /// How many more oven modifiers the list has after this one. The spec counts instances
+    /// with two or more but does not say how the engine combines them; only the first is read.
+    pub other_oven_modifiers: usize,
+}
+
+/// Lightmap counts over **every** `CModelInstance` of the main section, whichever entity uses
+/// it (static models, but also doors and props): the numbers `wld-lighting.md` gives per world.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LightmapCounts {
+    /// Model instances with at least one oven modifier in their list.
+    pub lit_instances: usize,
+    /// Oven modifiers in the lists of all model instances.
+    pub oven_modifiers: usize,
+    /// Model instances with more than one oven modifier.
+    pub several: usize,
 }
 
 impl StaticModel {
@@ -228,6 +289,8 @@ pub struct World {
     /// `dockingbay`). Retail worlds have at most one; if a world had several, this is the first
     /// in entity-list order.
     pub sky: Option<Sky>,
+    /// How many model instances of the world are lit, and by how many oven modifiers.
+    pub lightmap_counts: LightmapCounts,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -389,6 +452,45 @@ struct ModelInstance {
     model: ObjectRef,
 }
 
+/// Read apart from [`ModelInstance`]: a broken modifier list costs the lightmap, not the model.
+#[derive(MetaDeserialize)]
+struct InstanceModifiers {
+    #[meta(owner = "CModelInstance", name = "4")]
+    list: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct ModifierList {
+    #[meta(owner = "CShaderModifierList", name = "1")]
+    modifiers: Vec<ObjectRef>,
+}
+
+#[derive(MetaDeserialize)]
+struct OvenModifier {
+    #[meta(owner = "CTextureOvenShaderModifier", name = "1")]
+    texture_param: u32,
+    #[meta(owner = "CTextureOvenShaderModifier", name = "2")]
+    uv_param: u32,
+    #[meta(owner = "CTextureOvenShaderModifier", name = "3")]
+    uv_map: UvMapArg,
+    #[meta(owner = "CTextureOvenShaderModifier", name = "4")]
+    texture: TextureArg,
+}
+
+#[derive(MetaDeserialize)]
+struct UvMapArg {
+    #[meta(owner = "CShaderArgValUVMap", name = "1")]
+    id: u32,
+}
+
+#[derive(MetaDeserialize)]
+struct TextureArg {
+    #[meta(owner = "CShaderArgValTexture", name = "1")]
+    texture: ObjectRef,
+}
+
+const OVEN_MODIFIER: &str = "CTextureOvenShaderModifier";
+
 /// The decoded file with an id index over the main objects and the extra records.
 struct Graph<'a> {
     container: &'a Container<'a>,
@@ -426,6 +528,76 @@ impl<'a> Graph<'a> {
             bad(format!(
                 "{what} refers to object {id}, which is not in the file"
             ))
+        })
+    }
+
+    fn ident(&self, id: u32) -> Ident {
+        Ident {
+            id,
+            name: self.container.ident(id).unwrap_or_default().to_string(),
+        }
+    }
+
+    /// The oven modifiers of a model instance's modifier list, in list order; empty when the
+    /// instance has no list or the list cannot be read.
+    fn oven_modifiers(&self, instance: &Object) -> Vec<&'a Object> {
+        let Ok(InstanceModifiers {
+            list: ObjectRef(Some(list)),
+        }) = self.typed(instance, "")
+        else {
+            return Vec::new();
+        };
+        let Some(list) = self.by_id.get(&list) else {
+            return Vec::new();
+        };
+        let Ok(list) = self.typed::<ModifierList>(list, "") else {
+            return Vec::new();
+        };
+        list.modifiers
+            .iter()
+            .filter_map(|r| r.0.and_then(|id| self.by_id.get(&id)).copied())
+            .filter(|o| self.class_of(o) == OVEN_MODIFIER)
+            .collect()
+    }
+
+    /// The lightmap of a model instance: its first oven modifier and the texture it names.
+    fn lightmap(&self, instance: &Object) -> Option<Lightmap> {
+        let ovens = self.oven_modifiers(instance);
+        let first = *ovens.first()?;
+        let oven: OvenModifier = self.typed(first, "").ok()?;
+        let (texture_object, texture) = match oven.texture.texture.0 {
+            None => (None, Err("the lightmap texture is null".to_string())),
+            Some(id) => match self.by_id.get(&id) {
+                None => (
+                    None,
+                    Err(format!(
+                        "the lightmap texture refers to object {id}, which is not stored in the file{}",
+                        self.external_path(id)
+                            .map(|p| format!(" (the external file `{p}`)"))
+                            .unwrap_or_default()
+                    )),
+                ),
+                Some(o) if self.class_of(o) != "CStaticTexture" => (
+                    None,
+                    Err(format!(
+                        "the lightmap texture is object {id}, a `{}`, not a CStaticTexture",
+                        self.class_of(o)
+                    )),
+                ),
+                Some(o) => (
+                    Some(id),
+                    Texture::from_object(&o.value, self.types()).map_err(|e| e.to_string()),
+                ),
+            },
+        };
+        Some(Lightmap {
+            modifier: first.id,
+            texture_param: self.ident(oven.texture_param),
+            uv_param: self.ident(oven.uv_param),
+            uv_map: self.ident(oven.uv_map.id),
+            texture_object,
+            texture,
+            other_oven_modifiers: ovens.len() - 1,
         })
     }
 
@@ -527,7 +699,18 @@ impl World {
             spawn_markers: Vec::new(),
             chapters: Vec::new(),
             sky: None,
+            lightmap_counts: LightmapCounts::default(),
         };
+        for o in &decoded.objects {
+            if g.class_of(o) != "CModelInstance" {
+                continue;
+            }
+            let n = g.oven_modifiers(o).len();
+            let c = &mut world.lightmap_counts;
+            c.oven_modifiers += n;
+            c.lit_instances += usize::from(n > 0);
+            c.several += usize::from(n > 1);
+        }
         for e in &root.entities {
             let o = g.object(e.0, "an entity of CWorld.1")?;
             let class = g.class_of(o);
@@ -585,8 +768,8 @@ fn static_model(g: &Graph<'_>, o: &Object, serial: u32, name: String) -> Result<
     let aspect: Aspect = g.typed(renderable, &what)?;
     let model: ModelRenderable = g.typed(renderable, &what)?;
     let what = format!("the model instance of static model {}", o.id);
-    let instance = g.object(model.instance.0, &what)?;
-    let instance: ModelInstance = g.typed(instance, &what)?;
+    let instance_object = g.object(model.instance.0, &what)?;
+    let instance: ModelInstance = g.typed(instance_object, &what)?;
     let (rotation, translation) = aspect.world.split();
     Ok(StaticModel {
         serial,
@@ -596,6 +779,7 @@ fn static_model(g: &Graph<'_>, o: &Object, serial: u32, name: String) -> Result<
         translation,
         scale: instance.scale.into(),
         has_hull: entity.mechanism.0.is_some(),
+        lightmap: g.lightmap(instance_object),
     })
 }
 
