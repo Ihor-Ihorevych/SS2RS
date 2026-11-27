@@ -62,6 +62,9 @@ pub struct Instance {
     pub transform: Transform,
     /// Whether this placement takes part in collision.
     pub collidable: bool,
+    /// This placement's own lightmap: an index into [`LevelScene::textures`], drawn with the lightmap UVs of the
+    /// model's parts ([`MeshData::lightmap_uvs`]); `None`: not lightmapped (RFC 0013 amendment 2).
+    pub lightmap: Option<u32>,
 }
 
 /// A place a player can start.
@@ -190,6 +193,14 @@ impl LevelScene {
                 ));
             }
             let t = &inst.transform;
+            if let Some(l) = inst.lightmap
+                && l as usize >= self.textures.len()
+            {
+                return bad(format!(
+                    "instance {i} names lightmap {l} of {}",
+                    self.textures.len()
+                ));
+            }
             let finite = t.translation.is_finite() && t.rotation.is_finite() && t.scale.is_finite();
             if !finite
                 || (t.rotation.length_squared() - 1.0).abs() > 1e-3
@@ -270,6 +281,7 @@ impl LevelScene {
                 scale,
             },
             collidable: true,
+            lightmap: None,
         };
         let id = Quat::IDENTITY;
         let ramp = 20f32.to_radians();
@@ -293,7 +305,13 @@ impl LevelScene {
                 Vec3::new(-0.5, 2.0, 0.5),
             ),
         ];
+        let mut instances = instances;
+        // The floor is lightmapped: a procedural lightmap with a shadow in its middle (see `test_lightmap`).
+        instances[0].lightmap = Some(TEST_LIGHTMAP_TEXTURE);
         let (vertices, indices) = unit_cube();
+        // Each face of the cube maps the whole lightmap (0..1): fine for the one lightmapped placement, the floor,
+        // whose top face shows it.
+        let lightmap_uvs = Some(vertices.iter().map(|v| v.uv).collect());
         let collision = CollisionData {
             positions: vertices.iter().map(|v| Vec3::from(v.position)).collect(),
             indices: indices.clone(),
@@ -304,7 +322,11 @@ impl LevelScene {
             models: vec![ModelData {
                 name: "unit cube".to_string(),
                 parts: vec![ModelPart {
-                    mesh: MeshData { vertices, indices },
+                    mesh: MeshData {
+                        vertices,
+                        indices,
+                        lightmap_uvs,
+                    },
                     material: 0,
                 }],
                 collision: Some(collision),
@@ -317,6 +339,7 @@ impl LevelScene {
             }],
             textures: std::iter::once(checker_texture())
                 .chain(CubeFace::ALL.map(test_sky_face))
+                .chain(std::iter::once(test_lightmap()))
                 .collect(),
             instances,
             spawns: vec![SpawnPoint {
@@ -329,6 +352,30 @@ impl LevelScene {
                 tint: [1.0, 1.0, 1.0, 1.0],
             }),
         }
+    }
+}
+
+/// Where [`LevelScene::test_room`] keeps the floor's lightmap in its textures.
+pub const TEST_LIGHTMAP_TEXTURE: u32 = 7;
+
+/// The test room floor's lightmap: 16 x 16 RGBA8, light grey (200) with a dark (60) 8 x 8 square in its middle, so a
+/// renderer that applies it draws a shadow in the middle of the floor and one that ignores it does not.
+pub fn test_lightmap() -> TextureData {
+    let mut texels = Vec::with_capacity(16 * 16 * 4);
+    for y in 0..16 {
+        for x in 0..16 {
+            let shadow = (4..12).contains(&x) && (4..12).contains(&y);
+            let c = if shadow { 60 } else { 200 };
+            texels.extend([c, c, c, 255]);
+        }
+    }
+    TextureData {
+        width: 16,
+        height: 16,
+        format: TexelFormat::Rgba8,
+        mips: vec![texels],
+        repeat_u: false,
+        repeat_v: false,
     }
 }
 
@@ -539,6 +586,34 @@ mod tests {
     }
 
     #[test]
+    fn the_test_room_floor_is_lightmapped() {
+        let room = LevelScene::test_room();
+        let lit: Vec<usize> = (0..room.instances.len())
+            .filter(|i| room.instances[*i].lightmap.is_some())
+            .collect();
+        assert_eq!(lit, [0], "only the floor");
+        assert_eq!(TEST_ROOM_LABELS[0], "floor");
+        let lightmap = &room.textures[TEST_LIGHTMAP_TEXTURE as usize];
+        assert_eq!(lightmap, &test_lightmap());
+        let mesh = &room.models[0].parts[0].mesh;
+        assert_eq!(
+            mesh.lightmap_uvs.as_ref().map(Vec::len),
+            Some(mesh.vertices.len())
+        );
+        let mut bad = LevelScene::test_room();
+        bad.instances[0].lightmap = Some(99);
+        assert!(bad.validate().is_err());
+        let mut bad = LevelScene::test_room();
+        bad.models[0].parts[0]
+            .mesh
+            .lightmap_uvs
+            .as_mut()
+            .unwrap()
+            .pop();
+        assert!(bad.validate().is_err());
+    }
+
+    #[test]
     fn a_bad_sky_is_rejected() {
         let check = |f: &dyn Fn(&mut SkyData)| {
             let mut s = LevelScene::test_room();
@@ -562,6 +637,7 @@ mod tests {
             model: 0,
             transform: Transform::from_translation(Vec3::new(100.0, 5.0, 0.0)),
             collidable: false,
+            lightmap: None,
         });
         let after = room.bounds().unwrap();
         assert!(after.max.x >= 100.5 && after.min == before.min);
