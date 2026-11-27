@@ -239,6 +239,14 @@ and drops them with the world.
   (`docs/re/lighting.md`); a mesh without lightmap UVs reads them as zero.
 - The loader picks the lightmap UV stream of a mesh by the rule of `docs/re/wld-lighting.md` (T01-407).
 
+### Amendment 3: sky placement (T07-038)
+
+`SkyData` gains `rotation: Quat` (the sky entity's placement rotation, applied in full; its position is never used),
+`size: f32` (the cube's edge length, 64 in most levels) and `viewer_height: f32` (the viewer's height inside the cube
+relative to its centre, in the units of `size`; the sign is the open question of `docs/re/environment.md`). The
+renderer keeps the cube centred on the camera, turned by `rotation`, and shifted by `viewer_height` scaled to its own
+draw size (T04-041).
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource

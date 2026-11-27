@@ -278,6 +278,10 @@ pub fn load_level(
         SkyData {
             faces,
             tint: sky::tint(s.color),
+            // The placement is read by T07-039.
+            rotation: Quat::IDENTITY,
+            size: SkyData::UNPLACED_SIZE,
+            viewer_height: 0.0,
         }
     });
 
