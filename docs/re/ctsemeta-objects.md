@@ -1,7 +1,7 @@
 # CTSEMETA object data (`OBJS`)
 
-- **Roadmap tasks:** T01-050a (framing, primitives, class instances), T01-050b (containers and arrays), T01-050c (references, strings)
-- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet — needs an independent re-read (T01-049) and an independent walker (T01-050d)_
+- **Roadmap tasks:** T01-050a (framing, primitives, class instances), T01-050b (containers and arrays), T01-050c (references, strings), T01-050d (independent object walk)
+- **Author:** @Ihor-Ihorevych/agent · **Independent walker:** @lxstyo/agent, 2026-11-25 · **Reviewer:** _independent spec re-read pending (T01-049)_
 - **Confidence:** **high** for everything below except where marked. Evidence: a decoder built from exactly these rules reads the object data of **all 9,269** format-8 file entries (every `.wld` world included) and ends on the `EDOB` marker **to the byte**, and the extra records after `EDOB` end on `METAEND ` (see "Evidence").
 
 Prerequisites: `ctsemeta-container.md` (file frame) and `ctsemeta-types.md` (type table). Everything here is little-endian. There is **no padding or alignment anywhere**: values follow each other byte for byte.
@@ -109,6 +109,33 @@ Marker usage measured in the 9,162 files that decode: `STAR` 165,678 · `DCON` 4
 - That is **9,269 of 9,269**: no file fails. (The walk takes about 11 minutes: it reads every archive entry, also the ones a later patch overrides.) The distinct paths are 59 worlds and 60 other files with extra records; `tools/re/wld_verify.py` checks the worlds one by one.
 - Markers met while decoding: 420,586 `DCON`, 548,328 `SSAR`, 283,556 `STAR`, 11,000 `DTRS`.
 
+### Independent OBJS verification (T01-050d)
+
+The standard-library script `tools/re/ctsemeta_independent_verify.py` was written from this
+specification and its frame and type-table prerequisites. It checks each record header against
+`OBTY`, advances over each serialized value, and checks that the computed cursor lands exactly on
+`EDOB`, zero, and `METAEND `. An empty inline array has no element bytes. Its element type can be
+external even when the file supplies no inline layout for that type.
+
+On the 14 retail archives, counting each entry including earlier copies replaced by patches:
+
+| Result | Count |
+|---|---:|
+| Archive file entries | 12,288 |
+| Version 8 CTSEMETA entries | 9,269 |
+| Version 8 entries with nonempty `EDTY`, excluded from the walk | 179 |
+| Version 8 entries walked exactly to zero-record `EDOB` | 9,090 |
+| Main records walked in those 9,090 entries | 178,519 |
+| Failures by format or object type | 0 |
+| Older CTSEMETA entries, excluded | 155 |
+
+Run `python -I tools/re/ctsemeta_independent_verify.py` with `SS2_DATA_DIR` set or pass the
+installation directory as an argument. The script groups any failures by the current `OBTY`
+type or by framing when no current object applies. The command succeeds only after matching
+the retail archive, version 8 entry, and walked-entry counts above with zero failures.
+This walk verifies byte boundaries and
+record ordering. Extra records and the validity of individual reference targets were outside its scope.
+
 ## The `EDOB` section
 
 After the last object record comes the tag `EDOB`, a `u32 count`, and `count` **extra records**, then the footer `METAEND `. An extra record has the same encoding as an `OBJS` record: `u32 object id`, `u32 type id`, then the value of that type by the rules above. The ids of extra records are **not** in `OBTY` and never clash with it (checked). After the last extra record the cursor is exactly on `METAEND `.
@@ -124,4 +151,3 @@ Evidence (`tools/re/edob_verify.py`): of **60 distinct non-world files** with a 
 - What the per-file `ADIM` blocks are for (fixed-array counts come from the type *name*; no other use was needed).
 - Meaning of the `kind` codes and `flags` words: `dtty-kinds.md` (T01-052; the struct `kind` is a class version). `INFO[0]`, `RFIL.flags`, `EXOB.flags`, `EDTY` and the old versions 4–7: `ctsemeta-leftovers.md` (T01-051).
 - Whether `UUUU` (seen in 43 `.tex` files) is a payload marker.
-- An **independent walker** written only from this document (T01-050d) is still needed to prove the text is complete; the author's decoder is not independent evidence.

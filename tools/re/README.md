@@ -5,6 +5,7 @@ Plain Python 3 scripts (standard library only) that read an install's `.gro` arc
 ```
 python -I tools/re/validate_ctsemeta.py "C:\path\to\Serious Sam 2"        # frame validation counts
 python -I tools/re/walk_objects.py "C:\path\to\Serious Sam 2"             # object-data decode: how many files decode to EDOB
+python -I tools/re/ctsemeta_independent_verify.py "C:\path\to\Serious Sam 2"  # T01-050d: independent OBJS alignment, zero-record EDOB
 python -I tools/re/inventory.py "C:\path\to\Serious Sam 2" inventory.md   # regenerate docs/re/inventory.md
 ```
 
@@ -14,6 +15,7 @@ Texture evidence (docs/re/tex.md):
 
 ```
 python -I tools/re/tex_verify.py "C:\path\to\Serious Sam 2"       # size checks for every .tex, flag/wrap/dimension statistics
+python -I tools/re/tex_legacy_verify.py "C:\path\to\Serious Sam 2"  # T01-083: legacy payload layouts and effective path counts
 ```
 
 `ctse_values.py` is the value decoder these scripts share (objects -> Python values).
