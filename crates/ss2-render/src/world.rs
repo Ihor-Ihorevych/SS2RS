@@ -7,7 +7,7 @@
 
 use std::ops::Range;
 
-use ss2_core::math::{Mat4, Vec3};
+use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{CubeFace, MeshData, MeshVertex, TexelFormat, TextureData};
 use wgpu::util::DeviceExt;
@@ -58,6 +58,12 @@ pub struct SkyBatch {
     pub faces: [Option<TextureHandle>; 6],
     /// Linear RGBA multiplier on every face.
     pub tint: [f32; 4],
+    /// How the cube is turned in the world; it keeps this orientation whichever way the camera looks.
+    pub rotation: Quat,
+    /// The level's cube edge length (only the ratio to `viewer_height` matters: the drawn cube has its own size).
+    pub size: f32,
+    /// The viewer's height inside the cube relative to its centre, in the units of `size` (RFC 0013 amendment 3).
+    pub viewer_height: f32,
 }
 
 /// Half the size of the sky cube drawn around the camera (it never writes depth, so its size only has to clear the
@@ -67,6 +73,9 @@ const SKY_HALF_SIZE: f32 = 10.0;
 struct GpuSky {
     /// One material per face, in [`CubeFace::ALL`] order.
     faces: Vec<wgpu::BindGroup>,
+    rotation: Quat,
+    /// The viewer's height inside the drawn cube (the level's offset scaled to [`SKY_HALF_SIZE`]).
+    viewer_offset: f32,
 }
 
 struct GpuMesh {
@@ -626,6 +635,16 @@ impl WorldGpu {
         if !sky.tint.iter().all(|c| c.is_finite()) {
             return Err(RenderError::World(format!("sky tint {:?}", sky.tint)));
         }
+        if !sky.rotation.is_finite()
+            || (sky.rotation.length_squared() - 1.0).abs() > 1e-3
+            || !(sky.size.is_finite() && sky.size > 0.0)
+            || !sky.viewer_height.is_finite()
+        {
+            return Err(RenderError::World(format!(
+                "sky placement: rotation {:?}, size {}, viewer height {}",
+                sky.rotation, sky.size, sky.viewer_height
+            )));
+        }
         let mut faces = Vec::with_capacity(6);
         for face in sky.faces {
             // Clamped, so a face's edge does not pick up the opposite edge.
@@ -635,7 +654,11 @@ impl WorldGpu {
             };
             faces.push(self.material(device, view, &self.samplers[0], sky.tint, 0.0, true, None));
         }
-        self.sky = Some(GpuSky { faces });
+        self.sky = Some(GpuSky {
+            faces,
+            rotation: sky.rotation.normalize(),
+            viewer_offset: sky.viewer_height / sky.size * 2.0 * SKY_HALF_SIZE,
+        });
         Ok(())
     }
 
@@ -676,11 +699,13 @@ impl WorldGpu {
         uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
         uniform[16..19].copy_from_slice(&camera.forward().to_array());
         queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&uniform));
-        if self.sky.is_some() {
+        if let Some(sky) = &self.sky {
+            // Centred on the camera, except that the viewer sits `viewer_offset` above the cube's centre; turned by the
+            // level's rotation; never closer whatever the camera does.
             let around_camera = Mat4::from_scale_rotation_translation(
                 Vec3::splat(2.0 * SKY_HALF_SIZE),
-                ss2_core::math::Quat::IDENTITY,
-                camera.position,
+                sky.rotation,
+                camera.position - Vec3::Y * sky.viewer_offset,
             );
             queue.write_buffer(
                 &self.sky_instance,
