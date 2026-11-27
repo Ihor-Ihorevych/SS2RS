@@ -49,10 +49,11 @@ def check_world(name, d, st, dist, pairs, rows):
         faces = [ex.get(rend.get(f"CCubeRenderable.{k}").oid, "").rsplit("/", 1)[-1].lower() for k in (10, 11, 12, 13, 14, 15)]
         row["sky"] = (path.rsplit("/", 1)[-1].lower(), e.get("CCubeBackgroundEntity.en_fSize"), round(e.get("CCubeBackgroundEntity.en_fViewerY"), 2), hex(rec.get("CCubeBackgroundProperties.6")) if rec is not None else "", faces)
         st["sky cube: record texture is an external .tex"] += path.lower().endswith(".tex")
-        st["sky cube: six face textures on the renderable (.10-.15), distinct names"] += len(set(faces)) > 1
+        st["sky cube: six face textures on the renderable (.10-.15), distinct names"] += len({f for f in faces if f}) > 1
         dist["sky cube size (en_fSize)"][e.get("CCubeBackgroundEntity.en_fSize")] += 1
         st["sky cube: size equals the renderable's CCubeRenderable.1"] += e.get("CCubeBackgroundEntity.en_fSize") == rend.get("CCubeRenderable.1")
         st["sky cube: colour (record .6) equals the renderable's CCubeRenderable.3"] += rec is not None and rec.get("CCubeBackgroundProperties.6") == rend.get("CCubeRenderable.3")
+        st["sky cube: record .4 equals the renderable's CCubeRenderable.2"] += rec is not None and rec.get("CCubeBackgroundProperties.4") == rend.get("CCubeRenderable.2")
     # haze / bloom: renderable vs record member equality
     for cls, rcls, pcls, key in (("CHazeEntity", "CHazeEffectRenderable", "CHazeProperties", "haze"), ("CBloomEntity", "CBloomRenderable", "CBloomProperties", "bloom")):
         lst = of(cls); row[key] = []
@@ -112,7 +113,7 @@ def main():
              "## Sky cube", "", "| World | Sky texture | Size | Viewer Y | Colour | Faces (distinct) |", "|---|---|---|---|---|---|"]
         for r in sorted(rows, key=lambda r: r["world"]):
             s = r["sky"]
-            L.append(f"| {r['world']} | " + (f"`{s[0]}` | {s[1]:g} | {s[2]} | `{s[3]}` | {len(set(s[4]))} |" if s else " | | | | |"))
+            L.append(f"| {r['world']} | " + (f"`{s[0]}` | {s[1]:g} | {s[2]} | `{s[3]}` | {len({f for f in s[4] if f})} |" if s else " | | | | |"))
         L += ["", "## Haze volumes", "", "| World | Count | Volumes (colour: members .2 .3 .4 .5 .6 .7 .10) |", "|---|---|---|"]
         for r in sorted(rows, key=lambda r: r["world"]):
             if r["haze"]: L.append(f"| {r['world']} | {len(r['haze'])} | " + "; ".join(f"`{h['color']}`: " + " ".join(f"{h['props'].get(str(k), '-'):g}" if isinstance(h['props'].get(str(k), '-'), (int, float)) else '-' for k in (2, 3, 4, 5, 6, 7, 10)) for h in r["haze"][:6]) + (" …" if len(r["haze"]) > 6 else "") + " |")
