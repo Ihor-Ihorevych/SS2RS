@@ -1,26 +1,53 @@
-//! The interactive window (T03-033): the platform loop (`ss2_platform::window::run`) drives the app through
-//! `PlatformEvent`s; the app routes input to the menu, renders and applies settings effects.
+//! The interactive window: the platform loop (`ss2_platform::window::run`, T03-033) drives the app through
+//! `PlatformEvent`s; the app routes input to the menus or the game, renders and applies settings effects.
+//!
+//! "New Game" opens the level picker; a picked level loads on a worker thread behind a progress bar and is then
+//! played (T03-037): the walker or the free-fly camera of [`PlaySession`], the mouse captured, Esc for the pause
+//! menu, "Quit to Menu" drops the level.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
+use ss2_game::play::{Mode, PlaySession};
+use ss2_physics::query::QueryWorld;
 use ss2_platform::nav::StickNavigator;
 use ss2_platform::window::{PlatformApp, PlatformWindow, WindowConfig};
 use ss2_platform_api::{
-    AppControl, AppHandler, FrameInfo, GamepadAxis, InputEvent, KeyCode, LifecycleEvent,
-    MouseButton, PlatformEvent, PlatformPaths,
+    AppControl, AppHandler, FrameInfo, GamepadAxis, GamepadButton, InputEvent, KeyCode,
+    LifecycleEvent, MouseButton, PlatformEvent, PlatformPaths,
 };
 use ss2_render::Renderer;
-use ss2_ui::{Canvas, Color, DrawList, Menu, UiInput, Vec2, theme};
+use ss2_ui::level_select::{LevelPicker, PickerCommand};
+use ss2_ui::{Canvas, DrawList, Menu, MenuCommand, UiInput, Vec2, theme};
+use ss2_world::scene::LevelScene;
 
 use crate::input::{nav_for_button, nav_for_key};
+use crate::level_session::{SKY, upload};
+use crate::play::{Levels, Loading, draw_hud};
+use crate::play_input::PlayControls;
 use crate::state::{AppState, Effects, Scene};
 use crate::{profiling, screenshot};
 
-/// Clear color of the placeholder "game" scene.
-const PLAYING_CLEAR: Color = Color([0.02, 0.03, 0.05, 1.0]);
+/// What the game scene is doing.
+enum Phase {
+    /// Choosing a level.
+    Picking(LevelPicker),
+    /// Loading one.
+    Loading(Loading),
+    /// Playing one.
+    Playing(Box<Playing>),
+}
+
+struct Playing {
+    session: PlaySession,
+    name: String,
+    /// The renderer's world generation right after this level was uploaded; another value means it must be
+    /// uploaded again (a GPU device rebuild dropped it).
+    uploaded: Option<u64>,
+}
 
 struct App {
     state: AppState,
@@ -41,6 +68,11 @@ struct App {
     frames_left: Option<u32>,
     exit: bool,
     failure: Option<String>,
+    levels: Arc<Levels>,
+    phase: Option<Phase>,
+    controls: PlayControls,
+    /// `--level NAME`: load this level at the first frame.
+    start_level: Option<String>,
 }
 
 /// The settings for this run: the saved file (or the platform defaults when there is none), then
@@ -61,18 +93,27 @@ pub(crate) fn effective_settings(
     Ok(settings)
 }
 
-/// Run the interactive app. With `smoke_frames`, exits after that many frames. `overrides` are
-/// the `--set KEY=VALUE` settings overrides of this run. `paths` provides the settings and capture
-/// locations for an interactive run.
-pub fn run(
-    smoke_frames: Option<u32>,
-    overrides: &[String],
-    paths: Option<&PlatformPaths>,
-) -> Result<(), String> {
-    let settings_path = paths
+/// What a run of the window starts with besides the settings.
+pub(crate) struct RunOptions<'a> {
+    /// Exit after this many frames (automated smoke test).
+    pub smoke_frames: Option<u32>,
+    /// The `--set KEY=VALUE` overrides.
+    pub overrides: &'a [String],
+    /// Settings and capture locations of an interactive run.
+    pub paths: Option<&'a PlatformPaths>,
+    /// The levels the picker offers.
+    pub levels: Levels,
+    /// `--level NAME`: go straight into this level.
+    pub start_level: Option<String>,
+}
+
+/// Run the interactive app.
+pub(crate) fn run(options: RunOptions<'_>) -> Result<(), String> {
+    let settings_path = options
+        .paths
         .map(PlatformPaths::settings_file)
         .or_else(Settings::default_path);
-    let settings = effective_settings(settings_path.as_deref(), overrides)?;
+    let settings = effective_settings(settings_path.as_deref(), options.overrides)?;
     let config = WindowConfig {
         fullscreen: settings.fullscreen,
         ..WindowConfig::default()
@@ -80,9 +121,13 @@ pub fn run(
     let mut app = App::new(
         settings,
         settings_path,
-        paths.map(|paths| paths.save_dir.join("screenshots")),
-        smoke_frames,
+        options
+            .paths
+            .map(|paths| paths.save_dir.join("screenshots")),
+        options.smoke_frames,
+        options.levels,
     );
+    app.start_level = options.start_level;
     ss2_platform::window::run(&config, &mut app).map_err(|e| e.to_string())?;
     match app.failure {
         Some(message) => Err(message),
@@ -96,6 +141,7 @@ impl App {
         settings_path: Option<PathBuf>,
         screenshot_dir: Option<PathBuf>,
         frames_left: Option<u32>,
+        levels: Levels,
     ) -> Self {
         Self {
             state: AppState::new(settings.clone()),
@@ -113,6 +159,10 @@ impl App {
             frames_left,
             exit: false,
             failure: None,
+            levels: Arc::new(levels),
+            phase: None,
+            controls: PlayControls::default(),
+            start_level: None,
         }
     }
 
@@ -136,17 +186,90 @@ impl App {
         }
     }
 
+    fn is_playing(&self) -> bool {
+        self.state.scene == Scene::Playing && matches!(self.phase, Some(Phase::Playing(_)))
+    }
+
+    fn capture_cursor(&self, captured: bool) {
+        if let Some(w) = &self.window
+            && let Err(e) = w.set_cursor_captured(captured)
+        {
+            tracing::debug!("cursor capture {captured}: {e}");
+        }
+    }
+
+    fn new_picker(&self) -> LevelPicker {
+        LevelPicker::new(self.levels.entries())
+    }
+
+    fn start_loading(&mut self, id: &str) {
+        self.state.scene = Scene::Playing;
+        self.phase = Some(Phase::Loading(Loading::start(self.levels.clone(), id)));
+    }
+
+    fn enter_play(&mut self, scene: Arc<LevelScene>, physics: QueryWorld, name: String) {
+        self.controls.release_all();
+        self.phase = Some(Phase::Playing(Box::new(Playing {
+            session: PlaySession::new(scene, physics),
+            name,
+            uploaded: None,
+        })));
+        self.capture_cursor(true);
+    }
+
+    fn pause(&mut self) {
+        self.state.scene = Scene::Menu;
+        self.menu.open_pause();
+        self.controls.release_all();
+        self.capture_cursor(false);
+    }
+
+    fn leave_game(&mut self) {
+        self.phase = None;
+        self.controls.release_all();
+        self.capture_cursor(false);
+        if let Some(r) = self.renderer.as_mut() {
+            r.clear_world();
+        }
+    }
+
     fn dispatch(&mut self, input: UiInput) {
         match self.state.scene {
-            Scene::Playing => {
-                if input == UiInput::Nav(NavInput::Back) {
-                    self.state.scene = Scene::Menu;
-                    self.menu.open_pause();
+            Scene::Playing => match &mut self.phase {
+                Some(Phase::Picking(picker)) => match picker.handle(input) {
+                    Some(PickerCommand::Start(id)) => self.start_loading(&id),
+                    Some(PickerCommand::Back) => {
+                        self.leave_game();
+                        self.state.scene = Scene::Menu;
+                        self.menu.open_main();
+                    }
+                    None => {}
+                },
+                // The worker finishes on its own; its result is dropped.
+                Some(Phase::Loading(_)) if input == UiInput::Nav(NavInput::Back) => {
+                    self.phase = Some(Phase::Picking(self.new_picker()));
                 }
-            }
+                Some(Phase::Playing(_)) if input == UiInput::Nav(NavInput::Back) => self.pause(),
+                _ => {}
+            },
             Scene::Menu => {
                 for cmd in self.menu.handle(input) {
-                    let effects = self.state.apply(cmd);
+                    let effects = self.state.apply(cmd.clone());
+                    match cmd {
+                        MenuCommand::StartGame => {
+                            self.phase = Some(Phase::Picking(self.new_picker()));
+                        }
+                        MenuCommand::Resume => {
+                            if self.phase.is_none() {
+                                self.phase = Some(Phase::Picking(self.new_picker()));
+                            }
+                            if self.is_playing() {
+                                self.capture_cursor(true);
+                            }
+                        }
+                        MenuCommand::QuitToMenu => self.leave_game(),
+                        _ => {}
+                    }
                     self.run_effects(effects);
                 }
             }
@@ -184,24 +307,109 @@ impl App {
         }
     }
 
+    /// Input while a level is being played: Esc and Start pause, a click takes the mouse back (after focus was
+    /// lost), F12 still takes a screenshot, everything else goes to the controls.
+    fn play_input(&mut self, input: InputEvent) {
+        match input {
+            InputEvent::Key {
+                key: KeyCode::Escape,
+                pressed: true,
+                ..
+            }
+            | InputEvent::GamepadButton {
+                button: GamepadButton::Start,
+                pressed: true,
+                ..
+            } => self.pause(),
+            InputEvent::Key {
+                key: KeyCode::F12,
+                pressed: true,
+                repeat,
+            } => self.key_pressed(KeyCode::F12, repeat),
+            InputEvent::MouseButton {
+                button: MouseButton::Left,
+                pressed: true,
+            } => self.capture_cursor(true),
+            other => self.controls.on_event(&other),
+        }
+    }
+
+    /// Advance the game scene by `dt` seconds.
+    fn advance(&mut self, dt: f32) {
+        match &mut self.phase {
+            Some(Phase::Loading(loading)) => {
+                if let Some(result) = loading.poll(dt) {
+                    let name = loading.name.clone();
+                    match result {
+                        Ok((scene, physics)) => self.enter_play(scene, physics, name),
+                        Err(e) => {
+                            tracing::warn!("cannot load {name}: {e}");
+                            self.phase = Some(Phase::Picking(self.new_picker()));
+                        }
+                    }
+                }
+            }
+            Some(Phase::Playing(playing)) if self.state.scene == Scene::Playing => {
+                let input = self.controls.frame(dt);
+                playing.session.update(&input, dt);
+            }
+            _ => {}
+        }
+    }
+
     fn redraw(&mut self) {
         profiling::frame();
         profiling::profile_scope!("redraw");
-        let clear = match self.state.scene {
-            Scene::Menu => {
+        let mut world = None;
+        let clear = match (self.state.scene, &mut self.phase) {
+            (Scene::Menu, _) => {
                 self.menu.draw_into(&mut self.draw_list);
                 theme::BACKGROUND
             }
-            Scene::Playing => {
+            (Scene::Playing, Some(Phase::Picking(picker))) => {
                 self.draw_list.clear();
-                PLAYING_CLEAR
+                picker.draw(&mut self.draw_list);
+                theme::BACKGROUND
+            }
+            (Scene::Playing, Some(Phase::Loading(loading))) => {
+                loading.draw(&mut self.draw_list);
+                theme::BACKGROUND
+            }
+            (Scene::Playing, Some(Phase::Playing(playing))) => {
+                if let Some(renderer) = self.renderer.as_mut()
+                    && playing.uploaded != Some(renderer.world_generation())
+                {
+                    match upload(renderer, playing.session.scene()) {
+                        Ok(report) => {
+                            tracing::info!(level = %playing.name, ?report, "level on the GPU");
+                            playing.uploaded = Some(renderer.world_generation());
+                        }
+                        Err(e) => {
+                            self.failure = Some(format!("cannot upload {}: {e}", playing.name));
+                            self.exit = true;
+                            return;
+                        }
+                    }
+                }
+                draw_hud(
+                    &mut self.draw_list,
+                    &playing.name,
+                    playing.session.mode() == Mode::Fly,
+                );
+                world = Some(playing.session.camera());
+                SKY
+            }
+            (Scene::Playing, None) => {
+                self.draw_list.clear();
+                theme::BACKGROUND
             }
         };
         let rendered = {
             profiling::profile_scope!("render");
-            self.renderer
-                .as_mut()
-                .map(|renderer| renderer.render(&self.draw_list, clear))
+            self.renderer.as_mut().map(|renderer| match &world {
+                Some(camera) => renderer.render_world(camera, &self.draw_list, clear),
+                None => renderer.render(&self.draw_list, clear),
+            })
         };
         if let Some(Err(e)) = rendered {
             self.failure = Some(format!("rendering failed: {e}"));
@@ -211,8 +419,13 @@ impl App {
         if self.capture_pending && self.canvas().is_some() {
             self.capture_pending = false;
             if let (Some(renderer), Some(dir)) = (&mut self.renderer, &self.screenshot_dir) {
-                let capture = renderer
-                    .capture_frame(Some(&self.draw_list), clear)
+                let image = match &world {
+                    Some(camera) => {
+                        renderer.render_world_to_image(camera, Some(&self.draw_list), clear)
+                    }
+                    None => renderer.capture_frame(Some(&self.draw_list), clear),
+                };
+                let capture = image
                     .map_err(|error| error.to_string())
                     .and_then(|image| screenshot::save_interactive(dir, &image));
                 match capture {
@@ -226,8 +439,17 @@ impl App {
 
 impl AppHandler for App {
     fn event(&mut self, event: PlatformEvent) -> AppControl {
+        if let PlatformEvent::Input(input) = &event
+            && self.is_playing()
+        {
+            self.play_input(input.clone());
+            return self.control();
+        }
         match event {
             PlatformEvent::Lifecycle(LifecycleEvent::CloseRequested) => self.exit = true,
+            PlatformEvent::Lifecycle(LifecycleEvent::FocusChanged(false)) => {
+                self.controls.release_all();
+            }
             PlatformEvent::Lifecycle(
                 LifecycleEvent::Resized { width, height }
                 | LifecycleEvent::SurfaceReady(ss2_platform_api::SurfaceInfo {
@@ -278,11 +500,18 @@ impl AppHandler for App {
     }
 
     fn frame(&mut self, frame: &FrameInfo) -> AppControl {
+        if let Some(id) = self.start_level.take() {
+            self.start_loading(&id);
+        }
+        let dt = frame.delta.as_secs_f32();
         self.clock += frame.delta;
         let now_ms = u64::try_from(self.clock.as_millis()).unwrap_or(u64::MAX);
-        if let Some(nav) = self.stick.update(self.stick_xy.0, self.stick_xy.1, now_ms) {
+        if !self.is_playing()
+            && let Some(nav) = self.stick.update(self.stick_xy.0, self.stick_xy.1, now_ms)
+        {
             self.dispatch(UiInput::Nav(nav));
         }
+        self.advance(dt);
         self.redraw();
         if let Some(left) = self.frames_left.as_mut() {
             *left = left.saturating_sub(1);
@@ -307,182 +536,21 @@ impl PlatformApp for App {
             self.renderer = Some(renderer);
         }
         self.window = Some(window.clone());
+        if self.is_playing() {
+            self.capture_cursor(true);
+        }
         Ok(())
     }
 
     fn window_lost(&mut self) {
         self.renderer = None;
         self.window = None;
+        if let Some(Phase::Playing(playing)) = &mut self.phase {
+            playing.uploaded = None;
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ss2_platform_api::{GamepadButton, GamepadId, ScriptStep, run_script};
-    use ss2_ui::ScreenId;
-
-    #[test]
-    fn without_a_file_or_overrides_the_platform_defaults_apply() {
-        let s = effective_settings(None, &[]).unwrap();
-        assert_eq!(
-            s,
-            Settings::for_platform(ss2_core::settings::PlatformClass::current())
-        );
-    }
-
-    #[test]
-    fn overrides_are_applied_on_top_of_the_saved_settings() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.toml");
-        std::fs::write(&path, "vsync = false\nmaster_volume = 0.3\n").unwrap();
-        let overrides = ["fullscreen=1".to_owned(), "master_volume=0.9".to_owned()];
-        let s = effective_settings(Some(&path), &overrides).unwrap();
-        assert!(!s.vsync, "kept from the file");
-        assert!(s.fullscreen, "set by the override");
-        assert_eq!(s.master_volume, 0.9, "the override wins over the file");
-    }
-
-    #[test]
-    fn a_bad_override_is_an_error_naming_it() {
-        let message = effective_settings(None, &["brightness=1".to_owned()]).unwrap_err();
-        assert!(message.contains("brightness"), "{message}");
-    }
-
-    fn app() -> App {
-        App::new(
-            Settings::for_platform(ss2_core::settings::PlatformClass::current()),
-            None,
-            None,
-            None,
-        )
-    }
-
-    fn key(key: KeyCode) -> ScriptStep {
-        InputEvent::Key {
-            key,
-            pressed: true,
-            repeat: false,
-        }
-        .into()
-    }
-
-    #[test]
-    fn closing_the_window_exits() {
-        let mut a = app();
-        let report = run_script(
-            &mut a,
-            [
-                ScriptStep::Frame,
-                LifecycleEvent::CloseRequested.into(),
-                ScriptStep::Frame,
-            ],
-        );
-        assert!(report.exited);
-        assert_eq!(report.frames, 1);
-    }
-
-    #[test]
-    fn enter_starts_the_game_and_escape_pauses_it() {
-        let mut a = app();
-        run_script(&mut a, [key(KeyCode::Enter), ScriptStep::Frame]);
-        assert_eq!(a.state.scene, Scene::Playing);
-        run_script(&mut a, [key(KeyCode::Escape), ScriptStep::Frame]);
-        assert_eq!(a.state.scene, Scene::Menu);
-        assert_eq!(a.menu.screen(), ScreenId::Pause);
-    }
-
-    #[test]
-    fn quit_from_the_main_menu_exits() {
-        let mut a = app();
-        let report = run_script(
-            &mut a,
-            [
-                key(KeyCode::ArrowDown),
-                key(KeyCode::ArrowDown),
-                key(KeyCode::ArrowDown),
-                key(KeyCode::Enter),
-                ScriptStep::Frame,
-            ],
-        );
-        assert!(report.exited);
-    }
-
-    #[test]
-    fn released_and_repeated_keys_do_not_navigate_twice() {
-        let mut a = app();
-        run_script(
-            &mut a,
-            [InputEvent::Key {
-                key: KeyCode::Enter,
-                pressed: false,
-                repeat: false,
-            }
-            .into()],
-        );
-        assert_eq!(a.state.scene, Scene::Menu, "a release does nothing");
-    }
-
-    #[test]
-    fn the_gamepad_navigates_with_buttons_and_the_held_stick_repeats() {
-        let mut a = app();
-        let start = a.menu.focused();
-        let pad = GamepadId(0);
-        let mut steps: Vec<ScriptStep> = vec![
-            InputEvent::GamepadAxis {
-                pad,
-                axis: GamepadAxis::LeftStickY,
-                value: -1.0,
-            }
-            .into(),
-        ];
-        steps.push(ScriptStep::Frame);
-        run_script(&mut a, steps);
-        assert_ne!(a.menu.focused(), start, "the stick moved the focus down");
-        let after_one = a.menu.focused();
-        // Held for half a second: it repeats.
-        run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 30));
-        assert_ne!(a.menu.focused(), after_one, "held, it repeats");
-        // Released, then South activates whatever is focused (here: not New Game, so still the menu).
-        run_script(
-            &mut a,
-            [InputEvent::GamepadAxis {
-                pad,
-                axis: GamepadAxis::LeftStickY,
-                value: 0.0,
-            }
-            .into()],
-        );
-        let mut b = app();
-        run_script(
-            &mut b,
-            [InputEvent::GamepadButton {
-                pad,
-                button: GamepadButton::South,
-                pressed: true,
-            }
-            .into()],
-        );
-        assert_eq!(b.state.scene, Scene::Playing, "South activates New Game");
-    }
-
-    #[test]
-    fn smoke_frames_exit_after_the_count() {
-        let mut a = App::new(
-            Settings::for_platform(ss2_core::settings::PlatformClass::current()),
-            None,
-            None,
-            Some(3),
-        );
-        let report = run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 10));
-        assert_eq!((report.frames, report.exited), (3, true));
-    }
-
-    #[test]
-    fn f12_without_a_screenshot_folder_does_nothing() {
-        let mut a = app();
-        run_script(&mut a, [key(KeyCode::F12), ScriptStep::Frame]);
-        assert!(!a.capture_pending);
-        assert_eq!(a.state.scene, Scene::Menu);
-    }
-}
+#[path = "app_tests.rs"]
+mod tests;

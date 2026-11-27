@@ -10,6 +10,8 @@ mod data_location_tests;
 mod diagnostics;
 mod input;
 mod level_session;
+mod play;
+mod play_input;
 mod profiling;
 mod screenshot;
 mod state;
@@ -54,7 +56,13 @@ fn main() -> ExitCode {
             Ok(())
         }
         cli::Mode::Window(options) => launch(&options, paths.as_ref()),
-        cli::Mode::Smoke { frames } => app::run(Some(frames), &[], None),
+        cli::Mode::Smoke { frames } => app::run(app::RunOptions {
+            smoke_frames: Some(frames),
+            overrides: &[],
+            paths: None,
+            levels: play::Levels::new(None),
+            start_level: None,
+        }),
         cli::Mode::Screenshot { screen, out, size } => screenshot::take(screen, &out, size),
         cli::Mode::LevelScreenshot {
             level,
@@ -72,8 +80,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// Open the interactive window. The launch options that need features which do not exist yet
-/// are reported instead of being silently ignored.
+/// Open the interactive window with the levels of the player's install (`--data`, `SS2_DATA_DIR` or the search;
+/// without an install only the test room is offered). The launch options that need features which do not exist
+/// yet are reported instead of being silently ignored.
 fn launch(
     options: &ss2_core::cli::LaunchOptions,
     paths: Option<&ss2_platform_api::PlatformPaths>,
@@ -81,11 +90,18 @@ fn launch(
     if options.connect.is_some() || options.listen {
         return Err("--connect and --listen need multiplayer, which is not implemented yet".into());
     }
-    if let Some(level) = &options.level {
-        tracing::warn!("--level {level} is ignored: the app has no game data support yet");
-    }
-    if let Some(dir) = &options.data_dir {
-        tracing::info!("game data folder {} (not used yet)", dir.display());
-    }
-    app::run(None, &options.set, paths)
+    let game = level_session::data_dir(options.data_dir.as_deref())
+        .and_then(|dir| {
+            tracing::info!("game data folder {}", dir.display());
+            level_session::GameData::open(&dir)
+        })
+        .inspect_err(|e| tracing::warn!("no game data: {e}"))
+        .ok();
+    app::run(app::RunOptions {
+        smoke_frames: None,
+        overrides: &options.set,
+        paths,
+        levels: play::Levels::new(game),
+        start_level: options.level.clone(),
+    })
 }

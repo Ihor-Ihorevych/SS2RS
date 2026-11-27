@@ -1,0 +1,266 @@
+//! Headless tests of the app through `run_script` (no window, no renderer).
+
+use std::time::{Duration, Instant};
+
+use super::*;
+use crate::play::TEST_ROOM_ID;
+use ss2_platform_api::{GamepadId, ScriptStep, run_script};
+use ss2_ui::ScreenId;
+
+#[test]
+fn without_a_file_or_overrides_the_platform_defaults_apply() {
+    let s = effective_settings(None, &[]).unwrap();
+    assert_eq!(
+        s,
+        Settings::for_platform(ss2_core::settings::PlatformClass::current())
+    );
+}
+
+#[test]
+fn overrides_are_applied_on_top_of_the_saved_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.toml");
+    std::fs::write(&path, "vsync = false\nmaster_volume = 0.3\n").unwrap();
+    let overrides = ["fullscreen=1".to_owned(), "master_volume=0.9".to_owned()];
+    let s = effective_settings(Some(&path), &overrides).unwrap();
+    assert!(!s.vsync, "kept from the file");
+    assert!(s.fullscreen, "set by the override");
+    assert_eq!(s.master_volume, 0.9, "the override wins over the file");
+}
+
+#[test]
+fn a_bad_override_is_an_error_naming_it() {
+    let message = effective_settings(None, &["brightness=1".to_owned()]).unwrap_err();
+    assert!(message.contains("brightness"), "{message}");
+}
+
+fn app() -> App {
+    App::new(
+        Settings::for_platform(ss2_core::settings::PlatformClass::current()),
+        None,
+        None,
+        None,
+        Levels::new(None),
+    )
+}
+
+fn key(key: KeyCode, pressed: bool) -> ScriptStep {
+    InputEvent::Key {
+        key,
+        pressed,
+        repeat: false,
+    }
+    .into()
+}
+
+fn tap(k: KeyCode) -> [ScriptStep; 2] {
+    [key(k, true), key(k, false)]
+}
+
+/// Run frames until the level has loaded (the worker thread needs real time).
+fn until_playing(a: &mut App) {
+    let until = Instant::now() + Duration::from_secs(20);
+    while !a.is_playing() {
+        assert!(Instant::now() < until, "the level never finished loading");
+        run_script(a, [ScriptStep::Frame]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn session(a: &App) -> &PlaySession {
+    match &a.phase {
+        Some(Phase::Playing(p)) => &p.session,
+        _ => panic!("not playing"),
+    }
+}
+
+#[test]
+fn closing_the_window_exits() {
+    let mut a = app();
+    let report = run_script(
+        &mut a,
+        [
+            ScriptStep::Frame,
+            LifecycleEvent::CloseRequested.into(),
+            ScriptStep::Frame,
+        ],
+    );
+    assert!(report.exited);
+    assert_eq!(report.frames, 1);
+}
+
+#[test]
+fn new_game_opens_the_picker_and_back_returns_to_the_main_menu() {
+    let mut a = app();
+    run_script(&mut a, tap(KeyCode::Enter));
+    assert_eq!(a.state.scene, Scene::Playing);
+    assert!(matches!(a.phase, Some(Phase::Picking(_))));
+    run_script(&mut a, tap(KeyCode::Escape));
+    assert_eq!(a.state.scene, Scene::Menu);
+    assert_eq!(a.menu.screen(), ScreenId::Main);
+    assert!(a.phase.is_none());
+}
+
+#[test]
+fn picking_the_test_room_loads_it_and_walking_moves_through_it() {
+    let mut a = app();
+    run_script(&mut a, tap(KeyCode::Enter)); // New Game
+    run_script(&mut a, tap(KeyCode::Enter)); // the only entry: the test room
+    assert!(matches!(a.phase, Some(Phase::Loading(_))));
+    until_playing(&mut a);
+    let start = session(&a).feet();
+    // Hold W for half a second, looking a little to the right with the mouse.
+    let mut steps = vec![key(KeyCode::W, true)];
+    steps.push(InputEvent::MouseMotion { dx: 40.0, dy: 0.0 }.into());
+    steps.extend(std::iter::repeat_n(ScriptStep::Frame, 30));
+    steps.push(key(KeyCode::W, false));
+    run_script(&mut a, steps);
+    let moved = session(&a).feet() - start;
+    assert!(moved.z < -1.0, "walked forward (-Z): {moved}");
+    assert!(moved.x > 0.0, "turned right a little: {moved}");
+    assert!(session(&a).grounded());
+}
+
+#[test]
+fn escape_pauses_resume_continues_and_quit_to_menu_drops_the_level() {
+    let mut a = app();
+    a.start_level = Some(TEST_ROOM_ID.to_string());
+    until_playing(&mut a);
+    run_script(&mut a, [key(KeyCode::W, true)]);
+    run_script(&mut a, tap(KeyCode::Escape));
+    assert_eq!(a.state.scene, Scene::Menu);
+    assert_eq!(a.menu.screen(), ScreenId::Pause);
+    // Paused: frames do not move the walker, and the held W was let go.
+    let paused_at = session(&a).feet();
+    run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 20));
+    assert_eq!(session(&a).feet(), paused_at);
+    // Resume (the first pause item).
+    run_script(&mut a, tap(KeyCode::Enter));
+    assert!(a.is_playing());
+    run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 20));
+    assert_eq!(session(&a).feet(), paused_at, "W was released by the pause");
+    // Pause again and quit to the menu: the level is gone.
+    run_script(&mut a, tap(KeyCode::Escape));
+    run_script(
+        &mut a,
+        [
+            tap(KeyCode::ArrowDown),
+            tap(KeyCode::ArrowDown),
+            tap(KeyCode::Enter),
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    assert_eq!(a.state.scene, Scene::Menu);
+    assert!(a.phase.is_none());
+}
+
+#[test]
+fn f_switches_to_flying_and_the_gamepad_start_button_pauses() {
+    let mut a = app();
+    a.start_level = Some(TEST_ROOM_ID.to_string());
+    until_playing(&mut a);
+    run_script(
+        &mut a,
+        tap(KeyCode::F).into_iter().chain([ScriptStep::Frame]),
+    );
+    assert_eq!(session(&a).mode(), Mode::Fly);
+    let mut steps = vec![key(KeyCode::Space, true)];
+    steps.extend(std::iter::repeat_n(ScriptStep::Frame, 30));
+    run_script(&mut a, steps);
+    assert!(session(&a).camera().position.y > 3.0, "flew up");
+    run_script(
+        &mut a,
+        [InputEvent::GamepadButton {
+            pad: GamepadId(0),
+            button: GamepadButton::Start,
+            pressed: true,
+        }
+        .into()],
+    );
+    assert_eq!(a.state.scene, Scene::Menu);
+}
+
+#[test]
+fn escape_while_loading_goes_back_to_the_picker() {
+    let mut a = app();
+    run_script(&mut a, tap(KeyCode::Enter));
+    run_script(&mut a, tap(KeyCode::Enter));
+    assert!(matches!(a.phase, Some(Phase::Loading(_))));
+    run_script(&mut a, tap(KeyCode::Escape));
+    assert!(matches!(a.phase, Some(Phase::Picking(_))));
+}
+
+#[test]
+fn quit_from_the_main_menu_exits() {
+    let mut a = app();
+    let report = run_script(
+        &mut a,
+        [
+            key(KeyCode::ArrowDown, true),
+            key(KeyCode::ArrowDown, true),
+            key(KeyCode::ArrowDown, true),
+            key(KeyCode::Enter, true),
+            ScriptStep::Frame,
+        ],
+    );
+    assert!(report.exited);
+}
+
+#[test]
+fn the_gamepad_navigates_menus_with_a_held_stick_that_repeats() {
+    let mut a = app();
+    let start = a.menu.focused();
+    let pad = GamepadId(0);
+    run_script(
+        &mut a,
+        [
+            InputEvent::GamepadAxis {
+                pad,
+                axis: GamepadAxis::LeftStickY,
+                value: -1.0,
+            }
+            .into(),
+            ScriptStep::Frame,
+        ],
+    );
+    assert_ne!(a.menu.focused(), start, "the stick moved the focus down");
+    let after_one = a.menu.focused();
+    run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 30));
+    assert_ne!(a.menu.focused(), after_one, "held, it repeats");
+    let mut b = app();
+    run_script(
+        &mut b,
+        [InputEvent::GamepadButton {
+            pad,
+            button: GamepadButton::South,
+            pressed: true,
+        }
+        .into()],
+    );
+    assert!(
+        matches!(b.phase, Some(Phase::Picking(_))),
+        "South activates New Game"
+    );
+}
+
+#[test]
+fn smoke_frames_exit_after_the_count() {
+    let mut a = App::new(
+        Settings::for_platform(ss2_core::settings::PlatformClass::current()),
+        None,
+        None,
+        Some(3),
+        Levels::new(None),
+    );
+    let report = run_script(&mut a, std::iter::repeat_n(ScriptStep::Frame, 10));
+    assert_eq!((report.frames, report.exited), (3, true));
+}
+
+#[test]
+fn f12_without_a_screenshot_folder_does_nothing() {
+    let mut a = app();
+    run_script(&mut a, [key(KeyCode::F12, true), ScriptStep::Frame]);
+    assert!(!a.capture_pending);
+    assert_eq!(a.state.scene, Scene::Menu);
+}
