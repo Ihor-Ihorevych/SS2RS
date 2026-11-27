@@ -160,6 +160,7 @@ Defaults and data are in section 2. Test: the Kleer's land record with speed 8.5
 2. **The explosion service call of `ExplodeState`** (the exact meaning of its six arguments, whether it is a radius damage at the puppet's position, who applies it) and the damage record of healing: T01-381 (with T01-364, which owns the rest of `OnReceiveDamage`).
 3. **Run-time checks on the original** (T01-382): the healing ticks (start below the threshold, rate, stop at the end threshold, the macro events), the explosion trigger (accumulated damage with and without the bullet flag), the animation blend time, the sound range overrides, the nominal-health scaling of the thresholds in co-op.
 4. The roles of the environment record beyond the three uses read here (the per-step factors of the acceleration and rotation, the air-control and thrust interplay, who sets `en_bAddingThrust`) belong to the legged step (T01-141); the unscaled speed units of the other models are in T01-142.
+5. The player's own environment, body and moving-abilities numbers, read out of these same records, are tabulated in [`player-movement-constants.md`](player-movement-constants.md) (T01-410).
 
 ## Test vectors
 
