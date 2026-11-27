@@ -19,13 +19,35 @@ struct Variant {
     model_file: &'static str,
     /// An entity id of `CWorld.1` that is replaced by this (to make it dangle).
     entity_override: Option<u32>,
+    /// Whether and how the world has a sky entity.
+    sky: SkyKind,
+}
+
+/// The sky entity of the synthetic world.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SkyKind {
+    /// No `CCubeBackgroundEntity`.
+    Absent,
+    /// A five-face sky (no floor) with its property record.
+    WithRecord,
+    /// The same sky without a property record.
+    WithoutRecord,
+    /// A sky whose renderable names no face texture at all (and a record without a texture).
+    NoFaces,
 }
 
 const NORMAL: Variant = Variant {
     worlds: 1,
     model_file: "Content/Test/Box.mdl",
     entity_override: None,
+    sky: SkyKind::Absent,
 };
+
+const NORTH_TEX: &str = "Content/Test/Sky/Night_0000.tex";
+const WEST_TEX: &str = "Content/Test/Sky/Night_0003.tex";
+const SOUTH_TEX: &str = "Content/Test/Sky/Night_0002.tex";
+const EAST_TEX: &str = "Content/Test/Sky/Night_0001.tex";
+const CEILING_TEX: &str = "Content/Test/Sky/Night_0004.tex";
 
 /// 90 degrees about +y, as stored (x, y, z, w).
 const ROT_Y90: [f32; 4] = [0.0, FRAC_1_SQRT_2, 0.0, FRAC_1_SQRT_2];
@@ -227,12 +249,97 @@ fn world_file(v: Variant) -> Vec<u8> {
         &[],
     ));
     b.type_block(TypeBlock::class(33, "CModelConfiguration", 3, 5, None, &[]));
+    // The sky classes (`environment-schema.md`).
+    b.external_type(102, "CStaticTexture");
+    b.type_block(TypeBlock::alias(40, "COLOR", 0));
+    b.type_block(TypeBlock::alias(41, "BOOL", 0));
+    b.type_block(TypeBlock::pointer(42, "Ptr<CTexture>", 102));
+    b.type_block(TypeBlock::class(
+        43,
+        "CCubeRenderable",
+        3,
+        5,
+        Some(14),
+        &[
+            ("1", 1),
+            ("2", 1),
+            ("3", 40),
+            ("10", 42),
+            ("11", 42),
+            ("12", 42),
+            ("13", 42),
+            ("14", 42),
+            ("15", 42),
+        ],
+    ));
+    b.type_block(TypeBlock::pointer(44, "CCubeRenderable*", 43));
+    b.type_block(TypeBlock::class(
+        45,
+        "CSimpleBackgroundViewerRenderable",
+        1,
+        5,
+        Some(14),
+        &[("1", 1)],
+    ));
+    b.type_block(TypeBlock::pointer(
+        46,
+        "CSimpleBackgroundViewerRenderable*",
+        45,
+    ));
+    b.type_block(TypeBlock::class(
+        47,
+        "CCubeBackgroundEntity",
+        5,
+        5,
+        Some(7),
+        &[
+            ("1", 44),
+            ("3", 46),
+            ("en_qvPlacement", 6),
+            ("en_fSize", 1),
+            ("en_fViewerY", 1),
+            ("en_bActive", 41),
+        ],
+    ));
+    b.type_block(TypeBlock::class(
+        48,
+        "CCubeBackgroundProperties",
+        8,
+        5,
+        Some(10),
+        &[
+            ("1", 42),
+            ("6", 40),
+            ("2", 1),
+            ("3", 1),
+            ("4", 1),
+            ("5", 41),
+            ("ep_bActive", 41),
+        ],
+    ));
     b.external_object(50, module, 10, 100);
     b.external_object(51, mdl, 1, 101);
+    for (id, path) in [
+        (70, NORTH_TEX),
+        (71, WEST_TEX),
+        (72, SOUTH_TEX),
+        (73, EAST_TEX),
+        (74, CEILING_TEX),
+    ] {
+        let file = b.file_ref(path, 0);
+        b.external_object(id, file, 1, 102);
+    }
 
     let mut entities = vec![3, 4, 5, 6];
     if let Some(id) = v.entity_override {
         entities[1] = id;
+    }
+    let mut records = vec![60, 61, 62];
+    if v.sky != SkyKind::Absent {
+        entities.push(7);
+    }
+    if matches!(v.sky, SkyKind::WithRecord | SkyKind::NoFaces) {
+        records.push(63);
     }
     for i in 0..v.worlds {
         let id = if i == 0 { 1 } else { 90 + i as u32 };
@@ -241,7 +348,7 @@ fn world_file(v: Variant) -> Vec<u8> {
             13,
             ObjectBytes::new()
                 .dynamic_container(&entities)
-                .dynamic_container(&[60, 61, 62])
+                .dynamic_container(&records)
                 .f32(0.0)
                 .f32(-30.0)
                 .f32(0.0)
@@ -375,6 +482,44 @@ fn world_file(v: Variant) -> Vec<u8> {
         .finish(),
     );
 
+    // Entity 7: the sky, its cube renderable 20 and viewer renderable 21.
+    if v.sky != SkyKind::Absent {
+        let placement = (ROT_Y90, [1.0, 2.0, 3.0]);
+        b.object(
+            7,
+            47,
+            quat_vect(
+                entity(5).object_ref(Some(20)).object_ref(Some(21)),
+                placement.0,
+                placement.1,
+            )
+            .f32(64.0)
+            .f32(0.0)
+            .u32(1)
+            .finish(),
+        );
+        let faces: [Option<u32>; 6] = if v.sky == SkyKind::NoFaces {
+            [None; 6]
+        } else {
+            [Some(70), Some(71), Some(72), Some(73), None, Some(74)]
+        };
+        let mut cube = aspect(None, placement, placement, Some(7))
+            .f32(64.0)
+            .f32(1.0)
+            .u32(0x00FF_FFFF);
+        for f in faces {
+            cube = cube.object_ref(f);
+        }
+        b.object(20, 43, cube.finish());
+        b.object(
+            21,
+            45,
+            aspect(None, placement, placement, Some(7))
+                .f32(5.22)
+                .finish(),
+        );
+    }
+
     // The property records, in the extra section.
     let record = |id: u32, type_id: u32, entity: u32, name: &str| {
         let r = ObjectBytes::new()
@@ -395,7 +540,27 @@ fn world_file(v: Variant) -> Vec<u8> {
         b.edty_pair(id, type_id);
         extra.extend(record(id, type_id, entity, name));
     }
-    b.after_edob(3, &extra);
+    if records.contains(&63) {
+        // The sky's record: values that differ from the renderable's, to show which is read.
+        let texture = (v.sky == SkyKind::WithRecord).then_some(72);
+        b.edty_pair(63, 48);
+        let r = quat_vect(
+            ObjectBytes::new().u32(63).u32(48).object_ref(Some(7)),
+            IDENTITY,
+            [0.0, 0.0, 0.0],
+        )
+        .cstring("MDG_VillageDay_Bckg")
+        .object_ref(None)
+        .object_ref(texture)
+        .u32(0xFA7E_7E7E)
+        .f32(32.0)
+        .f32(-2.5)
+        .f32(0.0)
+        .u32(1)
+        .u32(1);
+        extra.extend(r.finish());
+    }
+    b.after_edob(records.len() as u32, &extra);
     b.build().unwrap()
 }
 
@@ -474,6 +639,78 @@ fn markers_take_the_world_placement_of_their_top_aspect() {
 }
 
 #[test]
+fn a_world_without_a_sky_entity_has_no_sky() {
+    assert_eq!(World::from_bytes(&world_file(NORMAL)).unwrap().sky, None);
+}
+
+#[test]
+fn the_sky_is_read_from_its_renderable_and_record() {
+    let world = World::from_bytes(&world_file(Variant {
+        sky: SkyKind::WithRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    assert_eq!(world.entity_count, 5);
+    let sky = world.sky.expect("a sky");
+    assert_eq!((sky.serial, sky.name.as_str()), (5, "MDG_VillageDay_Bckg"));
+    // The face members `.10`..`.15` are North, West, South, East, Floor, Ceiling.
+    assert_eq!(sky.face(SkyFace::North), Some(NORTH_TEX));
+    assert_eq!(sky.face(SkyFace::West), Some(WEST_TEX));
+    assert_eq!(sky.face(SkyFace::South), Some(SOUTH_TEX));
+    assert_eq!(sky.face(SkyFace::East), Some(EAST_TEX));
+    assert_eq!(sky.face(SkyFace::Floor), None);
+    assert_eq!(sky.face(SkyFace::Ceiling), Some(CEILING_TEX));
+    assert_eq!(sky.face_count(), 5);
+    // The record's values win over the renderable's (they agree in the retail data).
+    assert_eq!(sky.texture.as_deref(), Some(SOUTH_TEX));
+    assert_eq!(sky.color, 0xFA7E_7E7E);
+    assert_eq!((sky.size, sky.viewer_y, sky.flag_4), (32.0, -2.5, 0.0));
+    assert_eq!(sky.flag_5, Some(true));
+    assert_eq!(sky.viewer_value, Some(5.22));
+    assert_quat(sky.rotation, ROT_Y90);
+    assert_vec(sky.translation, [1.0, 2.0, 3.0]);
+}
+
+#[test]
+fn a_sky_without_a_record_takes_the_renderables_values() {
+    let world = World::from_bytes(&world_file(Variant {
+        sky: SkyKind::WithoutRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    let sky = world.sky.expect("a sky");
+    assert_eq!((sky.serial, sky.name.as_str()), (5, ""));
+    assert_eq!(sky.face(SkyFace::North), Some(NORTH_TEX));
+    assert_eq!(sky.texture, None);
+    assert_eq!(sky.color, 0x00FF_FFFF);
+    assert_eq!((sky.size, sky.viewer_y, sky.flag_4), (64.0, 0.0, 1.0));
+    assert_eq!(sky.flag_5, None);
+}
+
+#[test]
+fn a_sky_may_have_no_face_textures() {
+    let world = World::from_bytes(&world_file(Variant {
+        sky: SkyKind::NoFaces,
+        ..NORMAL
+    }))
+    .unwrap();
+    let sky = world.sky.expect("a sky");
+    assert!(SkyFace::ALL.iter().all(|f| sky.face(*f).is_none()));
+    assert_eq!(sky.face_count(), 0);
+    assert_eq!(sky.texture, None);
+    assert_eq!(sky.color, 0xFA7E_7E7E);
+}
+
+#[test]
+fn sky_faces_name_their_members_in_order() {
+    let members: Vec<_> = SkyFace::ALL.iter().map(|f| f.member()).collect();
+    assert_eq!(members, ["10", "11", "12", "13", "14", "15"]);
+    for (i, f) in SkyFace::ALL.iter().enumerate() {
+        assert_eq!(f.index(), i);
+    }
+}
+
+#[test]
 fn a_world_needs_exactly_one_root() {
     for worlds in [0, 2] {
         let err = World::from_bytes(&world_file(Variant { worlds, ..NORMAL }))
@@ -504,7 +741,10 @@ fn a_dangling_entity_or_a_model_that_is_not_an_mdl_is_an_error() {
 
 #[test]
 fn nothing_panics_on_damaged_files() {
-    let good = world_file(NORMAL);
+    let good = world_file(Variant {
+        sky: SkyKind::WithRecord,
+        ..NORMAL
+    });
     for len in (0..good.len()).step_by(7) {
         let _ = World::from_bytes(&good[..len]);
     }

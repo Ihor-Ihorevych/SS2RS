@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::f32::consts::FRAC_1_SQRT_2;
 
 use ss2_core::math::{Quat, Vec3};
-use ss2_format_wld::{ModelRef, World};
+use ss2_format_wld::{ModelRef, SkyFace, World};
 use ss2_vfs::{EntryKind, Vfs, VfsPath};
 
 /// Every file of the install with extension `ext`, sorted by path.
@@ -169,4 +169,137 @@ fn every_world_of_the_install_reads() {
     assert_eq!(scales["uniform"] + scales["non-uniform"], 16_377 + 5_057);
     // wld-entities.md: 177 spawn markers in 16 worlds, 307 chapter info entities.
     assert_eq!((spawn_markers, spawn_worlds, chapters), (177, 16, 307));
+}
+
+/// The sky test vector of `environment.md`: `1_3_Village`, a five-face sky.
+#[test]
+fn the_village_sky() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let path =
+        VfsPath::new("Content/SeriousSam2/Levels/01_MDigBo/1_3_Village/1_3_Village.wld").unwrap();
+    let world = World::from_bytes(&vfs.read(&path).unwrap()).unwrap();
+    let sky = world.sky.expect("the village has a sky");
+    let file = |f: SkyFace| {
+        sky.face(f)
+            .map(|p| p.rsplit('/').next().unwrap().to_ascii_lowercase())
+    };
+    assert_eq!(
+        file(SkyFace::North).as_deref(),
+        Some("mdigbo_village_bckg_0000.tex")
+    );
+    assert_eq!(
+        file(SkyFace::West).as_deref(),
+        Some("mdigbo_village_bckg_0003.tex")
+    );
+    assert_eq!(
+        file(SkyFace::South).as_deref(),
+        Some("mdigbo_village_bckg_0002.tex")
+    );
+    assert_eq!(
+        file(SkyFace::East).as_deref(),
+        Some("mdigbo_village_bckg_0001.tex")
+    );
+    assert_eq!(file(SkyFace::Floor), None);
+    assert_eq!(
+        file(SkyFace::Ceiling).as_deref(),
+        Some("mdigbo_village_bckg_0004.tex")
+    );
+    // The record's own texture is the south face's file.
+    assert_eq!(sky.texture.as_deref(), sky.face(SkyFace::South));
+    assert_eq!(
+        (sky.size, sky.viewer_y, sky.color),
+        (64.0, 0.0, 0x00FF_FFFF)
+    );
+}
+
+/// Every sky of the install, with the counts of `environment.md` and `environment-schema.md`.
+#[test]
+fn every_sky_of_the_install() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut seen = HashSet::new();
+    let (mut worlds, mut skies) = (0, 0);
+    let mut without_sky = Vec::new();
+    let mut without_faces = BTreeSet::new();
+    let mut per_face = [0usize; 6];
+    let (mut six, mut five, mut textured, mut texture_is_a_face) = (0, 0, 0, 0);
+    let (mut flag_4_set, mut flag_5_set) = (0, 0);
+    let mut sizes: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut colors = BTreeSet::new();
+    let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
+    let mut missing = Vec::new();
+    for path in files_with_extension(&vfs, "wld") {
+        let bytes = vfs.read(&path).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        worlds += 1;
+        let world = World::from_bytes(&bytes).unwrap();
+        let name = path.as_str().rsplit('/').next().unwrap_or_default();
+        let stem = name.trim_end_matches(".wld").to_ascii_lowercase();
+        let Some(sky) = world.sky else {
+            without_sky.push(stem);
+            continue;
+        };
+        skies += 1;
+        for f in SkyFace::ALL {
+            if let Some(p) = sky.face(f) {
+                per_face[f.index()] += 1;
+                if !VfsPath::new(p).is_ok_and(|p| vfs.exists(&p)) {
+                    missing.push(p.to_string());
+                }
+            }
+        }
+        match sky.face_count() {
+            0 => {
+                without_faces.insert(stem);
+            }
+            5 => five += 1,
+            6 => six += 1,
+            n => panic!("{}: {n} faces", path.as_str()),
+        }
+        if let Some(t) = &sky.texture {
+            textured += 1;
+            texture_is_a_face += usize::from(sky.faces.iter().flatten().any(|f| f == t));
+        }
+        flag_4_set += usize::from(sky.flag_4 == 1.0);
+        flag_5_set += usize::from(sky.flag_5 == Some(true));
+        *sizes.entry(sky.size.to_bits()).or_default() += 1;
+        colors.insert(sky.color);
+        min_y = min_y.min(sky.viewer_y);
+        max_y = max_y.max(sky.viewer_y);
+    }
+    eprintln!(
+        "{worlds} worlds, {skies} skies (none in {without_sky:?}); faces per member {per_face:?}; \
+         {five} five-face, {six} six-face, no faces in {without_faces:?}; record texture {textured} \
+         ({texture_is_a_face} a face); .4 set {flag_4_set}, .5 set {flag_5_set}; colours {colors:x?}; \
+         viewer y {min_y}..{max_y}"
+    );
+    assert!(missing.is_empty(), "{missing:?}");
+    // environment.md: 58 of 59 worlds have one sky; `dockingbay` has none.
+    assert_eq!((worlds, skies), (59, 58));
+    assert_eq!(without_sky, ["dockingbay"]);
+    // environment-schema.md: `.10`-`.13` and `.15` are set in 55 skies, `.14` (the floor) in 11.
+    assert_eq!(per_face, [55, 55, 55, 55, 11, 55]);
+    assert_eq!((five, six), (44, 11));
+    // The three skies without any face texture.
+    assert_eq!(
+        without_faces.into_iter().collect::<Vec<_>>(),
+        ["1_4_approachingcity", "dm_cockaleekie", "dm_hole"]
+    );
+    // The record's texture is set in 55 and is always one of the faces.
+    assert_eq!((textured, texture_is_a_face), (55, 55));
+    // Size 64 in 56 skies, 32 and 6 in one each; `.4` is 1 in 54, `.5` set in 16; 6 colours.
+    let sizes: Vec<_> = sizes
+        .into_iter()
+        .map(|(s, n)| (f32::from_bits(s), n))
+        .collect();
+    assert_eq!(sizes, [(6.0, 1), (32.0, 1), (64.0, 56)]);
+    assert_eq!((flag_4_set, flag_5_set), (54, 16));
+    assert_eq!(colors.len(), 6);
+    assert!(
+        (min_y + 6.66).abs() < 0.01 && (max_y - 4.52).abs() < 0.01,
+        "{min_y} {max_y}"
+    );
 }

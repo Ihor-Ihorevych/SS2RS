@@ -12,7 +12,9 @@
 //!   `CAspect.7`, so child entities need no recomputation), the instance scale (which may be
 //!   negative on an axis: a mirrored model) and whether it has a collision hull,
 //! - the spawn markers (`CSpawnMarkerEntity`) and the chapter info entities
-//!   (`CChapterInfoEntity`) with their placements and editor names.
+//!   (`CChapterInfoEntity`) with their placements and editor names,
+//! - the sky (`CCubeBackgroundEntity`, T02-039; spec `docs/re/environment.md`, section "Sky"):
+//!   its face textures by face member, colour, size and viewer height ([`Sky`]).
 //!
 //! Everything else (lights, the grids, the physics bodies, scripts, the other entity classes) is
 //! left out; [`World::entity_count`] says how many entities the file has in all.
@@ -103,6 +105,108 @@ pub struct Marker {
     pub translation: Vec3,
 }
 
+/// One face of the sky cube: the `CCubeRenderable` face members `.10` to `.15`, in that order
+/// (`docs/re/environment.md`, "Which face member is which direction").
+///
+/// The engine axis of each face is the spec's convention (**medium** confidence: the compass names
+/// come from the engine, the axes follow the right-handed, y-up, -Z-forward frame): North -Z,
+/// West -X, South +Z, East +X, Floor -Y, Ceiling +Y. How each face image is turned is the spec's
+/// orientation rule and is left to the code that draws the sky.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SkyFace {
+    /// `.10`, towards -Z.
+    North,
+    /// `.11`, towards -X.
+    West,
+    /// `.12`, towards +Z.
+    South,
+    /// `.13`, towards +X.
+    East,
+    /// `.14`, towards -Y (below); present in only 11 retail skies.
+    Floor,
+    /// `.15`, towards +Y (above).
+    Ceiling,
+}
+
+impl SkyFace {
+    /// Every face, in member order (`.10` to `.15`): the order of [`Sky::faces`].
+    pub const ALL: [Self; 6] = [
+        Self::North,
+        Self::West,
+        Self::South,
+        Self::East,
+        Self::Floor,
+        Self::Ceiling,
+    ];
+
+    /// The position of this face in [`SkyFace::ALL`] and [`Sky::faces`].
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The name of its `CCubeRenderable` member (`"10"` to `"15"`).
+    pub fn member(self) -> &'static str {
+        ["10", "11", "12", "13", "14", "15"][self.index()]
+    }
+}
+
+/// The sky of a world: its `CCubeBackgroundEntity`, the entity's property record
+/// (`CCubeBackgroundProperties`) and its renderables (`CCubeRenderable`,
+/// `CSimpleBackgroundViewerRenderable`).
+///
+/// The values the record and the renderable share (colour, size, the `.4` flag) and the viewer
+/// height are taken from the record, as the spec's reader invariant 1 asks; a sky without a record
+/// takes them from the renderable and the entity instead (in the retail data they agree, 58 of 58).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sky {
+    /// The entity's serial (`CEntity.1`).
+    pub serial: u32,
+    /// The editor name from the property record, empty without a record.
+    pub name: String,
+    /// The face textures in [`SkyFace::ALL`] order (members `.10` to `.15`): the path as the
+    /// world's file table stores it (an external `.tex`; two retail skies name pre-format-8
+    /// "legacy" textures), `None` where the member is null. Retail skies have five faces (no
+    /// floor), six, or none at all (3 worlds). A member that points at an object stored in the
+    /// world itself rather than an external file is also `None` (no retail sky does that).
+    pub faces: [Option<String>; 6],
+    /// The record's own texture (`CCubeBackgroundProperties.1`): in the retail data always the
+    /// same file as one of the faces, so drawing the sky does not need it. `None` when null, when
+    /// the sky has no record, or when it is not an external file.
+    pub texture: Option<String>,
+    /// The colour tint (`CCubeBackgroundProperties.6`, else `CCubeRenderable.3`) as the stored
+    /// 32-bit value, which the spec reads as ARGB (`0xFFFFFF` in most skies, where the top byte
+    /// is 0).
+    pub color: u32,
+    /// The cube's half-extent in world units (`.2`, else `CCubeRenderable.1`; 64 in 56 skies).
+    pub size: f32,
+    /// The viewer's vertical offset in the cube (`.3`, else `en_fViewerY`; -6.66 to 4.52).
+    pub viewer_y: f32,
+    /// The record's `.4` (else `CCubeRenderable.2`): 0 or 1, meaning not established.
+    pub flag_4: f32,
+    /// The record's `.5` (`None` without a record): meaning not established.
+    pub flag_5: Option<bool>,
+    /// The viewer renderable's `.1` (5.22 or 55.68 in the retail data; meaning not
+    /// established), `None` when the entity has no viewer renderable.
+    pub viewer_value: Option<f32>,
+    /// The entity's rotation (`en_qvPlacement`). The spec gives the faces fixed engine axes and
+    /// says nothing about this placement; it is read so that users can see it.
+    pub rotation: Quat,
+    /// The entity's position (`en_qvPlacement`); the cube is drawn around the viewer, not here.
+    pub translation: Vec3,
+}
+
+impl Sky {
+    /// The texture path of one face, `None` when the face is absent.
+    pub fn face(&self, face: SkyFace) -> Option<&str> {
+        self.faces[face.index()].as_deref()
+    }
+
+    /// How many faces name a texture.
+    pub fn face_count(&self) -> usize {
+        self.faces.iter().filter(|f| f.is_some()).count()
+    }
+}
+
 /// The parts of a `.wld` world this crate reads.
 #[derive(Clone, Debug, PartialEq)]
 pub struct World {
@@ -120,6 +224,10 @@ pub struct World {
     /// Whether a player is placed at a chapter's placement is not specified yet (T01-210); it is
     /// read because it is cheap and a level without spawn markers usually has chapters.
     pub chapters: Vec<Marker>,
+    /// The sky (`CCubeBackgroundEntity`), `None` when the world has none (one retail world,
+    /// `dockingbay`). Retail worlds have at most one; if a world had several, this is the first
+    /// in entity-list order.
+    pub sky: Option<Sky>,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -199,6 +307,62 @@ struct StaticModelEntity {
     renderable: ObjectRef,
     #[meta(owner = "CStaticModelEntity", name = "10")]
     mechanism: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct SkyEntity {
+    #[meta(owner = "CCubeBackgroundEntity", name = "1")]
+    cube: ObjectRef,
+    #[meta(owner = "CCubeBackgroundEntity", name = "3")]
+    viewer: ObjectRef,
+    #[meta(owner = "CCubeBackgroundEntity", name = "en_qvPlacement")]
+    placement: QuatVect,
+    #[meta(owner = "CCubeBackgroundEntity", name = "en_fViewerY")]
+    viewer_y: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct CubeRenderable {
+    #[meta(owner = "CCubeRenderable", name = "1")]
+    size: f32,
+    #[meta(owner = "CCubeRenderable", name = "2")]
+    flag: f32,
+    #[meta(owner = "CCubeRenderable", name = "3")]
+    color: u32,
+    #[meta(owner = "CCubeRenderable", name = "10")]
+    north: ObjectRef,
+    #[meta(owner = "CCubeRenderable", name = "11")]
+    west: ObjectRef,
+    #[meta(owner = "CCubeRenderable", name = "12")]
+    south: ObjectRef,
+    #[meta(owner = "CCubeRenderable", name = "13")]
+    east: ObjectRef,
+    #[meta(owner = "CCubeRenderable", name = "14")]
+    floor: ObjectRef,
+    #[meta(owner = "CCubeRenderable", name = "15")]
+    ceiling: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct ViewerRenderable {
+    #[meta(owner = "CSimpleBackgroundViewerRenderable", name = "1")]
+    value: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct SkyRecord {
+    #[meta(owner = "CCubeBackgroundProperties", name = "1")]
+    texture: ObjectRef,
+    #[meta(owner = "CCubeBackgroundProperties", name = "2")]
+    size: f32,
+    #[meta(owner = "CCubeBackgroundProperties", name = "3")]
+    viewer_y: f32,
+    #[meta(owner = "CCubeBackgroundProperties", name = "4")]
+    flag_4: f32,
+    #[meta(owner = "CCubeBackgroundProperties", name = "5")]
+    flag_5: bool,
+    #[meta(owner = "CCubeBackgroundProperties", name = "6")]
+    color: u32,
 }
 
 #[derive(MetaDeserialize)]
@@ -332,13 +496,16 @@ impl World {
         };
         let root: WorldRoot = g.typed(root, "the CWorld")?;
 
-        // Editor names, by entity id, from the property records (`CWorld.5`).
+        // Editor names and the records themselves, by entity id, from the property records
+        // (`CWorld.5`).
         let mut names: HashMap<u32, String> = HashMap::with_capacity(root.records.len());
+        let mut records: HashMap<u32, &Object> = HashMap::with_capacity(root.records.len());
         for r in &root.records {
             let o = g.object(r.0, "a property record of CWorld.5")?;
             let record: Record = g.typed(o, "a property record")?;
             if let Some(entity) = record.entity.0 {
                 names.insert(entity, record.name);
+                records.insert(entity, o);
             }
         }
 
@@ -359,14 +526,21 @@ impl World {
             static_models: Vec::new(),
             spawn_markers: Vec::new(),
             chapters: Vec::new(),
+            sky: None,
         };
         for e in &root.entities {
             let o = g.object(e.0, "an entity of CWorld.1")?;
             let class = g.class_of(o);
             if !matches!(
                 class,
-                "CStaticModelEntity" | "CSpawnMarkerEntity" | "CChapterInfoEntity"
+                "CStaticModelEntity"
+                    | "CSpawnMarkerEntity"
+                    | "CChapterInfoEntity"
+                    | "CCubeBackgroundEntity"
             ) {
+                continue;
+            }
+            if class == "CCubeBackgroundEntity" && world.sky.is_some() {
                 continue;
             }
             let serial = g.typed::<Entity>(o, "an entity")?.serial;
@@ -374,6 +548,10 @@ impl World {
             match class {
                 "CStaticModelEntity" => {
                     world.static_models.push(static_model(&g, o, serial, name)?);
+                }
+                "CCubeBackgroundEntity" => {
+                    let record = records.get(&o.id).copied();
+                    world.sky = Some(sky(&g, o, record, serial, name)?);
                 }
                 _ => {
                     let (rotation, translation) = aspects.placement(o.id).ok_or_else(|| {
@@ -418,6 +596,70 @@ fn static_model(g: &Graph<'_>, o: &Object, serial: u32, name: String) -> Result<
         translation,
         scale: instance.scale.into(),
         has_hull: entity.mechanism.0.is_some(),
+    })
+}
+
+fn sky(
+    g: &Graph<'_>,
+    o: &Object,
+    record: Option<&Object>,
+    serial: u32,
+    name: String,
+) -> Result<Sky> {
+    let entity: SkyEntity = g.typed(o, "a sky entity")?;
+    let what = format!("the cube renderable of sky {}", o.id);
+    let cube: CubeRenderable = g.typed(g.object(entity.cube.0, &what)?, &what)?;
+    let viewer_value = match entity.viewer.0 {
+        Some(id) => {
+            let what = format!("the viewer renderable of sky {}", o.id);
+            let viewer: ViewerRenderable = g.typed(g.object(Some(id), &what)?, &what)?;
+            Some(viewer.value)
+        }
+        None => None,
+    };
+    let record: Option<SkyRecord> = record
+        .map(|r| g.typed(r, &format!("the property record of sky {}", o.id)))
+        .transpose()?;
+    let texture = |r: &ObjectRef| r.0.and_then(|id| g.external_path(id)).map(str::to_string);
+    let faces = [
+        &cube.north,
+        &cube.west,
+        &cube.south,
+        &cube.east,
+        &cube.floor,
+        &cube.ceiling,
+    ]
+    .map(texture);
+    let (rotation, translation) = entity.placement.split();
+    Ok(match record {
+        Some(r) => Sky {
+            serial,
+            name,
+            faces,
+            texture: texture(&r.texture),
+            color: r.color,
+            size: r.size,
+            viewer_y: r.viewer_y,
+            flag_4: r.flag_4,
+            flag_5: Some(r.flag_5),
+            viewer_value,
+            rotation,
+            translation,
+        },
+        None => Sky {
+            serial,
+            name,
+            faces,
+            texture: None,
+            color: cube.color,
+            size: cube.size,
+            viewer_y: entity.viewer_y,
+            flag_4: cube.flag,
+            flag_5: None,
+            viewer_value,
+            rotation,
+            translation,
+        },
     })
 }
 
