@@ -128,6 +128,38 @@ pub fn format_bmf(data: &[u8]) {
     }
 }
 
+/// `ss2-format-mdl`: whatever reads has the materials its embedded surfaces name, each once and in id order, and
+/// meshes that keep the `format_bmf` property.
+pub fn format_mdl(data: &[u8]) {
+    use ss2_format_bmf::MaterialRef;
+    use ss2_format_mdl::{MeshSource, Model};
+    let Ok(model) = Model::from_bytes(cap(data)) else {
+        return;
+    };
+    assert!(
+        model.materials.windows(2).all(|w| w[0].id < w[1].id),
+        "materials are unique and sorted by id"
+    );
+    let _ = model.mesh();
+    for source in &model.meshes {
+        let MeshSource::Embedded(mesh) = source else {
+            continue;
+        };
+        for s in mesh.lods.iter().flat_map(|l| &l.surfaces) {
+            let n = s.positions.len();
+            assert!(s.indices.iter().all(|&i| usize::from(i) < n));
+            assert_eq!(s.normals.len(), n);
+            if let MaterialRef::Embedded(id) = s.material {
+                assert!(
+                    model.material(id).is_some(),
+                    "an embedded material is listed"
+                );
+                assert!(model.material_of(s).is_some());
+            }
+        }
+    }
+}
+
 /// `ss2-format-ans`: whatever reads can be sampled at any time in both loop modes, and the poses are parallel to the tracks.
 pub fn format_ans(data: &[u8]) {
     use ss2_format_ans::LoopMode;
