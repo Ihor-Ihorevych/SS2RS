@@ -234,7 +234,8 @@ fn a_gentle_ramp_is_walked_up_and_a_steep_one_is_slid_down() {
     };
     let w = ramp(20.0);
     let mut p = Walker::new(Vec3::ZERO);
-    run(&w, &mut p, &forward(), 1.0);
+    // 1.5 s: the measured acceleration (T01-432) reaches full speed more gently than the stored constant did.
+    run(&w, &mut p, &forward(), 1.5);
     assert!(p.position.y > 1.0, "climbed: {}", p.position);
     assert!(p.grounded);
 
