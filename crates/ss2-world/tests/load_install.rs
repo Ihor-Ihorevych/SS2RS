@@ -419,6 +419,154 @@ fn every_haze_loads() {
     assert_eq!((hazes, worlds), (65, 45));
 }
 
+/// Every bloom volume of the install reaches the scene (`environment.md`, "Bloom": 34 in 33
+/// worlds, T07-049), in the world's order, with the record's numbers unchanged by the engine's
+/// clamps, and the worked examples come out as the spec gives them: `dm_hole`'s two blooms and
+/// `1_3_village`'s one (strength, ramp, blur, balance, high-pass, edge fade, box size, colour).
+#[test]
+fn every_bloom_loads() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let without_models = WithoutModels(&vfs);
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut blooms, mut worlds, mut examples) = (0, 0, 0);
+    let mut failures = Vec::new();
+    let lin = |b: u32| {
+        let c = b as f32 / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let linear = |argb: u32| {
+        [
+            lin((argb >> 16) & 0xFF),
+            lin((argb >> 8) & 0xFF),
+            lin(argb & 0xFF),
+            (argb >> 24) as f32 / 255.0,
+        ]
+    };
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let world = World::from_bytes(&bytes).unwrap();
+        let scene = load_level(
+            &without_models,
+            &info.wld,
+            &LoadOptions::default(),
+            &mut |_| {},
+        )
+        .unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        if scene.skipped.iter().any(|l| l.starts_with("bloom"))
+            || scene.blooms.len() != world.blooms.len()
+        {
+            failures.push(format!(
+                "{}: {} of {} blooms",
+                info.id,
+                scene.blooms.len(),
+                world.blooms.len()
+            ));
+            continue;
+        }
+        blooms += scene.blooms.len();
+        worlds += usize::from(!scene.blooms.is_empty());
+        for (got, want) in scene.blooms.iter().zip(&world.blooms) {
+            // The box is the record's size about the renderable's world position, in its turned
+            // frame; the numbers are the record's (no retail value is clamped).
+            let centre = got.rotation * ((got.min + got.max) / 2.0);
+            let colour = linear(want.color);
+            if !centre.abs_diff_eq(want.translation, 1e-2)
+                || !(got.max - got.min).abs_diff_eq(want.size, 1e-2)
+                || got.fade(want.translation) != 1.0
+                || got.fade_margin != want.fade.max(0.001)
+                || (got.strength, got.ramp, got.blur, got.balance, got.high_pass)
+                    != (
+                        want.strength,
+                        want.ramp,
+                        want.blur,
+                        want.balance,
+                        want.high_pass,
+                    )
+                || got
+                    .colour
+                    .iter()
+                    .zip(colour)
+                    .any(|(a, b)| (a - b).abs() > 1e-6)
+            {
+                failures.push(format!("{}: bloom {} as {got:?}", info.id, want.serial));
+            }
+        }
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let check =
+            |b: &ss2_world::scene::BloomVolume, colour: u32, size: Vec3, numbers: [f32; 6]| {
+                assert!((b.max - b.min).abs_diff_eq(size, 1e-2), "{b:?}");
+                assert!(
+                    b.colour
+                        .iter()
+                        .zip(linear(colour))
+                        .all(|(a, w)| (a - w).abs() < 1e-6),
+                    "{b:?}"
+                );
+                let got = [
+                    b.fade_margin,
+                    b.strength,
+                    b.ramp,
+                    b.blur,
+                    b.balance,
+                    b.high_pass,
+                ];
+                assert!(got.iter().zip(numbers).all(|(a, w)| near(*a, w)), "{b:?}");
+            };
+        if info.id == "dm_hole" {
+            examples += 1;
+            let [a, b] = scene.blooms.as_slice() else {
+                panic!("dm_hole: {:?}", scene.blooms);
+            };
+            // "Bloom_PoolRoom", then "Bloom001", in the world's list order:
+            // [fade margin, strength, ramp, blur, balance, high-pass].
+            check(
+                a,
+                0xff15_0701,
+                Vec3::new(96.2, 88.1, 123.3),
+                [10.0, 1.0, 2.0, 1.205, 1.0, 0.5],
+            );
+            check(
+                b,
+                0xff27_2727,
+                Vec3::splat(250.0),
+                [10.0, 1.0, 1.5, 1.0, 1.0, 0.5],
+            );
+            // The spec's camera test: a point inside both fade-inset cores sees both at 1.
+            let both = scene.blooms_at(Vec3::new(-40.0, 30.0, -20.0));
+            assert_eq!(both.len(), 2, "{both:?}");
+            assert!(both.iter().all(|b| b.fade == 1.0), "{both:?}");
+        }
+        if info.id == "1_3_village" {
+            examples += 1;
+            let [b] = scene.blooms.as_slice() else {
+                panic!("1_3_village: {:?}", scene.blooms);
+            };
+            check(
+                b,
+                0xff46_3c26,
+                Vec3::new(400.0, 148.0, 400.0),
+                [25.0, 1.2422, 1.5, 1.0, 1.0, 0.15],
+            );
+        }
+    }
+    eprintln!("{blooms} blooms in {worlds} worlds");
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert_eq!(examples, 2, "dm_hole and 1_3_village are levels");
+    assert_eq!((blooms, worlds), (34, 33));
+}
+
 /// The models embedded in the worlds (`wld-geometry.md`, 109 placements, T07-043) are built like
 /// external ones: no skipped line says an embedded model is not read, and of the 82 distinct
 /// ones only the 10 with nothing to draw or collide with are left out, with a line each: 9 whose

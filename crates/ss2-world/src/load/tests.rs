@@ -1788,6 +1788,118 @@ fn an_unusable_haze_is_left_out_or_unturned_with_a_line() {
     assert_eq!(skipped.len(), 3, "{skipped:?}");
 }
 
+/// `1_3_Village`'s bloom (`environment.md`, second worked example and test vector), turned 90
+/// degrees about +y (the retail one is not) at its world position.
+fn village_bloom() -> Bloom {
+    Bloom {
+        serial: 3692,
+        name: "Bloom001".into(),
+        color: 0xff46_3c26,
+        size: Vec3::new(400.0, 148.0, 400.0),
+        fade: 25.0,
+        threshold: 3.0,
+        high_pass: 0.15,
+        strength: 1.2422,
+        ramp: 1.5,
+        blur: 1.0,
+        balance: 1.0,
+        local_box: (
+            Vec3::new(-200.0, -74.0, -200.0),
+            Vec3::new(200.0, 74.0, 200.0),
+        ),
+        rotation: Quat::from_xyzw(ROT_Y90[0], ROT_Y90[1], ROT_Y90[2], ROT_Y90[3]),
+        translation: Vec3::new(200.9, 47.3, -192.6),
+    }
+}
+
+#[test]
+fn the_village_bloom_becomes_a_turned_volume_with_its_chain_numbers() {
+    let mut skipped = Vec::new();
+    let v = bloom_volume(&village_bloom(), &mut skipped).unwrap();
+    assert!(skipped.is_empty(), "{skipped:?}");
+    // The edge fade `.5` = 25 and the five chain numbers by T01-424's mapping, unchanged.
+    assert_eq!(v.fade_margin, 25.0);
+    assert_eq!(
+        (v.strength, v.ramp, v.blur, v.balance, v.high_pass),
+        (1.2422, 1.5, 1.0, 1.0, 0.15)
+    );
+    // 0x46, 0x3c, 0x26 taken as sRGB, made linear; the alpha byte 0xff carried.
+    let lin = |b: f32| ((b / 255.0 + 0.055) / 1.055).powf(2.4);
+    for (got, want) in v.colour.iter().zip([lin(70.0), lin(60.0), lin(38.0), 1.0]) {
+        assert!((got - want).abs() < 1e-6, "{:?}", v.colour);
+    }
+    // The box is 400 x 148 x 400 in the bloom's own (turned) frame, centred on its placement.
+    assert!((v.max - v.min).abs_diff_eq(Vec3::new(400.0, 148.0, 400.0), 1e-3));
+    let centre = Vec3::new(200.9, 47.3, -192.6);
+    assert!((v.rotation * ((v.min + v.max) / 2.0)).abs_diff_eq(centre, 1e-3));
+    assert_eq!(v.fade(centre), 1.0);
+    // 25 inside the 74-high half extent: full; half-way through the edge: one half; outside: 0.
+    assert_eq!(v.fade(centre + Vec3::new(0.0, 45.0, 0.0)), 1.0);
+    assert!((v.fade(centre + Vec3::new(0.0, 61.5, 0.0)) - 0.5).abs() < 1e-3);
+    assert_eq!(v.fade(centre + Vec3::new(0.0, 80.0, 0.0)), 0.0);
+    let mut scene = LevelScene::test_room();
+    scene.blooms = vec![v];
+    scene.validate().unwrap();
+}
+
+#[test]
+fn a_blooms_numbers_go_through_the_engines_clamps() {
+    let mut skipped = Vec::new();
+    let mut b = village_bloom();
+    (b.fade, b.strength, b.ramp, b.blur, b.balance, b.high_pass) = (-5.0, 3.0, -1.0, 9.0, 0.0, 1.5);
+    let v = bloom_volume(&b, &mut skipped).unwrap();
+    assert_eq!(v.fade_margin, HazeVolume::MIN_FADE_MARGIN);
+    assert_eq!(
+        (v.strength, v.ramp, v.blur, v.balance, v.high_pass),
+        (2.0, 0.0, 8.0, 0.1, 1.0)
+    );
+    (b.balance, b.fade) = (20.0, 0.0);
+    let v = bloom_volume(&b, &mut skipped).unwrap();
+    assert_eq!(
+        (v.balance, v.fade_margin),
+        (10.0, HazeVolume::MIN_FADE_MARGIN)
+    );
+    assert!(skipped.is_empty(), "{skipped:?}");
+    let mut scene = LevelScene::test_room();
+    scene.blooms = vec![v];
+    scene.validate().unwrap();
+}
+
+#[test]
+fn an_unusable_bloom_is_left_out_or_unturned_with_a_line() {
+    let mut skipped = Vec::new();
+    let mut flat = village_bloom();
+    flat.size.x = 0.0;
+    assert!(bloom_volume(&flat, &mut skipped).is_none());
+    let mut nan = village_bloom();
+    nan.ramp = f32::NAN;
+    assert!(bloom_volume(&nan, &mut skipped).is_none());
+    let mut far = village_bloom();
+    far.translation.z = f32::INFINITY;
+    assert!(bloom_volume(&far, &mut skipped).is_none());
+    let mut unturnable = village_bloom();
+    unturnable.rotation = Quat::from_xyzw(0.0, f32::NAN, 0.0, 1.0);
+    let v = bloom_volume(&unturnable, &mut skipped).unwrap();
+    assert_eq!(v.rotation, Quat::IDENTITY);
+    assert!(
+        v.min.abs_diff_eq(Vec3::new(0.9, -26.7, -392.6), 1e-3),
+        "{}",
+        v.min
+    );
+    assert_eq!(skipped.len(), 4, "{skipped:?}");
+    assert!(
+        skipped
+            .iter()
+            .all(|l| l.starts_with("bloom 3692 (Bloom001)"))
+    );
+}
+
+#[test]
+fn a_world_without_blooms_loads_none() {
+    let (scene, _) = load(&CountingVfs::new(&all_files()));
+    assert!(scene.blooms.is_empty());
+}
+
 #[test]
 fn a_world_without_hazes_loads_none() {
     let (scene, _) = load(&CountingVfs::new(&all_files()));
@@ -2104,6 +2216,7 @@ fn chain_world(spawn_markers: Vec<Marker>, first_chapter: Option<usize>) -> Worl
         lightmap_counts: Default::default(),
         embedded_models: Vec::new(),
         hazes: Vec::new(),
+        blooms: Vec::new(),
     }
 }
 
