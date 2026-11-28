@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use ss2_render_api::Camera;
-use ss2_render_api::scene_data::{MeshData, TexelFormat, TextureData};
+use ss2_render_api::scene_data::{Fog, MeshData, TexelFormat, TextureData};
 use ss2_ui::{Canvas, Color, DrawList, Vec2};
 use wgpu::util::DeviceExt;
 
@@ -1001,6 +1001,13 @@ impl Renderer {
     /// Nothing changes if it returns an error (a stale or unknown texture, a non-finite tint).
     pub fn set_sky(&mut self, sky: Option<SkyBatch>) -> Result<(), RenderError> {
         self.world.set_sky(&self.device, sky)
+    }
+
+    /// Fog the world from the next frame on (`None`: no fog; RFC 0013 amendment 4). The sky is never fogged. Call it
+    /// every frame with the fog where the camera is; it survives [`Renderer::clear_world`] and is reset by a device
+    /// rebuild. Nothing changes if it returns an error ([`Fog::validate`]).
+    pub fn set_fog(&mut self, fog: Option<Fog>) -> Result<(), RenderError> {
+        self.world.set_fog(fog)
     }
 
     /// Drop every mesh, texture and batch of the world, and the sky.

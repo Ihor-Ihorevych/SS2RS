@@ -9,7 +9,7 @@ use std::ops::Range;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_render_api::Camera;
-use ss2_render_api::scene_data::{CubeFace, MeshData, MeshVertex, TexelFormat, TextureData};
+use ss2_render_api::scene_data::{CubeFace, Fog, MeshData, MeshVertex, TexelFormat, TextureData};
 use wgpu::util::DeviceExt;
 
 use crate::context::RenderError;
@@ -60,7 +60,7 @@ pub struct SkyBatch {
     pub tint: [f32; 4],
     /// How the cube is turned in the world; it keeps this orientation whichever way the camera looks.
     pub rotation: Quat,
-    /// The level's cube edge length (only the ratio to `viewer_height` matters: the drawn cube has its own size).
+    /// The level's cube half-extent, centre to face (only the ratio to `viewer_height` matters: the drawn cube has its own size).
     pub size: f32,
     /// The viewer's height inside the cube relative to its centre, in the units of `size` (RFC 0013 amendment 3).
     pub viewer_height: f32,
@@ -108,6 +108,8 @@ pub(crate) struct WorldGpu {
     /// The sky cube's matrix, written every frame (it follows the camera).
     sky_instance: wgpu::Buffer,
     sky: Option<GpuSky>,
+    /// The fog of the next frames ([`WorldGpu::set_fog`]).
+    fog: Option<Fog>,
     camera: wgpu::Buffer,
     camera_group: wgpu::BindGroup,
     material_layout: wgpu::BindGroupLayout,
@@ -138,7 +140,7 @@ impl WorldGpu {
         });
         let camera = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("world camera"),
-            size: 80,
+            size: 128,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -329,6 +331,7 @@ impl WorldGpu {
             sky_mesh,
             sky_instance,
             sky: None,
+            fog: None,
             camera,
             camera_group,
             material_layout,
@@ -623,6 +626,16 @@ impl WorldGpu {
     }
 
     /// Replace the sky (`None`: no sky, the clear colour shows). Nothing changes if it returns an error.
+    /// Fog the world from the next frame on (`None`: no fog); refused unless [`Fog::validate`] passes.
+    pub(crate) fn set_fog(&mut self, fog: Option<Fog>) -> Result<(), RenderError> {
+        if let Some(f) = &fog {
+            f.validate()
+                .map_err(|e| RenderError::World(e.to_string()))?;
+        }
+        self.fog = fog;
+        Ok(())
+    }
+
     pub(crate) fn set_sky(
         &mut self,
         device: &wgpu::Device,
@@ -657,7 +670,7 @@ impl WorldGpu {
         self.sky = Some(GpuSky {
             faces,
             rotation: sky.rotation.normalize(),
-            viewer_offset: sky.viewer_height / sky.size * 2.0 * SKY_HALF_SIZE,
+            viewer_offset: sky.viewer_height / sky.size * SKY_HALF_SIZE,
         });
         Ok(())
     }
@@ -695,9 +708,16 @@ impl WorldGpu {
             ));
         }
         let aspect = size.0 as f32 / size.1.max(1) as f32;
-        let mut uniform = [0f32; 20];
+        let mut uniform = [0f32; 32];
         uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
         uniform[16..19].copy_from_slice(&camera.forward().to_array());
+        uniform[20..23].copy_from_slice(&camera.position.to_array());
+        if let Some(fog) = self.fog {
+            uniform[24..27].copy_from_slice(&fog.colour);
+            uniform[27] = fog.strength;
+            uniform[28] = fog.near;
+            uniform[29] = fog.far;
+        }
         queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&uniform));
         if let Some(sky) = &self.sky {
             // Centred on the camera, except that the viewer sits `viewer_offset` above the cube's centre; turned by the

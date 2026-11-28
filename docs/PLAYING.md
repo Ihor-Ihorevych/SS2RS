@@ -35,7 +35,7 @@ The mouse is captured while you play; after switching to another window, click t
 ## What you will notice
 
 - Lighting is a flat light from the camera; there are no lightmaps, sky, fog or water surfaces yet.
-- Collision uses the coarsest drawn shape of each model, so it can be slightly off where the real collision mesh
-  differs (T01-055).
+- Collision uses each model's own collision mesh; the few models without one (about 10 of 2,000) collide with
+  their coarsest drawn shape.
 - Single-player levels start at a chapter marker, because the real start rule is not specified yet (T01-210).
 - 109 world-embedded models and some textures in old development formats are left out (listed in the log).

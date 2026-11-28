@@ -93,8 +93,8 @@ Rules:
 
 - `Instance::transform.scale` may be **negative** on any axis (mirrored placements). Mesh winding stays as
   authored; consumers that cull handle the mirror (the MVP renderer does not cull).
-- `ModelData::collision` is the coarsest render LOD for now; it is replaced by the real collision mesh once
-  its layout is specified (T01-055). `None` means the model does not collide.
+- `ModelData::collision` is the model's own collision mesh where it has one, else its coarsest PC render LOD
+  (Amendment 5). `None` means the model does not collide.
 - A loader that cannot read one model, material or texture **does not fail the load**: it records a line in
   `skipped` and uses a grey material, a white texture, or drops the instance.
 
@@ -242,10 +242,38 @@ and drops them with the world.
 ### Amendment 3: sky placement (T07-038)
 
 `SkyData` gains `rotation: Quat` (the sky entity's placement rotation, applied in full; its position is never used),
-`size: f32` (the cube's edge length, 64 in most levels) and `viewer_height: f32` (the viewer's height inside the cube
+`size: f32` (the cube's half-extent, centre to face, 64 in most levels) and `viewer_height: f32` (the viewer's height inside the cube
 relative to its centre, in the units of `size`; the sign is the open question of `docs/re/environment.md`). The
 renderer keeps the cube centred on the camera, turned by `rotation`, and shifted by `viewer_height` scaled to its own
 draw size (T04-041).
+
+### Amendment 4: distance haze (T00-038)
+
+A level's haze volumes (`docs/re/environment.md`, "Haze", T01-044/T01-070) cross the boundary so the renderer can
+draw the original's distance fog:
+
+- `ss2_render_api::Fog { colour: [f32; 3], near: f32, far: f32, strength: f32 }`: one linear fog for a frame. A
+  fragment at view distance `d` is mixed towards `colour` by `strength * clamp((d - near) / (far - near), 0, 1)`
+  (the original's screen fog is plain linear fog, `scale = 1/(far - near)`, `bias = -far * scale`).
+- `ss2_world::scene::HazeVolume { min: Vec3, max: Vec3, rotation: Quat, colour: [f32; 4], fade_margin: f32, near: f32,
+  far: f32 }` and `LevelScene::hazes: Vec<HazeVolume>` in the file's list order. The box is `min..max` in the
+  volume's own frame, turned by `rotation` about the world origin (identity unless the haze is attached to a parent
+  entity); `colour` is linear RGBA (the alpha is carried, its use is open); `fade_margin` is `.5` (at least 0.001),
+  `near`/`far` are `.6`/`.7` (`far >= near`, as the original clamps).
+- `LevelScene::fog_at(eye: Vec3) -> Option<Fog>`: each volume's strength is
+  `fade = 1 - clamp(distance(eye, box inset by fade_margin) / fade_margin, 0, 1)`; the volume with the highest
+  `fade` wins (ties: the later in list order), `None` when every `fade` is 0. How the original combines several
+  hazes is open (T01-412): one winner is our provisional rule.
+- `Renderer::set_fog(Option<Fog>)`, called by the app each frame with `fog_at(camera eye)`. The sky is not fogged
+  (open; revisit with T01-412).
+
+### Amendment 5: collision meshes (T07-036)
+
+`CollisionData` gains `pub from_collision_mesh: bool`. The loader fills `ModelData::collision` from the model's own
+collision mesh (`docs/re/bmf.md`, "Collision mesh", read by `ss2_format_bmf::CollisionMesh`, T02-042), in model space
+like the render parts, and sets the flag; a model without a collision mesh, or with an empty one, keeps the coarsest
+PC render LOD with the flag clear (procedural geometry such as the test room also has it clear). Consumers that only
+need triangles ignore the flag.
 
 ## Alternatives considered
 
