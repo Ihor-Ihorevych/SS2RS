@@ -368,6 +368,68 @@ pub fn load_level_with_report(
     Ok(scene_of_world(vfs, wld, &world, options, progress))
 }
 
+/// A model loaded on its own, outside any `.wld` placement (T04-049: the player's view-model weapon loads its
+/// `.mdl` straight from its weapon parameters file). Unlike [`LevelScene`], which shares one material and texture
+/// table across everything a world places, this is one model's own, so `model.parts`' and `skinned`'s material
+/// indices index `materials` here, and `materials`' texture indices index `textures` here.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StandaloneModel {
+    /// The model drawn as plain batches (used when `skinned` is `None`).
+    pub model: ModelData,
+    /// The model drawn animated (module docs, "Animated models"), when its skeleton, skinned surfaces and
+    /// animations allow it; `None` draws `model` static instead.
+    pub skinned: Option<SkinnedModelData>,
+    /// The materials `model.parts`' and `skinned`'s parts' `material` indices name.
+    pub materials: Vec<MaterialData>,
+    /// The textures `materials`' `base_texture` indices name.
+    pub textures: Vec<TextureData>,
+    /// Problems that did not stop the load (a left-out part, a texture or `.mtr` that could not be read, ...).
+    pub skipped: Vec<String>,
+}
+
+/// Read and build the `.mdl` at `path` on its own (T04-049): the same build a `.wld` placement of it would get
+/// (`Loader::model`, animated when the model allows it), but with its own material and texture tables rather
+/// than sharing a whole level's. Used for a model that is never placed in a world — a weapon's (or any other
+/// object's) first-person view-model.
+///
+/// # Errors
+/// When the file cannot be read or parsed, or its mesh cannot be built; what a `.wld` placement of the same model
+/// would instead record in [`LevelScene::skipped`] and carry on from, raised here since there is no level to carry
+/// on loading.
+pub fn load_standalone_model(
+    vfs: &dyn Vfs,
+    path: &VfsPath,
+    options: &LoadOptions,
+) -> Result<StandaloneModel> {
+    let mut loader = Loader {
+        vfs,
+        skipped: Vec::new(),
+        materials: Vec::new(),
+        material_ids: BTreeMap::new(),
+        texture_paths: Vec::new(),
+        texture_ids: BTreeMap::new(),
+        mtr_cache: BTreeMap::new(),
+        skeleton_cache: BTreeMap::new(),
+        anim_cache: BTreeMap::new(),
+        report: LightmapReport::default(),
+    };
+    let built = loader
+        .model(path, false, 0)
+        .map_err(|e| Error::invalid("standalone model", format!("{}: {e}", path.as_str())))?;
+    let paths = std::mem::take(&mut loader.texture_paths);
+    let textures = paths
+        .iter()
+        .map(|p| loader.texture(p, options.max_texture_size))
+        .collect();
+    Ok(StandaloneModel {
+        model: built.model,
+        skinned: built.skinned,
+        materials: loader.materials,
+        textures,
+        skipped: loader.skipped,
+    })
+}
+
 /// Where a model comes from: one key per distinct model of a load.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum ModelKey {

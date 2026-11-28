@@ -35,6 +35,7 @@ use crate::level_session::{SKY, WorldUpload, pose_attachments, pose_skinned, upl
 use crate::play::{Levels, Loading, draw_hud};
 use crate::play_input::PlayControls;
 use crate::state::{AppState, Effects, Scene};
+use crate::viewmodel::{self, WeaponViewModel};
 use crate::wizard_scene::{Outcome, SceneMaker, WizardScene};
 use crate::{profiling, screenshot};
 
@@ -60,6 +61,16 @@ struct Playing {
     /// Seconds of play so far, summed from frame deltas while playing (not paused): the time of every animated
     /// placement's default animation (T04-044).
     animation_time: f64,
+    /// The weapon the view-model pass shows (T04-049): [`viewmodel::DEFAULT_WEAPON`] at first, or whichever
+    /// weapon a digit key last picked ([`App::play_input`]).
+    weapon: u16,
+    /// `weapon`'s view-model on the GPU, kept to re-pose it every frame without reloading; `None` while it has
+    /// not been loaded yet, could not be loaded (`viewmodel::load_weapon_viewmodel` logs why), or there is no
+    /// game data to read its files from (the test room).
+    viewmodel: Option<WeaponViewModel>,
+    /// `(weapon, renderer generation)` [`viewmodel`] was loaded for; a mismatch (a digit key, or a device
+    /// rebuild that dropped every GPU handle) means it must be loaded again.
+    viewmodel_loaded_for: Option<(u16, u64)>,
 }
 
 struct App {
@@ -247,6 +258,9 @@ impl App {
             uploaded: None,
             world: None,
             animation_time: 0.0,
+            weapon: viewmodel::DEFAULT_WEAPON,
+            viewmodel: None,
+            viewmodel_loaded_for: None,
         })));
         self.capture_cursor(true);
     }
@@ -383,6 +397,13 @@ impl App {
                 button: MouseButton::Left,
                 pressed: true,
             } => self.capture_cursor(true),
+            InputEvent::Key {
+                key, pressed: true, ..
+            } if viewmodel::digit_weapon(key).is_some() => {
+                if let Some(Phase::Playing(playing)) = &mut self.phase {
+                    playing.weapon = viewmodel::digit_weapon(key).unwrap_or(playing.weapon);
+                }
+            }
             other => self.controls.on_event(&other),
         }
     }
@@ -518,6 +539,22 @@ impl App {
                     )
                 {
                     tracing::warn!(error = %e, "attachments not posed");
+                }
+                if let Some(renderer) = self.renderer.as_mut() {
+                    let generation = renderer.world_generation();
+                    if playing.viewmodel_loaded_for != Some((playing.weapon, generation)) {
+                        playing.viewmodel = self.levels.vfs().and_then(|vfs| {
+                            viewmodel::load_weapon_viewmodel(renderer, vfs, playing.weapon)
+                        });
+                        playing.viewmodel_loaded_for = Some((playing.weapon, generation));
+                    }
+                    let vm = playing
+                        .viewmodel
+                        .as_ref()
+                        .map(|u| viewmodel::pose(u, playing.animation_time as f32));
+                    if let Err(e) = renderer.set_viewmodel(vm) {
+                        tracing::warn!(error = %e, "viewmodel weapon not drawn");
+                    }
                 }
                 draw_hud(
                     &mut self.draw_list,

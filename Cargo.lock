@@ -2696,6 +2696,7 @@ dependencies = [
  "puffin",
  "puffin_http",
  "ss2-core",
+ "ss2-format-ep",
  "ss2-game",
  "ss2-physics",
  "ss2-platform",

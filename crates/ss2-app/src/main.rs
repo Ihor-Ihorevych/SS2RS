@@ -13,6 +13,7 @@ mod play_input;
 mod profiling;
 mod screenshot;
 mod state;
+mod viewmodel;
 mod wizard_scene;
 
 use std::process::ExitCode;
