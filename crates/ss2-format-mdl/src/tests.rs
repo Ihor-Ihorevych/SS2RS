@@ -753,3 +753,83 @@ fn every_model_of_the_real_install_reads() {
     );
     assert!(missing_meshes.is_empty() && missing_materials.is_empty());
 }
+
+/// The skeletons and animation sets of every `.mdl` of the install (T04-044) against the counts of `docs/re/mdl.md`:
+/// skeletons 518 embedded, 70 external (60 `.skl`, 10 `.rsc`), 3,119 none; animation set instances 354 embedded,
+/// 681 external `.ans`, 10 null; every embedded one readable. Kleer's embedded skeleton has 33 bones in LOD 0, with
+/// names. Skips without `SS2_DATA_DIR`.
+#[test]
+fn every_model_skeleton_and_animation_set_reads() {
+    use ss2_vfs::{EntryKind, Vfs, VfsPath};
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut stack = vec![VfsPath::root()];
+    let (mut sk_embedded, mut sk_skl, mut sk_rsc, mut sk_none) = (0usize, 0usize, 0usize, 0usize);
+    let (mut set_embedded, mut set_ans, mut set_null) = (0usize, 0usize, 0usize);
+    let mut unreadable = Vec::new();
+    while let Some(d) = stack.pop() {
+        for e in vfs.list(&d).unwrap() {
+            let path = d.join(&e.name).unwrap();
+            if e.kind == EntryKind::Dir {
+                stack.push(path);
+                continue;
+            }
+            if path.extension() != Some("mdl") {
+                continue;
+            }
+            let Ok(model) = Model::from_bytes(&vfs.read(&path).unwrap()) else {
+                continue; // `every_model_of_the_real_install_reads` reports those
+            };
+            match &model.skeleton {
+                SkeletonSource::Embedded(_) => sk_embedded += 1,
+                SkeletonSource::External(p) if p.to_ascii_lowercase().ends_with(".skl") => {
+                    sk_skl += 1
+                }
+                SkeletonSource::External(_) => sk_rsc += 1,
+                SkeletonSource::None => sk_none += 1,
+                SkeletonSource::Unreadable(why) => {
+                    unreadable.push(format!("{}: {why}", path.as_str()))
+                }
+            }
+            for s in &model.anim_sets {
+                match s {
+                    AnimSetSource::Embedded(_) => set_embedded += 1,
+                    AnimSetSource::External(p) => {
+                        assert!(p.to_ascii_lowercase().ends_with(".ans"), "{p}");
+                        set_ans += 1;
+                    }
+                    AnimSetSource::None => set_null += 1,
+                    AnimSetSource::Unreadable(why) => {
+                        unreadable.push(format!("{}: {why}", path.as_str()))
+                    }
+                }
+            }
+        }
+    }
+    eprintln!(
+        "skeletons: {sk_embedded} embedded, {sk_skl} .skl, {sk_rsc} other, {sk_none} none; sets: {set_embedded} \
+         embedded, {set_ans} .ans, {set_null} null; unreadable {}",
+        unreadable.len()
+    );
+    assert!(unreadable.is_empty(), "{unreadable:#?}");
+    assert_eq!((sk_embedded, sk_skl, sk_rsc, sk_none), (518, 60, 10, 3119));
+    assert_eq!((set_embedded, set_ans, set_null), (354, 681, 10));
+
+    let kleer = VfsPath::new("Content/SeriousSam2/Models/Enemies/Kleer/Kleer.mdl").unwrap();
+    let model = Model::from_bytes(&vfs.read(&kleer).unwrap()).unwrap();
+    let SkeletonSource::Embedded(skeleton) = &model.skeleton else {
+        panic!("{:?}", model.skeleton);
+    };
+    let lod = &skeleton.lods()[0];
+    assert_eq!(lod.bones().len(), 33);
+    assert!(
+        lod.bones().iter().all(|b| !b.name.is_empty()),
+        "bones are named"
+    );
+    assert_eq!(
+        model.anim_sets,
+        [AnimSetSource::External(
+            "Content/SeriousSam2/Models/Enemies/Kleer/Animations/Kleer.ans".to_string()
+        )]
+    );
+}

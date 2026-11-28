@@ -14,12 +14,13 @@
 //! assert!(room.bounds().unwrap().max.y > start.position.y);
 //! ```
 
-use ss2_core::math::{Quat, Vec3};
+use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_render_api::scene_data::{
     AlphaMode, Bloom, Fog, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
 pub use ss2_render_api::scene_data::{CubeFace, FaceBasis};
+use ss2_render_api::skinning::{BoneTransform, SkeletonData, SkinnedMeshData};
 use ss2_render_api::{Aabb, Transform};
 
 /// One drawable piece of a model: a mesh with one material.
@@ -69,6 +70,163 @@ pub struct Instance {
     /// This placement's own lightmap: an index into [`LevelScene::textures`], drawn with the lightmap UVs of the
     /// model's parts ([`MeshData::lightmap_uvs`]); `None`: not lightmapped (RFC 0013 amendment 2).
     pub lightmap: Option<u32>,
+}
+
+/// One drawable piece of an animated model: a skinned mesh with one material (RFC 0013 amendment 8).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkinnedPart {
+    /// The triangles in the bind pose, in the model's own space. Its bone list ([`SkinnedMeshData::inverse_bind`])
+    /// is the model's whole skeleton in bone order, so one palette poses every part of the model.
+    pub mesh: SkinnedMeshData,
+    /// Index into [`LevelScene::materials`].
+    pub material: u32,
+}
+
+/// One key of a [`BoneTrack`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AnimKey<T> {
+    /// Seconds since the animation's start.
+    pub time: f32,
+    /// The parent-relative value at that time.
+    pub value: T,
+}
+
+/// The keys of one bone of a [`SkeletalAnimation`]: parent-relative translations and rotations (`[x, y, z, w]`), in
+/// ascending time. An empty list leaves that part of the bone at its rest pose.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoneTrack {
+    /// Index into the skeleton's bones ([`SkeletonData::bones`]).
+    pub bone: u32,
+    /// Translation keys.
+    pub translations: Vec<AnimKey<[f32; 3]>>,
+    /// Rotation keys (unit quaternions).
+    pub rotations: Vec<AnimKey<[f32; 4]>>,
+}
+
+/// An animation already bound to the bones of one skeleton (RFC 0013 amendment 8). It loops: time wraps every
+/// [`SkeletalAnimation::duration`] seconds. Between keys translations are interpolated linearly and rotations
+/// spherically along the shorter arc (`docs/re/ans.md`, reader invariant 6); before the first and after the last key
+/// the nearest key is held.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkeletalAnimation {
+    /// The animation's name, for messages and for choosing one.
+    pub name: String,
+    /// The length of one pass, in seconds (above 0).
+    pub duration: f32,
+    /// The animated bones; a bone without a track keeps its rest pose.
+    pub tracks: Vec<BoneTrack>,
+}
+
+impl SkeletalAnimation {
+    /// The parent-relative pose of `skeleton` `time` seconds after the start (time wraps; a time that is not finite
+    /// counts as 0): its rest pose with every track's value at that time. Tracks whose bone is not in `skeleton` are
+    /// skipped.
+    pub fn local_pose(&self, skeleton: &SkeletonData, time: f32) -> Vec<BoneTransform> {
+        let mut pose = skeleton.rest_pose();
+        let t = if time.is_finite() && self.duration > 0.0 {
+            time.rem_euclid(self.duration)
+        } else {
+            0.0
+        };
+        for track in &self.tracks {
+            let Some(bone) = pose.get_mut(track.bone as usize) else {
+                continue;
+            };
+            if let Some(v) = sample_keys(&track.translations, t, |a, b, u| {
+                Vec3::from(a).lerp(Vec3::from(b), u).to_array()
+            }) && v.iter().all(|c| c.is_finite())
+            {
+                bone.translation = Vec3::from(v);
+            }
+            if let Some(v) = sample_keys(&track.rotations, t, |a, b, u| {
+                Quat::from_array(a)
+                    .normalize()
+                    .slerp(Quat::from_array(b).normalize(), u)
+                    .to_array()
+            }) {
+                let q = Quat::from_array(v);
+                if q.is_finite() && q.length_squared() > 1e-12 {
+                    bone.rotation = q.normalize();
+                }
+            }
+        }
+        pose
+    }
+}
+
+/// The value of `keys` at `time`: held before the first and after the last key, mixed by `mix` in between.
+fn sample_keys<T: Copy>(keys: &[AnimKey<T>], time: f32, mix: impl Fn(T, T, f32) -> T) -> Option<T> {
+    let (first, last) = (keys.first()?, keys.last()?);
+    if time <= first.time {
+        return Some(first.value);
+    }
+    if time >= last.time {
+        return Some(last.value);
+    }
+    let next = keys.partition_point(|k| k.time <= time);
+    let (a, b) = (&keys[next - 1], &keys[next]);
+    let span = b.time - a.time;
+    let u = if span > 0.0 {
+        (time - a.time) / span
+    } else {
+        1.0
+    };
+    Some(mix(a.value, b.value, u))
+}
+
+/// An animated model that skinned instances place (RFC 0013 amendment 8): a skeleton, skinned parts and animations
+/// bound to the skeleton.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkinnedModelData {
+    /// Where it came from (a file path for a loaded model), for messages.
+    pub name: String,
+    /// The bones; every part's bone list is this skeleton's, in bone order.
+    pub skeleton: SkeletonData,
+    /// What to draw.
+    pub parts: Vec<SkinnedPart>,
+    /// The animations, at least one.
+    pub animations: Vec<SkeletalAnimation>,
+    /// The animation a placement plays: an index into `animations` (the loader's module docs say how it is chosen).
+    pub default_animation: u32,
+    /// What collides, in the bind pose; `None` means the model does not collide.
+    pub collision: Option<CollisionData>,
+}
+
+impl SkinnedModelData {
+    /// The bone palette (one bone-to-model matrix per bone, in bone order: what `Renderer::set_bone_palette` takes)
+    /// of animation `animation` at `time` seconds; the rest pose for an index that is out of range.
+    pub fn palette(&self, animation: usize, time: f32) -> Vec<Mat4> {
+        let local = match self.animations.get(animation) {
+            Some(a) => a.local_pose(&self.skeleton, time),
+            None => self.skeleton.rest_pose(),
+        };
+        // One transform per bone by construction, so this cannot fail.
+        self.skeleton.model_transforms(&local).unwrap_or_default()
+    }
+
+    /// [`SkinnedModelData::palette`] of the default animation.
+    pub fn default_palette(&self, time: f32) -> Vec<Mat4> {
+        self.palette(self.default_animation as usize, time)
+    }
+
+    /// The box around every part in the bind pose, in model space; `None` without vertices.
+    pub fn bounds(&self) -> Option<Aabb> {
+        self.parts
+            .iter()
+            .filter_map(|p| p.mesh.bounds())
+            .reduce(|a, b| Aabb::new(a.min.min(b.min), a.max.max(b.max)))
+    }
+}
+
+/// An animated model placed in the level (RFC 0013 amendment 8).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkinnedInstance {
+    /// Index into [`LevelScene::skinned_models`].
+    pub model: u32,
+    /// Model space to world space, with the rules of [`Instance::transform`].
+    pub transform: Transform,
+    /// Whether this placement takes part in collision (with its model's bind-pose collision).
+    pub collidable: bool,
 }
 
 /// A place a player can start.
@@ -130,6 +288,10 @@ pub struct LevelScene {
     pub hazes: Vec<HazeVolume>,
     /// The bloom volumes, in the file's list order (RFC 0013 amendment 6); see [`LevelScene::blooms_at`].
     pub blooms: Vec<BloomVolume>,
+    /// Animated models the skinned instances refer to (RFC 0013 amendment 8).
+    pub skinned_models: Vec<SkinnedModelData>,
+    /// Placed animated models: drawn skinned and posed every frame by the app; they are not in `instances`.
+    pub skinned_instances: Vec<SkinnedInstance>,
 }
 
 /// One bloom volume (`docs/re/environment.md`, "Bloom"): a box like a haze's, fading in over `fade_margin` as the eye
@@ -261,6 +423,45 @@ fn haze_problem(h: &HazeVolume) -> Option<String> {
     None
 }
 
+/// Whether a placement's transform is finite, its rotation of unit length and no scale axis zero.
+fn transform_ok(t: &Transform) -> bool {
+    let finite = t.translation.is_finite() && t.rotation.is_finite() && t.scale.is_finite();
+    finite
+        && (t.rotation.length_squared() - 1.0).abs() <= 1e-3
+        && t.scale.abs().min_element() != 0.0
+}
+
+/// What is wrong with an animation of a skeleton of `bones` bones, if anything.
+fn animation_problem(a: &SkeletalAnimation, bones: usize) -> Option<String> {
+    if !(a.duration.is_finite() && a.duration > 0.0) {
+        return Some(format!("lasts {} s", a.duration));
+    }
+    for t in &a.tracks {
+        if t.bone as usize >= bones {
+            return Some(format!("animates bone {} of {bones}", t.bone));
+        }
+        let translations: Vec<(f32, bool)> = t
+            .translations
+            .iter()
+            .map(|k| (k.time, k.value.iter().all(|c| c.is_finite())))
+            .collect();
+        let rotations: Vec<(f32, bool)> = t
+            .rotations
+            .iter()
+            .map(|k| (k.time, k.value.iter().all(|c| c.is_finite())))
+            .collect();
+        for keys in [translations, rotations] {
+            if keys.iter().any(|(time, ok)| !(time.is_finite() && *ok)) {
+                return Some(format!("has a non-finite key on bone {}", t.bone));
+            }
+            if keys.windows(2).any(|w| w[1].0 < w[0].0) {
+                return Some(format!("has keys out of order on bone {}", t.bone));
+            }
+        }
+    }
+    None
+}
+
 /// What a level load is busy with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoadStage {
@@ -351,14 +552,11 @@ impl LevelScene {
                     self.textures.len()
                 ));
             }
-            let finite = t.translation.is_finite() && t.rotation.is_finite() && t.scale.is_finite();
-            if !finite
-                || (t.rotation.length_squared() - 1.0).abs() > 1e-3
-                || t.scale.abs().min_element() == 0.0
-            {
+            if !transform_ok(t) {
                 return bad(format!("instance {i} has a bad transform {t:?}"));
             }
         }
+        self.validate_skinned()?;
         if let Some(sky) = &self.sky {
             if !sky.tint.iter().all(|c| c.is_finite()) {
                 return bad(format!("sky tint {:?}", sky.tint));
@@ -399,6 +597,70 @@ impl LevelScene {
         for (i, b) in self.blooms.iter().enumerate() {
             if let Some(problem) = bloom_problem(b) {
                 return bad(format!("bloom {i} {problem}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// The checks of [`LevelScene::validate`] for the animated models and their placements.
+    fn validate_skinned(&self) -> Result<()> {
+        let bad = |detail: String| Err(Error::invalid("level scene", detail));
+        for (i, model) in self.skinned_models.iter().enumerate() {
+            let what = format!("skinned model {i} ({})", model.name);
+            let bones = model.skeleton.bones().len();
+            for (j, part) in model.parts.iter().enumerate() {
+                if let Err(e) = part.mesh.validate() {
+                    return bad(format!("{what} part {j}: {e}"));
+                }
+                if part.mesh.inverse_bind.len() != bones {
+                    return bad(format!(
+                        "{what} part {j} has {} bones, the skeleton {bones}",
+                        part.mesh.inverse_bind.len()
+                    ));
+                }
+                if part.material as usize >= self.materials.len() {
+                    return bad(format!(
+                        "{what} part {j} names material {} of {}",
+                        part.material,
+                        self.materials.len()
+                    ));
+                }
+            }
+            if model.default_animation as usize >= model.animations.len() {
+                return bad(format!(
+                    "{what} plays animation {} of {}",
+                    model.default_animation,
+                    model.animations.len()
+                ));
+            }
+            for a in &model.animations {
+                if let Some(problem) = animation_problem(a, bones) {
+                    return bad(format!("{what} animation `{}` {problem}", a.name));
+                }
+            }
+            if let Some(c) = &model.collision {
+                let n = c.positions.len();
+                if !c.indices.len().is_multiple_of(3)
+                    || c.indices.iter().any(|x| *x as usize >= n)
+                    || c.positions.iter().any(|p| !p.is_finite())
+                {
+                    return bad(format!("{what} has broken collision"));
+                }
+            }
+        }
+        for (i, inst) in self.skinned_instances.iter().enumerate() {
+            if inst.model as usize >= self.skinned_models.len() {
+                return bad(format!(
+                    "skinned instance {i} names model {} of {}",
+                    inst.model,
+                    self.skinned_models.len()
+                ));
+            }
+            if !transform_ok(&inst.transform) {
+                return bad(format!(
+                    "skinned instance {i} has a bad transform {:?}",
+                    inst.transform
+                ));
             }
         }
         Ok(())
@@ -487,6 +749,20 @@ impl LevelScene {
                     });
                 }
             }
+        }
+        for inst in &self.skinned_instances {
+            let Some(b) = self
+                .skinned_models
+                .get(inst.model as usize)
+                .and_then(SkinnedModelData::bounds)
+            else {
+                continue;
+            };
+            let w = b.transformed(inst.transform.matrix());
+            out = Some(match out {
+                Some(o) => Aabb::new(o.min.min(w.min), o.max.max(w.max)),
+                None => w,
+            });
         }
         out
     }
@@ -594,7 +870,90 @@ impl LevelScene {
             }),
             hazes: vec![TEST_HAZE],
             blooms: vec![TEST_BLOOM],
+            skinned_models: Vec::new(),
+            skinned_instances: Vec::new(),
         }
+    }
+
+    /// [`LevelScene::test_room`] with [`test_skinned_bar`] standing on the floor 4 m in front of the spawn (at
+    /// `(0, 0, 2)`), collidable: an animated placement for tests without game data.
+    pub fn test_room_animated() -> Self {
+        let mut room = Self::test_room();
+        room.skinned_models.push(test_skinned_bar());
+        room.skinned_instances.push(SkinnedInstance {
+            model: 0,
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
+            collidable: true,
+        });
+        room
+    }
+}
+
+/// A small animated model for tests: a 0.4 m square bar 2 m tall on two bones (the root at the origin, a child named
+/// `Tip` at y = 1), its lower half on the root and its upper half on the child, with collision, and one animation,
+/// `Bend`, that turns the child a quarter turn about +Z and back over 2 s (keys at 0, 1 and 2 s). Its part names
+/// material 0.
+pub fn test_skinned_bar() -> SkinnedModelData {
+    use ss2_render_api::skinning::{SkeletonBone, SkinnedVertex};
+    let skeleton = SkeletonData::new(vec![
+        SkeletonBone::at_rest(1, None, BoneTransform::IDENTITY, Mat4::IDENTITY),
+        SkeletonBone::at_rest(
+            2,
+            Some(1),
+            BoneTransform::new(Quat::IDENTITY, Vec3::Y),
+            Mat4::from_translation(-Vec3::Y),
+        ),
+    ])
+    .and_then(|s| s.with_bone_names(["Root", "Tip"]))
+    .unwrap_or_else(|e| unreachable!("a fixed valid skeleton: {e}"));
+    // The unit cube scaled to 0.4 x 2 x 0.4, standing on y = 0; vertices above y = 1 follow the child.
+    let (cube, indices) = unit_cube();
+    let vertices: Vec<SkinnedVertex> = cube
+        .iter()
+        .map(|v| {
+            let p = Vec3::from(v.position) * Vec3::new(0.4, 2.0, 0.4) + Vec3::Y;
+            SkinnedVertex {
+                position: p.to_array(),
+                normal: v.normal,
+                uv: v.uv,
+                joints: [u16::from(p.y > 1.0), 0, 0, 0],
+                weights: [1.0, 0.0, 0.0, 0.0],
+            }
+        })
+        .collect();
+    let collision = CollisionData {
+        positions: vertices.iter().map(|v| Vec3::from(v.position)).collect(),
+        indices: indices.clone(),
+        from_collision_mesh: false,
+    };
+    let turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
+    let key = |time: f32, value: [f32; 4]| AnimKey { time, value };
+    SkinnedModelData {
+        name: "skinned test bar".to_string(),
+        parts: vec![SkinnedPart {
+            mesh: SkinnedMeshData {
+                vertices,
+                indices,
+                inverse_bind: skeleton.inverse_binds(),
+            },
+            material: 0,
+        }],
+        skeleton,
+        animations: vec![SkeletalAnimation {
+            name: "Bend".to_string(),
+            duration: 2.0,
+            tracks: vec![BoneTrack {
+                bone: 1,
+                translations: Vec::new(),
+                rotations: vec![
+                    key(0.0, Quat::IDENTITY.to_array()),
+                    key(1.0, turn),
+                    key(2.0, Quat::IDENTITY.to_array()),
+                ],
+            }],
+        }],
+        default_animation: 0,
+        collision: Some(collision),
     }
 }
 
@@ -1164,5 +1523,132 @@ mod bloom_tests {
         assert!(check(&|b| b.blur = -1.0));
         assert!(check(&|b| b.fade_margin = 0.0));
         assert!(check(&|b| b.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 2.0)));
+    }
+}
+
+#[cfg(test)]
+mod skinned_tests {
+    use super::*;
+
+    #[test]
+    fn the_animated_test_room_is_valid_and_its_bar_bends() {
+        let room = LevelScene::test_room_animated();
+        room.validate().unwrap();
+        let bar = &room.skinned_models[0];
+        assert_eq!(bar.parts[0].mesh.inverse_bind.len(), 2);
+        // At rest (and at a whole period) the palette is the rest pose: the skin is the identity.
+        let rest = bar
+            .skeleton
+            .model_transforms(&bar.skeleton.rest_pose())
+            .unwrap();
+        for t in [0.0, 2.0, 4.0, -2.0, f32::NAN] {
+            let p = bar.default_palette(t);
+            assert!(
+                p.iter().zip(&rest).all(|(a, b)| a.abs_diff_eq(*b, 1e-5)),
+                "t = {t}"
+            );
+        }
+        // At 1 s the child is turned a quarter about +Z at its joint: the top (y = 2) moves to x = -1, y = 1.
+        let p = bar.default_palette(1.0);
+        let top = p[1] * bar.skeleton.bones()[1].inverse_bind;
+        assert!(
+            top.transform_point3(Vec3::new(0.0, 2.0, 0.0))
+                .abs_diff_eq(Vec3::new(-1.0, 1.0, 0.0), 1e-5)
+        );
+        // Half way to it (0.5 s), an eighth of a turn.
+        let half = bar.default_palette(0.5)[1]
+            .to_scale_rotation_translation()
+            .1;
+        assert!(half.abs_diff_eq(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4), 1e-5));
+        // An animation index out of range gives the rest pose.
+        assert_eq!(bar.palette(5, 1.0), rest);
+        // The bar is in the level's bounds: its top at y = 2 near z = 2.
+        assert!(room.bounds().unwrap().max.y >= 2.0);
+        let mut alone = LevelScene::test_room_animated();
+        alone.instances.clear();
+        let b = alone.bounds().unwrap();
+        assert!(
+            b.min.abs_diff_eq(Vec3::new(-0.2, 0.0, 1.8), 1e-5)
+                && b.max.abs_diff_eq(Vec3::new(0.2, 2.0, 2.2), 1e-5)
+        );
+    }
+
+    #[test]
+    fn keys_are_held_outside_their_range_and_empty_tracks_keep_the_rest_pose() {
+        let bar = test_skinned_bar();
+        let anim = SkeletalAnimation {
+            name: "Lift".into(),
+            duration: 4.0,
+            tracks: vec![
+                BoneTrack {
+                    bone: 1,
+                    translations: vec![
+                        AnimKey {
+                            time: 1.0,
+                            value: [0.0, 1.0, 0.0],
+                        },
+                        AnimKey {
+                            time: 2.0,
+                            value: [0.0, 3.0, 0.0],
+                        },
+                    ],
+                    rotations: Vec::new(),
+                },
+                // A bone that is not in the skeleton is skipped.
+                BoneTrack {
+                    bone: 9,
+                    ..BoneTrack::default()
+                },
+            ],
+        };
+        let y = |t: f32| anim.local_pose(&bar.skeleton, t)[1].translation.y;
+        assert_eq!(y(0.5), 1.0, "before the first key");
+        assert!((y(1.5) - 2.0).abs() < 1e-6);
+        assert_eq!(y(3.0), 3.0, "after the last key");
+        assert!((y(5.5) - 2.0).abs() < 1e-6, "wraps every 4 s");
+        assert_eq!(
+            anim.local_pose(&bar.skeleton, 1.5)[1].rotation,
+            Quat::IDENTITY
+        );
+    }
+
+    #[test]
+    fn broken_animated_models_and_placements_are_rejected() {
+        let check = |f: &dyn Fn(&mut LevelScene)| {
+            let mut s = LevelScene::test_room_animated();
+            f(&mut s);
+            s.validate().is_err()
+        };
+        assert!(!check(&|_| {}));
+        assert!(check(&|s| s.skinned_instances[0].model = 3));
+        assert!(check(&|s| s.skinned_instances[0].transform.scale.x = 0.0));
+        assert!(check(&|s| s.skinned_models[0].parts[0].material = 40));
+        assert!(check(&|s| s.skinned_models[0].parts[0]
+            .mesh
+            .inverse_bind
+            .pop()
+            .map(drop)
+            .unwrap_or(())));
+        assert!(check(&|s| s.skinned_models[0].parts[0]
+            .mesh
+            .indices
+            .push(0)));
+        assert!(check(&|s| s.skinned_models[0].default_animation = 1));
+        assert!(check(&|s| s.skinned_models[0].animations[0].duration = 0.0));
+        assert!(check(
+            &|s| s.skinned_models[0].animations[0].tracks[0].bone = 2
+        ));
+        assert!(check(&|s| s.skinned_models[0].animations[0].tracks[0]
+            .rotations[1]
+            .time = 5.0));
+        assert!(check(&|s| s.skinned_models[0].animations[0].tracks[0]
+            .rotations[0]
+            .value[0] = f32::NAN));
+        assert!(check(&|s| s.skinned_models[0]
+            .collision
+            .as_mut()
+            .unwrap()
+            .indices
+            .push(999)));
     }
 }

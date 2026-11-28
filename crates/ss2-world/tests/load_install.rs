@@ -1040,3 +1040,74 @@ fn every_level_is_lightmapped() {
         (159, 186, 284, 432, 29)
     );
 }
+
+/// Animated placements (T04-044, RFC 0013 amendment 8): two levels with animated models load them as skinned
+/// instances, and every animation of every animated model poses with finite, bounded palettes: at 24 times over a
+/// pass, each bone matrix is finite and rigid (determinant near 1) and its origin, like every skinned vertex, stays
+/// within the model's bind-pose box grown by twice its diagonal plus 10 m. At least one model visibly moves.
+#[test]
+fn animated_placements_pose_with_finite_bounded_palettes() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    for id in ["dm_dockingbay", "6_3_snow_base"] {
+        let info = level(&levels, id);
+        let scene = load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        scene.validate().unwrap();
+        assert!(
+            scene.skinned_instances.len() >= 10,
+            "{id}: {} animated placements",
+            scene.skinned_instances.len()
+        );
+        let mut moved = 0usize;
+        for model in &scene.skinned_models {
+            let bounds = model.bounds().expect("an animated model has vertices");
+            let reach = (bounds.max - bounds.min).length() * 2.0 + 10.0;
+            let inside = |p: Vec3| {
+                p.is_finite()
+                    && p.cmpge(bounds.min - Vec3::splat(reach)).all()
+                    && p.cmple(bounds.max + Vec3::splat(reach)).all()
+            };
+            let rest = model.palette(usize::MAX, 0.0);
+            for (a, animation) in model.animations.iter().enumerate() {
+                let mut max_change = 0.0f32;
+                for step in 0..24 {
+                    let t = animation.duration * step as f32 / 24.0;
+                    let palette = model.palette(a, t);
+                    assert_eq!(palette.len(), model.skeleton.bones().len());
+                    for (b, m) in palette.iter().enumerate() {
+                        let what =
+                            format!("{id} `{}` `{}` t {t} bone {b}", model.name, animation.name);
+                        assert!(m.is_finite(), "{what}: {m:?}");
+                        assert!(
+                            (m.determinant() - 1.0).abs() < 1e-2,
+                            "{what}: det {}",
+                            m.determinant()
+                        );
+                        assert!(inside(m.w_axis.truncate()), "{what}: origin {}", m.w_axis);
+                        max_change = max_change.max(
+                            (*m - rest[b])
+                                .abs()
+                                .to_cols_array()
+                                .iter()
+                                .fold(0.0, |x, y| x.max(*y)),
+                        );
+                    }
+                    for part in &model.parts {
+                        for v in (0..part.mesh.vertices.len()).step_by(7) {
+                            let p = part.mesh.skinned_position(v, &palette).unwrap();
+                            assert!(inside(p), "{id} `{}` vertex {v} at {p}", model.name);
+                        }
+                    }
+                }
+                moved += usize::from(a == model.default_animation as usize && max_change > 1e-3);
+            }
+        }
+        eprintln!(
+            "{id}: {} animated placements of {} models, {moved} of them move in their default animation",
+            scene.skinned_instances.len(),
+            scene.skinned_models.len()
+        );
+        assert!(moved > 0, "{id}: nothing moves");
+    }
+}

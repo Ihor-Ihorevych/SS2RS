@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_physics::controller::WalkConfig;
-use ss2_render::{Renderer, SkyBatch, TextureHandle, WorldBatch};
+use ss2_render::{Renderer, SkinnedDraw, SkyBatch, TextureHandle, WorldBatch};
 use ss2_render_api::Camera;
-use ss2_render_api::scene_data::{AlphaMode, TextureData};
+use ss2_render_api::scene_data::{AlphaMode, MaterialData, TextureData};
 use ss2_ui::Color;
 use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{SystemEnvironment, Vfs};
@@ -129,6 +129,19 @@ pub(crate) struct UploadReport {
     pub sky: bool,
     /// Placements drawn with their own lightmap (one batch each per model part).
     pub lightmapped: usize,
+    /// Animated placements (RFC 0013 amendment 8).
+    pub skinned_instances: usize,
+    /// Skinned draws: one per part of each animated placement.
+    pub skinned_draws: usize,
+}
+
+/// How a material's alpha is drawn: blending is drawn as a cutout until the renderer sorts transparent surfaces.
+fn alpha_cutoff(material: &MaterialData) -> Option<f32> {
+    match material.alpha {
+        AlphaMode::Opaque => None,
+        AlphaMode::Mask { cutoff } => Some(cutoff),
+        AlphaMode::Blend => Some(0.5),
+    }
 }
 
 /// Put `scene` on the GPU as the renderer's world, replacing what was there: one mesh and one batch per model part,
@@ -191,12 +204,7 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
                 mesh,
                 texture: material.base_texture.map(|t| textures[t as usize]),
                 tint: material.base_color,
-                // Blending is drawn as a cutout until the renderer sorts transparent surfaces.
-                alpha_cutoff: match material.alpha {
-                    AlphaMode::Opaque => None,
-                    AlphaMode::Mask { cutoff } => Some(cutoff),
-                    AlphaMode::Blend => Some(0.5),
-                },
+                alpha_cutoff: alpha_cutoff(&material),
                 instances,
                 lightmap,
             };
@@ -213,6 +221,7 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
         }
     }
     renderer.set_world(batches).map_err(|e| e.to_string())?;
+    upload_skinned(renderer, scene, &textures, &mut report)?;
     // The sky's faces are textures of the scene like any other (stand-ins included).
     let sky = scene.sky.map(|sky| SkyBatch {
         faces: sky.faces.map(|f| f.map(|t| textures[t as usize])),
@@ -224,6 +233,88 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
     report.sky = sky.is_some();
     renderer.set_sky(sky).map_err(|e| e.to_string())?;
     Ok(report)
+}
+
+/// Put the animated placements on the GPU (RFC 0013 amendment 8): one skinned mesh per part of each animated model,
+/// and one skinned draw per part of each placement, in placement order, then part order (the order [`pose_skinned`]
+/// relies on), posed by its model's default animation at time 0.
+fn upload_skinned(
+    renderer: &mut Renderer,
+    scene: &LevelScene,
+    textures: &[TextureHandle],
+    report: &mut UploadReport,
+) -> Result<(), String> {
+    let mut meshes = Vec::with_capacity(scene.skinned_models.len());
+    for model in &scene.skinned_models {
+        let handles = model
+            .parts
+            .iter()
+            .map(|p| renderer.create_skinned_mesh(&p.mesh))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("animated model {}: {e}", model.name))?;
+        meshes.push(handles);
+    }
+    let palettes: Vec<Vec<Mat4>> = scene
+        .skinned_models
+        .iter()
+        .map(|m| m.default_palette(0.0))
+        .collect();
+    let mut draws = Vec::new();
+    for inst in &scene.skinned_instances {
+        let m = inst.model as usize;
+        for (part, mesh) in scene.skinned_models[m].parts.iter().zip(&meshes[m]) {
+            let material = scene.materials[part.material as usize];
+            draws.push(SkinnedDraw {
+                mesh: *mesh,
+                texture: material.base_texture.map(|t| textures[t as usize]),
+                tint: material.base_color,
+                alpha_cutoff: alpha_cutoff(&material),
+                transform: inst.transform.matrix(),
+                palette: palettes[m].clone(),
+            });
+        }
+    }
+    report.skinned_instances = scene.skinned_instances.len();
+    report.skinned_draws = draws.len();
+    renderer.set_skinned(draws).map_err(|e| e.to_string())
+}
+
+/// Pose every animated placement `time` seconds into its model's default animation (T04-044): each model's palette is
+/// computed once and given to the skinned draws of all its placements with `Renderer::set_bone_palette`. Every
+/// placement of a model shows the same moment. Returns how many draws were posed; none if the renderer's skinned
+/// draws are not the ones [`upload`] made for `scene`.
+///
+/// # Errors
+/// When the renderer refuses a palette (the scene was validated, so this means a GPU-side mismatch).
+pub(crate) fn pose_skinned(
+    renderer: &mut Renderer,
+    scene: &LevelScene,
+    time: f32,
+) -> Result<usize, String> {
+    let expected: usize = scene
+        .skinned_instances
+        .iter()
+        .map(|i| scene.skinned_models[i.model as usize].parts.len())
+        .sum();
+    if expected == 0 || renderer.skinned_count() != expected {
+        return Ok(0);
+    }
+    let palettes: Vec<Vec<Mat4>> = scene
+        .skinned_models
+        .iter()
+        .map(|m| m.default_palette(time))
+        .collect();
+    let mut draw = 0;
+    for inst in &scene.skinned_instances {
+        let m = inst.model as usize;
+        for _ in &scene.skinned_models[m].parts {
+            renderer
+                .set_bone_palette(draw, &palettes[m])
+                .map_err(|e| e.to_string())?;
+            draw += 1;
+        }
+    }
+    Ok(draw)
 }
 
 /// The camera at the level's start: at eye height above the start point, facing its heading.
@@ -276,6 +367,7 @@ pub(crate) fn take_level_screenshot(
         meshes = report.meshes,
         textures = report.textures,
         textures_replaced = report.textures_replaced,
+        animated = report.skinned_instances,
         skipped = scene.skipped.len(),
         hazes = scene.hazes.len(),
         fog = ?fog,
@@ -439,6 +531,43 @@ mod tests {
             &image.pixels[((45 * 160 + 80) * 4)..][..4],
             &[102, 153, 204, 255]
         );
+    }
+
+    #[test]
+    fn an_animated_placement_is_posed_by_its_animation() {
+        let mut renderer = match Renderer::new_offscreen((160, 90)) {
+            Ok(r) => r,
+            Err(RenderError::NoAdapter(reason)) => {
+                eprintln!("SKIPPED (no GPU adapter): {reason}");
+                return;
+            }
+            Err(e) => panic!("{e}"),
+        };
+        let room = LevelScene::test_room_animated();
+        let report = upload(&mut renderer, &room).unwrap();
+        assert_eq!((report.skinned_instances, report.skinned_draws), (1, 1));
+        assert_eq!(renderer.skinned_count(), 1);
+        let camera = start_camera(&room);
+        let changed = |a: &ss2_render::ImageRgba8, b: &ss2_render::ImageRgba8| {
+            a.pixels
+                .chunks(4)
+                .zip(b.pixels.chunks(4))
+                .filter(|(p, q)| p.iter().zip(q.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+                .count()
+        };
+        let rest = renderer.render_world_to_image(&camera, None, SKY).unwrap();
+        // A whole pass later the bar is back at rest; at 1 s its upper half is bent over to the left.
+        assert_eq!(pose_skinned(&mut renderer, &room, 2.0).unwrap(), 1);
+        let again = renderer.render_world_to_image(&camera, None, SKY).unwrap();
+        assert!(changed(&rest, &again) < 20, "{}", changed(&rest, &again));
+        pose_skinned(&mut renderer, &room, 1.0).unwrap();
+        let bent = renderer.render_world_to_image(&camera, None, SKY).unwrap();
+        assert!(changed(&rest, &bent) > 100, "{}", changed(&rest, &bent));
+        // Without animated placements nothing is posed; nor is a scene other than the uploaded one.
+        let plain = LevelScene::test_room();
+        assert_eq!(pose_skinned(&mut renderer, &plain, 1.0).unwrap(), 0);
+        upload(&mut renderer, &plain).unwrap();
+        assert_eq!(pose_skinned(&mut renderer, &room, 1.0).unwrap(), 0);
     }
 
     #[test]

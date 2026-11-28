@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
-use ss2_meta::{Container, Struct, TypeSystem, Value};
+use ss2_meta::{Container, Decoded, Struct, TypeSystem, Value};
 
 /// A skeleton, with its LODs in source order.
 #[derive(Debug, Clone, PartialEq)]
@@ -94,13 +94,30 @@ impl Skeleton {
                 "expected two main objects: CResourceFile and CSkeleton",
             ));
         };
-        let types = &decoded.types;
-        Fields::new(types, &resource.value, "CResourceFile")?;
-        let skeleton = Fields::new(types, &skeleton.value, "CSkeleton")?;
+        Fields::new(&decoded.types, &resource.value, "CResourceFile")?;
+        Self::read(&container, &decoded.types, &skeleton.value)
+    }
+
+    /// Read the `CSkeleton` object `id` of an already decoded container: the same object shape
+    /// as a `.skl` file's, wherever it is stored. A `.mdl` model embeds its skeleton this way
+    /// (`docs/re/mdl.md`, "Skeleton"; 518 models). Bone names come from `container`'s identifier
+    /// table at each bone's id, as in a `.skl` file.
+    ///
+    /// # Errors
+    /// [`Error::NotFound`] if there is no object `id`; otherwise as [`Skeleton::parse`].
+    pub fn from_object(container: &Container<'_>, decoded: &Decoded, id: u32) -> Result<Self> {
+        let object = decoded
+            .object(id)
+            .ok_or_else(|| Error::NotFound(format!("object {id}")))?;
+        Self::read(container, &decoded.types, &object.value)
+    }
+
+    fn read(container: &Container<'_>, types: &TypeSystem, value: &Value) -> Result<Self> {
+        let skeleton = Fields::new(types, value, "CSkeleton")?;
         let lods = skeleton
             .list("1")?
             .iter()
-            .map(|value| read_lod(&container, types, value))
+            .map(|value| read_lod(container, types, value))
             .collect::<Result<_>>()?;
         Ok(Self { lods })
     }
