@@ -1,7 +1,9 @@
 # The player's stored movement constants (T01-410)
 
 - **Roadmap task:** T01-410 (feeds T07-037, the retuning of the provisional walker of T07-030; the
-  measured version stays T01-024, blocked because the original cannot be run here)
+  measured version stays T01-024 — T01-038 (2026-11-28) got the oracle harness attached to the
+  running original for the first time, but could not yet read the player's position or velocity; see
+  "Live-check attempt, 2026-11-28" below)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
 - **Confidence:** **high** for every number read directly from `EntityParams/PlayerPuppet.ep` and
   `PlayerPuppet_DM.ep` and reproduced by `tools/re/player_movement_verify.py`; **medium** for the
@@ -249,6 +251,56 @@ only the walker's own feel.
    effective eye height by about 0.2).
 7. Confirmation, from the running game, that the world unit really is the metre (this page's
    cross-check is medium confidence, not a measurement).
+
+## Live-check attempt, 2026-11-28 (T01-038)
+
+- **Roadmap task:** T01-038 (oracle capture, scoped to player movement this run) · **Author:**
+  @Ihor-Ihorevych/agent
+
+T01-038 set out to measure ground speed (including diagonal), acceleration/deceleration curves, jump
+apex and air time, step-up height, gravity and eye height on the running original, to check against
+the table above, using `tools/oracle` (T11-008; its live check, T11-008b, was still open). The
+original **could** be started this run (Steam started and logged in locally, then
+`Bin/Sam2.exe +sam_bStartDemoPlayback 1 +sam_strDemoFile Content/SeriousSam2/Demos/Demo_0001.dem …`,
+per `docs/ORACLE_HARNESS.md`), and the harness attached and read real numbers for the first time —
+but **no movement number below was obtained**, for the reasons below. Nothing was faked: where a
+number could not be read, it is reported as not read, not guessed.
+
+**What was confirmed live:**
+
+- The simulation clock (`sim.now_raw`) advances at 4.2946×10⁹ raw counts per second of game time
+  against the `docs/re/main-loop.md` §1 prediction of 2³² ≈ 4.29497×10⁹ — within 0.01%, over a
+  500-sample/25-second capture. **Confidence: high.**
+- The oracle target map's chain to the player puppet entity (world → a handle → world-info entity →
+  a handle → game-info entity → a handle → player brain → a handle → player puppet) needed one hop's
+  offset corrected; once fixed, `player.health`/`health_max`/`armour`/`alive` matched the on-screen
+  HUD repeatedly across several minutes of demo playback, several level changes and a vehicle
+  section (values cross-checked by eye against screenshots: 125, 135, 150, 165, 200 and a momentary
+  2). **Confidence: high** (repeated, consistent, independently cross-checked against the HUD).
+
+**What is still blocked — no movement number could be measured:**
+
+The player's placement (position, orientation) and velocity are **not yet reachable** through the
+oracle target map. The existing guess for the position/orientation chain (a handle on the puppet,
+one more offset for x/y/z) resolves to a different object on almost every read — plausible-looking
+position floats on one sample, obvious garbage a fraction of a second later with the player
+visibly not moving — which reads as a pooled/reused temporary slot, not a stable reference to the
+puppet's own placement. Without a stable position and velocity reading, **none** of this run's
+target numbers could be produced:
+
+- ground speed, steady-state or diagonal;
+- acceleration/deceleration curves (time to full speed, time to stop);
+- jump apex height and air time;
+- step-up height;
+- gravity (measured, as opposed to the data-only `wld-root.md` reading already in this page);
+- eye height from the camera.
+
+The table above (T01-410, data-only, read from the `.ep` files) is therefore **unchanged** by this
+run: nothing here confirms or contradicts any of its numbers. Finding the real placement/velocity
+object needs more targeted work than this run's time box — most likely reading `Sam2Game.dll`'s
+placement/mechanism accessors in the local decompile tree against the now-corrected puppet chain,
+rather than further blind memory scanning — and is split off as a follow-up task (see
+`docs/roadmap/T01-reverse-engineering.md`, the task appended after T01-038).
 
 ## Test vectors
 
