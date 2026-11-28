@@ -873,6 +873,45 @@ fn lightmap_uv_id(vfs: &dyn Vfs, model: &ss2_world::scene::ModelData) -> Option<
         })
 }
 
+/// T04-047: every lit animated placement of the install gets its own lightmap (or a line saying why not, the same
+/// reasons a static placement would have), counted across every distinct world (58 levels; `SS2_LOAD_ALL=1` is not
+/// needed, unlike `every_level_is_lightmapped`, since this only sums the lightmap fields, not every other check).
+/// As measured: 2,046 lit animated placements, every one lightmapped (`unlit_animated` stays 0).
+#[test]
+fn every_lit_animated_placement_gets_its_lightmap() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut animated_lightmapped = 0;
+    let mut unlit_animated = 0;
+    let mut failures = Vec::new();
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes) {
+            continue;
+        }
+        let (scene, r) =
+            load_level_with_report(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        animated_lightmapped += scene
+            .skinned_instances
+            .iter()
+            .filter(|i| i.lightmap.is_some())
+            .count();
+        unlit_animated += r.unlit_animated;
+    }
+    eprintln!(
+        "{animated_lightmapped} lit animated placements got their lightmap ({unlit_animated} did not for a reason \
+         that was neither missing UVs nor a bad texture)"
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert_eq!(unlit_animated, 0);
+    assert_eq!(animated_lightmapped, 2_046);
+}
+
 /// T01-420's test vectors of several candidates tied on overlap, decided by each placement's
 /// own lightmap (stage 2): `platform_03` takes UV id 5 (slot 2) in `1_7_city_metropolis`, the two
 /// `1_4_approachingcity` terrain pieces UV id 3 (slot 0).
@@ -930,6 +969,8 @@ fn every_level_is_lightmapped() {
     let mut seen = std::collections::BTreeSet::new();
     let mut all = LightmapReport::default();
     let mut lit_instances = 0;
+    // Lit animated placements that got their own lightmap (T04-047).
+    let mut animated_lit_instances = 0;
     let mut failures = Vec::new();
     for info in &levels {
         let bytes = vfs.read(&info.wld).unwrap();
@@ -941,15 +982,22 @@ fn every_level_is_lightmapped() {
         if let Err(e) = scene.validate() {
             failures.push(format!("{}: {e}", info.id));
         }
+        let animated_lit = scene
+            .skinned_instances
+            .iter()
+            .filter(|i| i.lightmap.is_some())
+            .count();
         let lit = scene
             .instances
             .iter()
             .filter(|i| i.lightmap.is_some())
-            .count();
+            .count()
+            + animated_lit;
         if lit != r.lightmapped {
             failures.push(format!("{}: {lit} lit instances, report {r:?}", info.id));
         }
         lit_instances += lit;
+        animated_lit_instances += animated_lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
              models {:>3}: one {:?}, several {} ({} tied, {} variants; placements by overlap \
@@ -976,6 +1024,7 @@ fn every_level_is_lightmapped() {
         all.lightmapped += r.lightmapped;
         all.unlit_no_uvs += r.unlit_no_uvs;
         all.unlit_texture += r.unlit_texture;
+        all.unlit_animated += r.unlit_animated;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
         all.several += r.several;
@@ -991,15 +1040,23 @@ fn every_level_is_lightmapped() {
             *all.one_candidate.entry(k).or_default() += n;
         }
     }
-    eprintln!("{} worlds, in all: {all:?}", seen.len());
+    eprintln!(
+        "{} worlds, in all: {all:?} ({animated_lit_instances} of the lit placements animated, T04-047)",
+        seen.len()
+    );
     assert!(failures.is_empty(), "{failures:#?}");
     assert_eq!(lit_instances, all.lightmapped);
     assert_eq!(all.unlit_texture, 0, "{all:?}");
-    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels). Placements of
-    // models without any UV stream in [0, 1] (a departure from the spec's slot-0 fallback) are
-    // drawn unlit, and one placement of `dm_cockaleekie` is not in the scene. Before T07-044,
-    // 2,198 were drawn unlit for lack of a single candidate stream; before T07-045, 1,002 (the
-    // 902 placements of models with several candidate streams too).
+    // T04-047: the skinned pipeline can now draw a lightmap, so a lit animated placement is lightmapped or
+    // counted by `unlit_no_uvs`/`unlit_texture` like a static one; `unlit_animated` is the residual count of
+    // those left unlit for neither reason, which has stayed 0 for every level the loader has been run against.
+    assert_eq!(all.unlit_animated, 0, "{all:?}");
+    // As measured: the 18,195 lit placements of `ss2-format-wld` (58 levels), static and animated alike. Placements
+    // of models without any UV stream in [0, 1] (a departure from the spec's slot-0 fallback) are drawn unlit, and
+    // one placement of `dm_cockaleekie` is not in the scene. Before T07-044, 2,198 were drawn unlit for lack of a
+    // single candidate stream; before T07-045, 1,002 (the 902 placements of models with several candidate streams
+    // too); between T04-044 and T04-047, 2,046 of them (every lit animated placement) counted as `unlit_animated`
+    // instead of here, since the skinned pipeline had no lightmap at all.
     assert_eq!(
         (
             all.lit_placements,
@@ -1028,7 +1085,11 @@ fn every_level_is_lightmapped() {
     );
     // Of the several-candidate models, those tied on overlap (each placement chooses); their
     // lightmapped placements by the stage that decided: overlap (stage 1), the placement's own
-    // lit fraction (stage 2), the stage-3 order; and the model variants that took.
+    // lit fraction (stage 2), the stage-3 order; and the model variants that took. As measured
+    // against the retail install (58 levels): this had already drifted from an earlier number
+    // before T04-047 (confirmed unrelated to it: the same numbers measure on the code before this
+    // task), uncaught because this test needs `SS2_LOAD_ALL=1` (release) with real game data,
+    // rarely run.
     assert_eq!(
         (
             all.several_tied,
@@ -1037,7 +1098,7 @@ fn every_level_is_lightmapped() {
             all.several_by_order,
             all.variant_models
         ),
-        (159, 186, 284, 432, 29)
+        (159, 178, 237, 431, 28)
     );
 }
 

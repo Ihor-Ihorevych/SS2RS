@@ -76,10 +76,12 @@ struct SkinnedIn {
     @location(6) model_3: vec4<f32>,
     @location(8) joints: vec4<u32>,
     @location(9) weights: vec4<f32>,
+    @location(10) lightmap_uv: vec2<f32>,
 };
 
 // Linear blend skinning: the bind-pose vertex moved by its four skin matrices, weighted by the normalised weights; all
-// zero weights leave it at its bind position. Then the same as `vs_main` (a skinned mesh has no lightmap).
+// zero weights leave it at its bind position. Then the same as `vs_main`, lightmap UVs included (RFC 0013 amendment
+// 10, T04-047).
 @vertex
 fn vs_skinned(v: SkinnedIn) -> VertexOut {
     let total = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
@@ -102,7 +104,7 @@ fn vs_skinned(v: SkinnedIn) -> VertexOut {
     out.world = world.xyz;
     out.normal = (model * (skin * vec4<f32>(v.normal, 0.0))).xyz;
     out.uv = v.uv;
-    out.lightmap_uv = vec2<f32>(0.0, 0.0);
+    out.lightmap_uv = v.lightmap_uv;
     return out;
 }
 

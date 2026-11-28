@@ -415,6 +415,41 @@ wall clock: a player is plain data the caller samples with its own `time`):
   `palette_of(&inst.animation, t)` instead of one palette per model, so two placements of one model started at
   different times (or one held, one looping) now show different moments.
 
+### Amendment 10: lightmaps on skinned draws (T04-047)
+
+Amendment 8 gave animated models no lightmap at all: a lit placement of one was drawn by the flat light, and
+`LightmapReport::unlit_animated` counted every such placement. The skinned pipeline now gets a lightmap exactly
+like the static one (amendment 2), with the smallest boundary change that lets it:
+
+- `ss2_render_api::skinning::SkinnedMeshData` gains `lightmap_uvs: Option<Vec<[f32; 2]>>` (one UV per vertex, as
+  many as `vertices`; `None` for a mesh without one), the same shape as `scene_data::MeshData::lightmap_uvs`.
+  `validate()` checks its length and finiteness the same way.
+- `ss2_world::scene::SkinnedInstance` gains `lightmap: Option<u32>` (an index into `LevelScene::textures`), with
+  the rules of `Instance::lightmap`. `validate()` checks it is in range.
+- The loader (`ss2_world::load`) gives a `SkinnedPart`'s mesh lightmap UVs from the **same stream** `build`
+  chooses for the model's static parts (`lightmap::choose`, module docs "Lightmaps"): `Loader::build` now returns
+  that stream's position alongside the built `ModelData`, and `Loader::model_parts` passes it to `Loader::skinned`,
+  which passes it to `skin::skinned_parts`/`skin::append_skinned_surface` (a new parameter, built the same way
+  `append_surface` already builds a static part's). A lit animated placement then goes through the loader's
+  existing per-placement lightmap-texture resolution (module docs "Lightmaps") exactly as a lit static placement
+  does, sharing `LightmapReport::lightmapped`, `unlit_no_uvs` and `unlit_texture` with it. The one piece of the
+  static rule not extended to animated models is the **per-placement** tie-break of stage 2 (several candidate
+  streams tied on overlap): a static model can duplicate itself into a stream-specific variant per placement, but
+  an animated model's mesh is bound to one skeleton and bone palette, so a tied animated model instead gives every
+  one of its placements the model's own stage-3 stream (no retail model needs more, as measured). With this,
+  `LightmapReport::unlit_animated` only still counts a lit animated placement left unlit for a reason that is
+  neither `unlit_no_uvs` nor `unlit_texture` — none measured so far, so it has dropped to 0 everywhere the loader
+  has been run against the retail install.
+- `ss2_render::SkinnedDraw` gains `lightmap: Option<TextureHandle>`, with the rules of `WorldBatch::lightmap`
+  (drawn full bright: base colour times the lightmap, no light term). `WorldGpu` gains a third skinned vertex
+  buffer (lightmap UVs, zero-filled for a mesh without them, the same `lightmap_uv_buffer` helper the static mesh
+  already uses) and resolves `SkinnedDraw::lightmap` into the same `material()` bind group a lightmapped static
+  batch gets. `world.wgsl`'s `vs_skinned` reads the new attribute instead of hard-coding `lightmap_uv = (0, 0)`;
+  `fs_main` is unchanged (it already branches on the material's lightmapped flag, not on which vertex stage ran).
+- The app's `upload_skinned` gives each draw its placement's lightmap texture, but only for a part whose mesh has
+  lightmap UVs (a part without them is drawn by the flat light, the same rule `upload`'s static path already
+  applies per part).
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource

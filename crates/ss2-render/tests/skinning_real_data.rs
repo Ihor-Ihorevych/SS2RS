@@ -127,6 +127,7 @@ fn skinned_surface(surface: &Surface, skeleton: &SkeletonData) -> Option<Skinned
         vertices,
         indices: surface.indices.iter().map(|i| u32::from(*i)).collect(),
         inverse_bind: skeleton.inverse_binds(),
+        lightmap_uvs: None,
     };
     mesh.validate().ok()?;
     Some(mesh)

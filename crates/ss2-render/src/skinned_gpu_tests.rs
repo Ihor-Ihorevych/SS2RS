@@ -5,7 +5,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
-use ss2_render_api::scene_data::{MeshData, MeshVertex};
+use ss2_render_api::scene_data::{MeshData, MeshVertex, TextureData};
 use ss2_render_api::skinning::{
     BoneTransform, SkeletonBone, SkeletonData, SkinnedMeshData, SkinnedVertex,
 };
@@ -94,6 +94,7 @@ fn skinned_bar(s: &SkeletonData) -> SkinnedMeshData {
         vertices,
         indices,
         inverse_bind: s.inverse_binds(),
+        lightmap_uvs: None,
     }
 }
 
@@ -107,6 +108,7 @@ fn draw(mesh: SkinnedMeshHandle, palette: Vec<Mat4>) -> SkinnedDraw {
         palette,
         // Generous: these tests are not about culling (T04-048), so the bar must never be culled by it.
         bounds: Aabb::new(Vec3::splat(-10.0), Vec3::splat(10.0)),
+        lightmap: None,
     }
 }
 
@@ -224,6 +226,88 @@ fn the_bind_pose_matches_the_static_path() {
             .chunks(4)
             .any(|p| p[0] > 200 && p[1] < 10 && p[2] < 10),
         "the bar is drawn at all (turned, so lit a little less than fully)"
+    );
+}
+
+/// T04-047: a lit animated placement, in the bind pose, matches what a lit static placement of the same mesh draws
+/// (`vs_skinned` samples its own lightmap exactly like `vs_main`'s full-bright path).
+#[test]
+fn a_lit_skinned_draw_in_the_bind_pose_matches_the_static_path() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen() else {
+        return;
+    };
+    // Every vertex samples the same texel: a uniform lightmap is enough to show the skinned path reads it at all,
+    // and a white tint with no base texture makes the drawn colour exactly the lightmap's.
+    let lightmap_uvs = vec![[0.5, 0.5]; bar().0.len()];
+    let lightmap = r
+        .create_texture(&TextureData::solid([0, 200, 0, 255]))
+        .unwrap();
+    let transform =
+        Mat4::from_rotation_translation(Quat::from_rotation_y(0.4), Vec3::new(0.2, 0.1, DEPTH));
+    let white = [1.0, 1.0, 1.0, 1.0];
+
+    let (vertices, indices) = bar();
+    let static_mesh = r
+        .create_mesh(&MeshData {
+            vertices: vertices
+                .iter()
+                .map(|v| MeshVertex {
+                    position: v.position,
+                    normal: v.normal,
+                    uv: v.uv,
+                })
+                .collect(),
+            indices,
+            lightmap_uvs: Some(lightmap_uvs.clone()),
+        })
+        .unwrap();
+    r.set_world(vec![WorldBatch {
+        mesh: static_mesh,
+        texture: None,
+        tint: white,
+        alpha_cutoff: None,
+        instances: vec![transform],
+        lightmap: Some(lightmap),
+    }])
+    .unwrap();
+    let static_img = r
+        .render_world_to_image(&Camera::default(), None, SKY)
+        .unwrap();
+    r.set_world(Vec::new()).unwrap();
+
+    let s = skeleton();
+    let mesh = r
+        .create_skinned_mesh(&SkinnedMeshData {
+            lightmap_uvs: Some(lightmap_uvs),
+            ..skinned_bar(&s)
+        })
+        .unwrap();
+    let rest = s.model_transforms(&s.rest_pose()).unwrap();
+    r.set_skinned(vec![SkinnedDraw {
+        transform,
+        tint: white,
+        lightmap: Some(lightmap),
+        ..draw(mesh, rest)
+    }])
+    .unwrap();
+    let skinned_img = r
+        .render_world_to_image(&Camera::default(), None, SKY)
+        .unwrap();
+
+    let differing = static_img
+        .pixels
+        .chunks(4)
+        .zip(skinned_img.pixels.chunks(4))
+        .filter(|(a, b)| a.iter().zip(*b).any(|(x, y)| x.abs_diff(*y) > 1))
+        .count();
+    assert_eq!(differing, 0, "pixels that differ from the static path");
+    assert!(
+        static_img
+            .pixels
+            .chunks(4)
+            .any(|p| close([p[0], p[1], p[2], p[3]], [0, 200, 0, 255])),
+        "the bar is drawn full bright with its lightmap, not the flat light"
     );
 }
 

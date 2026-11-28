@@ -152,13 +152,16 @@ fn palette_joints(surface: &Surface, skeleton: &SkeletonData) -> Vec<Option<u16>
 }
 
 /// Append one surface to a skinned `mesh` (whose bone list is `skeleton`'s), with the base UVs from the stream of map
-/// id `uv_map` (else the first). Weights are the stored bytes over 255 (the renderer normalises them); a weight whose
-/// palette slot is no bone of the skeleton, or a surface without skinning, gets weight 0, so such vertices stay at
-/// their bind position. Returns how many weights were dropped for want of a bone.
+/// id `uv_map` (else the first) and, when `lightmap_stream` names one, that position's stream as the lightmap UVs
+/// (the loader's module docs, "Lightmaps": the same rule as a static mesh's). Weights are the stored bytes over 255
+/// (the renderer normalises them); a weight whose palette slot is no bone of the skeleton, or a surface without
+/// skinning, gets weight 0, so such vertices stay at their bind position. Returns how many weights were dropped for
+/// want of a bone.
 pub(super) fn append_skinned_surface(
     mesh: &mut SkinnedMeshData,
     surface: &Surface,
     uv_map: Option<u32>,
+    lightmap_stream: Option<usize>,
     skeleton: &SkeletonData,
 ) -> usize {
     let base = u32::try_from(mesh.vertices.len()).unwrap_or(u32::MAX);
@@ -167,6 +170,19 @@ pub(super) fn append_skinned_surface(
     } else {
         Vec::new()
     };
+    if let Some(k) = lightmap_stream {
+        let lightmap = surface.uv_sets.get(k);
+        let uvs = mesh
+            .lightmap_uvs
+            .get_or_insert_with(|| vec![[0.0, 0.0]; mesh.vertices.len()]);
+        uvs.extend((0..surface.positions.len()).map(|i| {
+            lightmap
+                .and_then(|u| u.get(i))
+                .copied()
+                .filter(|u| u.iter().all(|c| c.is_finite()))
+                .unwrap_or([0.0, 0.0])
+        }));
+    }
     let stream = uv_map
         .and_then(|id| surface.uv_map_ids.iter().position(|m| *m == id))
         .filter(|i| *i < surface.uv_sets.len())
@@ -219,10 +235,13 @@ pub(super) fn append_skinned_surface(
 }
 
 /// The skinned parts of one level of detail's `surfaces`, one per material: `material_of(i)` gives surface `i`'s scene
-/// material and base-colour UV map. Parts that are empty or fail validation are left out (their errors returned).
+/// material and base-colour UV map. With `lightmap_stream`, every part also gets lightmap UVs from that position
+/// (the loader's module docs, "Lightmaps"; chosen by `lightmap::choose`, the same rule as a static mesh's). Parts
+/// that are empty or fail validation are left out (their errors returned).
 pub(super) fn skinned_parts(
     surfaces: &[Surface],
     skeleton: &SkeletonData,
+    lightmap_stream: Option<usize>,
     mut material_of: impl FnMut(usize) -> (u32, Option<u32>),
 ) -> (Vec<SkinnedPart>, Vec<String>, usize) {
     let mut parts: Vec<SkinnedPart> = Vec::new();
@@ -236,12 +255,19 @@ pub(super) fn skinned_parts(
                     vertices: Vec::new(),
                     indices: Vec::new(),
                     inverse_bind: skeleton.inverse_binds(),
+                    lightmap_uvs: None,
                 },
                 material,
             });
             parts.len() - 1
         });
-        dropped += append_skinned_surface(&mut parts[p].mesh, surface, uv_map, skeleton);
+        dropped += append_skinned_surface(
+            &mut parts[p].mesh,
+            surface,
+            uv_map,
+            lightmap_stream,
+            skeleton,
+        );
     }
     let mut kept = Vec::with_capacity(parts.len());
     let mut left_out = Vec::new();
@@ -387,7 +413,8 @@ mod tests {
     fn palette_slots_become_skeleton_bones_and_unknown_ids_weigh_nothing() {
         let s = skeleton();
         // Palette slot 0 is bone id 2 (index 1), slot 1 is bone id 9: no bone.
-        let (parts, left_out, dropped) = skinned_parts(&[surface(vec![2, 9])], &s, |_| (3, None));
+        let (parts, left_out, dropped) =
+            skinned_parts(&[surface(vec![2, 9])], &s, None, |_| (3, None));
         assert!(left_out.is_empty());
         assert_eq!(dropped, 1);
         let mesh = &parts[0].mesh;
@@ -403,8 +430,28 @@ mod tests {
         let mut plain = surface(Vec::new());
         plain.bone_weights = None;
         assert!(!is_skinned(&plain));
-        let (parts, _, dropped) = skinned_parts(&[plain], &s, |_| (0, None));
+        let (parts, _, dropped) = skinned_parts(&[plain], &s, None, |_| (0, None));
         assert_eq!(dropped, 0);
         assert!(parts[0].mesh.vertices.iter().all(|v| v.weights == [0.0; 4]));
+    }
+
+    #[test]
+    fn a_lightmap_stream_gives_every_part_lightmap_uvs_at_that_position() {
+        let s = skeleton();
+        let mut two_streams = surface(vec![2]);
+        // Slot 0 is the base colour UVs, slot 1 the lightmap's.
+        two_streams
+            .uv_sets
+            .push(vec![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]);
+        // Without a chosen stream, no lightmap UVs at all.
+        let (parts, _, _) = skinned_parts(&[two_streams.clone()], &s, None, |_| (0, Some(0)));
+        assert_eq!(parts[0].mesh.lightmap_uvs, None);
+        // With one, every vertex gets slot 1's coordinates, independent of the base-colour UV map.
+        let (parts, _, _) = skinned_parts(&[two_streams], &s, Some(1), |_| (0, Some(0)));
+        assert_eq!(
+            parts[0].mesh.lightmap_uvs,
+            Some(vec![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
+        );
+        assert_eq!(parts[0].mesh.vertices[0].uv, [0.0, 0.0], "slot 0, as named");
     }
 }

@@ -247,7 +247,9 @@ fn culling_bounds(model: &ss2_world::scene::SkinnedModelData) -> Aabb {
 /// Put the animated placements on the GPU (RFC 0013 amendment 8): one skinned mesh per part of each animated model,
 /// and one skinned draw per part of each placement, in placement order, then part order (the order [`pose_skinned`]
 /// relies on), each posed by its own placement's player ([`ss2_world::scene::SkinnedInstance::animation`]) at time
-/// 0 (RFC 0013 amendment 9, T04-048).
+/// 0 (RFC 0013 amendment 9, T04-048). A lit placement's own lightmap goes on every one of its draws whose part has
+/// lightmap UVs, drawn full bright like a lightmapped static batch (RFC 0013 amendment 10, T04-047); a part
+/// without them (its model has none at all) is drawn by the flat light, as before.
 fn upload_skinned(
     renderer: &mut Renderer,
     scene: &LevelScene,
@@ -270,8 +272,16 @@ fn upload_skinned(
         let m = inst.model as usize;
         let model = &scene.skinned_models[m];
         let palette = model.palette_of(&inst.animation, 0.0);
+        let lightmap = inst.lightmap.map(|t| textures[t as usize]);
         for (part, mesh) in model.parts.iter().zip(&meshes[m]) {
             let material = scene.materials[part.material as usize];
+            // A part without lightmap UVs cannot use a lightmap: it is drawn by the flat light.
+            let lightmap = part
+                .mesh
+                .lightmap_uvs
+                .is_some()
+                .then_some(lightmap)
+                .flatten();
             draws.push(SkinnedDraw {
                 mesh: *mesh,
                 texture: material.base_texture.map(|t| textures[t as usize]),
@@ -280,6 +290,7 @@ fn upload_skinned(
                 transform: inst.transform.matrix(),
                 palette: palette.clone(),
                 bounds: bounds[m],
+                lightmap,
             });
         }
     }

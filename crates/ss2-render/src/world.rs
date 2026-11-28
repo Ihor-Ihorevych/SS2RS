@@ -3,7 +3,8 @@
 //!
 //! Skinned meshes (RFC 0013 amendment 7, T04-006) go through a second pipeline of the same shader: each skinned
 //! instance owns a uniform buffer of [`MAX_BONES`] skin matrices (palette times inverse bind, multiplied on the CPU
-//! when the palette is set) and is drawn with the world's lighting and fog.
+//! when the palette is set) and is drawn with the world's lighting and fog, or full bright with its own lightmap
+//! like a lightmapped static batch (RFC 0013 amendment 10, T04-047).
 //!
 //! The renderer keeps no CPU copy of world data. When the GPU device is rebuilt (or [`crate::Renderer::clear_world`]
 //! is called) every mesh, texture and batch is dropped and [`crate::Renderer::world_generation`] changes; the
@@ -64,6 +65,9 @@ pub struct SkinnedDraw {
     /// resampling the animation itself every frame. The world loader's `SkinnedModelData::culling_bounds` is
     /// built to hold this.
     pub bounds: Aabb,
+    /// A lightmap: drawn full bright with the mesh's lightmap UVs, like [`WorldBatch::lightmap`] (RFC 0013
+    /// amendment 10, T04-047); `None`: lit by the flat light as before.
+    pub lightmap: Option<TextureHandle>,
 }
 
 /// One mesh drawn with one look at many places.
@@ -123,6 +127,8 @@ struct GpuMesh {
 
 struct GpuSkinnedMesh {
     vertices: wgpu::Buffer,
+    /// One lightmap UV per vertex (zeros for a mesh without them; T04-047), like [`GpuMesh::lightmap_uvs`].
+    lightmap_uvs: wgpu::Buffer,
     indices: wgpu::Buffer,
     index_count: u32,
     inverse_bind: Vec<Mat4>,
@@ -333,6 +339,7 @@ impl WorldGpu {
         let skinned_attributes = wgpu::vertex_attr_array![
             0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 8 => Uint16x4, 9 => Float32x4
         ];
+        let skinned_lightmap_attributes = wgpu::vertex_attr_array![10 => Float32x2];
         let skinned_buffers = [
             Some(wgpu::VertexBufferLayout {
                 array_stride: std::mem::size_of::<SkinnedVertex>() as u64,
@@ -340,6 +347,11 @@ impl WorldGpu {
                 attributes: &skinned_attributes,
             }),
             Some(instance_buffer),
+            Some(wgpu::VertexBufferLayout {
+                array_stride: 8,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &skinned_lightmap_attributes,
+            }),
         ];
         let make_pipeline =
             |label: &str,
@@ -784,12 +796,15 @@ impl WorldGpu {
             .map_err(|_| RenderError::World("too many indices".into()))?;
         let index = u32::try_from(self.skinned_meshes.len())
             .map_err(|_| RenderError::World("too many skinned meshes".into()))?;
+        let lightmap_uvs =
+            lightmap_uv_buffer(device, mesh.lightmap_uvs.as_deref(), mesh.vertices.len());
         self.skinned_meshes.push(GpuSkinnedMesh {
             vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("skinned mesh vertices"),
                 contents: bytemuck::cast_slice(&mesh.vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             }),
+            lightmap_uvs,
             indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("skinned mesh indices"),
                 contents: bytemuck::cast_slice(&mesh.indices),
@@ -847,6 +862,7 @@ impl WorldGpu {
         for (i, d) in draws.iter().enumerate() {
             let mesh = self.skinned_mesh_index(d.mesh)?;
             let texture = d.texture.map(|t| self.texture(t)).transpose()?;
+            let lightmap = d.lightmap.map(|t| self.texture(t)).transpose()?;
             let cutoff = d.alpha_cutoff.unwrap_or(0.0);
             if !d.tint.iter().all(|c| c.is_finite())
                 || !cutoff.is_finite()
@@ -886,7 +902,15 @@ impl WorldGpu {
                 ),
                 None => (&self.white, &self.samplers[3]),
             };
-            let material = self.material(device, view, sampler, d.tint, cutoff, false, None);
+            let material = self.material(
+                device,
+                view,
+                sampler,
+                d.tint,
+                cutoff,
+                false,
+                lightmap.map(|l| &l.view),
+            );
             planned.push(GpuSkinnedDraw {
                 mesh,
                 material,
@@ -1167,6 +1191,7 @@ impl WorldGpu {
             pass.set_bind_group(2, &d.palette_group, &[]);
             pass.set_vertex_buffer(0, mesh.vertices.slice(..));
             pass.set_vertex_buffer(1, d.instance.slice(..));
+            pass.set_vertex_buffer(2, mesh.lightmap_uvs.slice(..));
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.index_count, 0, 0..1);
         }

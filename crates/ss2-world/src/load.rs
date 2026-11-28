@@ -79,6 +79,18 @@
 //! used (the spec does not say how they combine). The UVs are kept as authored, like the base UVs.
 //! [`load_level_with_report`] also returns how often each case happened ([`LightmapReport`]).
 //!
+//! An **animated** model's chosen stream (the one `lightmap::choose` picks for its drawn level of detail; T04-047,
+//! RFC 0013 amendment 10) is the same as the static build's: every [`crate::scene::SkinnedPart`]'s mesh gets
+//! lightmap UVs from that position too, so a lit placement of an animated model gets
+//! [`crate::scene::SkinnedInstance::lightmap`] exactly when a lit static placement of the same model would get
+//! [`Instance::lightmap`] — through [`LightmapReport::lightmapped`], `unlit_no_uvs` and `unlit_texture`, shared
+//! with the static placements. The one piece of the static rule an animated model does not get is the
+//! **per-placement** tie-break of stage 2 (several candidate streams tied on overlap): a static model can
+//! duplicate itself into a stream-specific variant per placement, but an animated model's mesh is bound to one
+//! skeleton and bone palette, so duplicating it for a tie is left for a future task if retail data ever needs it
+//! (none measured so far ties for an animated model); every placement of such a model gets the model's one
+//! stage-3 stream instead.
+//!
 //! ## Sky
 //!
 //! The world's sky entity (`environment.md`, "Sky", read by [`ss2_format_wld::Sky`]) becomes
@@ -166,8 +178,9 @@
 //!   ids of LOD 0), bones in file order with their rest pose, stored inverse bind and name. A
 //!   skeleton that cannot be read or used (a `.rsc` skeleton, more than 256 bones) leaves the
 //!   model static with a skipped line.
-//! - Each part (surfaces merged by material, as for static parts, with the same UV stream rule)
-//!   lists the whole skeleton as its bones. A vertex's bone index addresses its surface's palette,
+//! - Each part (surfaces merged by material, as for static parts, with the same UV stream rule, lightmap UVs
+//!   included when the model is lit: "Lightmaps", below, T04-047) lists the whole skeleton as its bones. A
+//!   vertex's bone index addresses its surface's palette,
 //!   whose entry is a bone id of the skeleton (`mdl.md`, "Bone palettes in models"); its weight is
 //!   the stored byte over 255. A palette entry that is no bone of the skeleton is "no bone"
 //!   (`mdl.md` reader invariant 4): that weight is dropped (one skipped line per model says how
@@ -189,8 +202,9 @@
 //!   ...) fall into the second case: they hold their rest-ish first frame, not loop the action,
 //!   until something (game logic, later) gives the placement a real start time.
 //! - The collision is the static build's, in the bind pose; a placement collides as a static
-//!   one would. A lit placement of an animated model is drawn without its lightmap
-//!   ([`LightmapReport::unlit_animated`]): the skinned path has none.
+//!   one would. A lit placement of an animated model gets its own lightmap exactly as a lit static placement
+//!   would (T04-047, "Lightmaps", below; [`LightmapReport::unlit_animated`] is the residual count of those that
+//!   still do not).
 //! - Models stored in the world are never animated: their bone and track names would come from
 //!   the world's identifier table, which does not hold them at the bones' ids.
 //!
@@ -270,15 +284,18 @@ const BLEND_NONE: u32 = 0x1F4;
 pub struct LightmapReport {
     /// Static models of the world with an oven modifier (lit placements).
     pub lit_placements: usize,
-    /// Placements that got a lightmap ([`Instance::lightmap`]).
+    /// Placements that got a lightmap ([`Instance::lightmap`] or [`crate::scene::SkinnedInstance::lightmap`]).
     pub lightmapped: usize,
     /// Lit placements left unlit because their model has no lightmap UVs (no UV stream in
-    /// [0, 1]).
+    /// [0, 1]): static or animated alike, since both get lightmap UVs from the same chosen stream (T04-047).
     pub unlit_no_uvs: usize,
-    /// Lit placements left unlit because their lightmap could not be read or converted.
+    /// Lit placements left unlit because their lightmap could not be read or converted: static or animated alike.
     pub unlit_texture: usize,
-    /// Lit placements drawn animated, without their lightmap (the skinned path has none; module
-    /// docs, "Animated models").
+    /// Lit placements drawn animated, left unlit for a reason that is neither of the above (module docs, "Animated
+    /// models"; RFC 0013 amendment 10). Before T04-047 the skinned pipeline had no lightmap at all, so every lit
+    /// animated placement counted here; now its model's parts get lightmap UVs exactly as a static build's would
+    /// (`skin::skinned_parts`'s `lightmap_stream`), so a lit animated placement is lightmapped or counted by
+    /// `unlit_no_uvs`/`unlit_texture` like a static one, and this field has stayed 0 in every level measured so far.
     pub unlit_animated: usize,
     /// Lit placements that are not in the scene at all (their model is missing or broken, or
     /// the placement is unusable).
@@ -479,6 +496,8 @@ fn scene_of_world(
     let mut skinned_instances = Vec::new();
     // The static model of each instance, for its lightmap.
     let mut instance_source = Vec::new();
+    // Same, for each skinned instance (T04-047).
+    let mut skinned_instance_source = Vec::new();
     for (m, path) in world.static_models.iter().zip(&placement_model) {
         let skinned = path.as_ref().and_then(|p| skinned_index.get(p)).copied();
         let Some(model) = path
@@ -507,7 +526,6 @@ fn scene_of_world(
             scale: m.scale,
         };
         if skinned.is_some() {
-            loader.report.unlit_animated += usize::from(m.lightmap.is_some());
             skinned_instances.push(SkinnedInstance {
                 model,
                 transform,
@@ -516,7 +534,10 @@ fn scene_of_world(
                 // clock on its model's default animation; now each gets the module docs' "Animated models" rule
                 // for itself.
                 animation: skinned_models[model as usize].default_player(),
+                // Set after the textures, below, exactly like a static placement's (T04-047).
+                lightmap: None,
             });
+            skinned_instance_source.push(m);
             continue;
         }
         instances.push(Instance {
@@ -600,6 +621,40 @@ fn scene_of_world(
                         }
                     }
                 }
+            }
+            Err(why) => {
+                loader.report.unlit_texture += 1;
+                loader.skip(format!(
+                    "static model {} ({}): lightmap (oven modifier {}): {why} (drawn unlit)",
+                    m.serial, m.name, lm.modifier
+                ));
+            }
+        }
+    }
+    // An animated placement's own lightmap (T04-047): the same rule as a static placement's, since its model's
+    // parts got lightmap UVs from the same stream (`Loader::skinned`'s `lightmap_stream`). Ties among several
+    // candidate streams are not re-chosen per placement here (`Built::lightmap_stream`'s doc): every instance of a
+    // tied model gets the model's one stream, so `unlit_animated` only still counts a placement whose model (and so
+    // every placement of it, static or animated alike) has no lightmap UVs or texture at all — a case already
+    // covered by `unlit_no_uvs`/`unlit_texture` below, leaving nothing left for it to count in the retail data
+    // measured so far.
+    for (instance, m) in skinned_instances.iter_mut().zip(&skinned_instance_source) {
+        let Some(lm) = &m.lightmap else { continue };
+        let model = &skinned_models[instance.model as usize];
+        if model.parts.iter().any(|p| p.mesh.lightmap_uvs.is_none()) {
+            loader.report.unlit_no_uvs += 1;
+            continue;
+        }
+        match lm
+            .texture
+            .as_ref()
+            .map_err(String::clone)
+            .and_then(|t| texture_data(t, options.max_texture_size).map(|d| (t, d)))
+        {
+            Ok((_, data)) => {
+                textures.push(data);
+                instance.lightmap = Some(index_u32(textures.len() - 1));
+                loader.report.lightmapped += 1;
             }
             Err(why) => {
                 loader.report.unlit_texture += 1;
@@ -874,6 +929,12 @@ struct Built {
     /// The model drawn animated, when it is one (module docs, "Animated models"); its placements
     /// then become skinned instances and `model` is not used.
     skinned: Option<SkinnedModelData>,
+    /// The lightmap stream chosen for `model.parts` (`None` without a lit placement or no stream in [0, 1]); given
+    /// to the skinned build too, so a part of `skinned` gets lightmap UVs from the same position (T04-047). Ties
+    /// (`several`) are not re-chosen per placement for an animated model: every instance gets this stream, the
+    /// model's stage-3 default, rather than `ss2_world::load`'s per-placement `Tie` mechanism (a minimal boundary
+    /// choice; `docs/rfcs/0013-level-scene-boundary.md` amendment 10).
+    lightmap_stream: Option<usize>,
 }
 
 /// A lit model whose candidate streams tie on overlap: each lit placement chooses among them by
@@ -941,7 +1002,14 @@ impl Loader<'_> {
                 let lookup = |id| model.material(id);
                 let mut built = self.build(name, mesh, collide, lit, &lookup)?;
                 if animate {
-                    built.skinned = self.skinned(name, model, mesh, &lookup, &built.model);
+                    built.skinned = self.skinned(
+                        name,
+                        model,
+                        mesh,
+                        &lookup,
+                        &built.model,
+                        built.lightmap_stream,
+                    );
                 }
                 Ok(built)
             }
@@ -967,7 +1035,14 @@ impl Loader<'_> {
                 };
                 let mut built = self.build(name, &mesh, collide, lit, &lookup)?;
                 if animate {
-                    built.skinned = self.skinned(name, model, &mesh, &lookup, &built.model);
+                    built.skinned = self.skinned(
+                        name,
+                        model,
+                        &mesh,
+                        &lookup,
+                        &built.model,
+                        built.lightmap_stream,
+                    );
                 }
                 Ok(built)
             }
@@ -1062,13 +1137,17 @@ impl Loader<'_> {
             },
             several,
             skinned: None,
+            lightmap_stream,
         })
     }
 
     /// `model` built animated (module docs, "Animated models"), or `None` to draw it static: it
     /// needs a skinned surface in its drawn level of detail, a readable skeleton and an animation
-    /// that binds to it. `stat` is the static build (its collision is reused). A model that has
-    /// what it takes but whose skeleton or animations cannot be used gets a skipped line.
+    /// that binds to it. `stat` is the static build (its collision is reused). `lightmap_stream` is
+    /// `stat`'s chosen lightmap stream (`build`'s `lightmap_stream`, T04-047): every animated part gets lightmap
+    /// UVs from the same position, so a lit placement of this model gets its lightmap exactly when a static
+    /// placement of it would. A model that has what it takes but whose skeleton or animations cannot be used gets
+    /// a skipped line.
     fn skinned<'m>(
         &mut self,
         name: &str,
@@ -1076,6 +1155,7 @@ impl Loader<'_> {
         mesh: &Mesh,
         embedded: &dyn Fn(u32) -> Option<&'m Material>,
         stat: &ModelData,
+        lightmap_stream: Option<usize>,
     ) -> Option<SkinnedModelData> {
         let lod = mesh.lods.iter().find(|l| l.is_for_pc())?;
         if !lod.surfaces.iter().any(skin::is_skinned) || model.anim_sets.is_empty() {
@@ -1134,9 +1214,10 @@ impl Loader<'_> {
                 MaterialRef::External(raw) => self.mtr(raw, name),
             })
             .collect();
-        let (parts, left_out, dropped) = skin::skinned_parts(&lod.surfaces, &skeleton, |i| {
-            self.material(materials[i].as_ref())
-        });
+        let (parts, left_out, dropped) =
+            skin::skinned_parts(&lod.surfaces, &skeleton, lightmap_stream, |i| {
+                self.material(materials[i].as_ref())
+            });
         for e in left_out {
             self.skip(format!("model `{name}`: an animated part is left out: {e}"));
         }
