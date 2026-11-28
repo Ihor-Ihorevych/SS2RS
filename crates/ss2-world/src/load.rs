@@ -425,6 +425,8 @@ pub fn load_level_with_report(
         .unwrap_or_default()
         .to_string();
     let scene = LevelScene {
+        // The hazes are read by T07-042.
+        hazes: Vec::new(),
         name,
         gravity: if world.gravity.is_finite() {
             world.gravity
