@@ -1,4 +1,4 @@
-// The 3D world pass (RFC 0013): textured static meshes, one matrix per instance, reverse-Z depth and a light that
+// The 3D world pass (RFC 0013): textured static and skinned meshes, one matrix per instance, reverse-Z depth and a light that
 // comes from the camera (a "headlight"), two-sided because the winding of the game's meshes is not yet verified.
 
 struct Camera {
@@ -26,6 +26,13 @@ struct Material {
 @group(1) @binding(2) var<uniform> material: Material;
 @group(1) @binding(3) var lightmap_texture: texture_2d<f32>;
 @group(1) @binding(4) var lightmap_sampler: sampler;
+
+// The skin matrices of one skinned instance (palette x inverse bind, computed on upload; T04-006). Only `vs_skinned`
+// reads it; the static pipeline's layout has no group 2.
+struct Palette {
+    bones: array<mat4x4<f32>, 256>,
+};
+@group(2) @binding(0) var<uniform> palette: Palette;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -56,6 +63,46 @@ fn vs_main(v: VertexIn) -> VertexOut {
     out.normal = (model * vec4<f32>(v.normal, 0.0)).xyz;
     out.uv = v.uv;
     out.lightmap_uv = v.lightmap_uv;
+    return out;
+}
+
+struct SkinnedIn {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) model_0: vec4<f32>,
+    @location(4) model_1: vec4<f32>,
+    @location(5) model_2: vec4<f32>,
+    @location(6) model_3: vec4<f32>,
+    @location(8) joints: vec4<u32>,
+    @location(9) weights: vec4<f32>,
+};
+
+// Linear blend skinning: the bind-pose vertex moved by its four skin matrices, weighted by the normalised weights; all
+// zero weights leave it at its bind position. Then the same as `vs_main` (a skinned mesh has no lightmap).
+@vertex
+fn vs_skinned(v: SkinnedIn) -> VertexOut {
+    let total = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
+    var skin = mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0),
+    );
+    if total > 0.0 {
+        let w = v.weights / total;
+        let j = min(v.joints, vec4<u32>(255u));
+        skin = palette.bones[j.x] * w.x + palette.bones[j.y] * w.y + palette.bones[j.z] * w.z
+            + palette.bones[j.w] * w.w;
+    }
+    let model = mat4x4<f32>(v.model_0, v.model_1, v.model_2, v.model_3);
+    var out: VertexOut;
+    let world = model * (skin * vec4<f32>(v.position, 1.0));
+    out.clip = camera.view_proj * world;
+    out.world = world.xyz;
+    out.normal = (model * (skin * vec4<f32>(v.normal, 0.0))).xyz;
+    out.uv = v.uv;
+    out.lightmap_uv = vec2<f32>(0.0, 0.0);
     return out;
 }
 

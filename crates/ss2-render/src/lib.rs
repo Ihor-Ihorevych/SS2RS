@@ -11,6 +11,8 @@ mod images;
 mod nine_slice;
 mod plan;
 mod scissor;
+#[cfg(test)]
+mod skinned_gpu_tests;
 mod text;
 mod ui_frame;
 #[cfg(test)]
@@ -25,4 +27,4 @@ pub use image_diff::*;
 pub use nine_slice::*;
 pub use scissor::*;
 pub use ui_frame::{Filter, ImageDraw, ImageHandle, NineSliceDraw, UiCommand, UiFrame};
-pub use world::{MeshHandle, SkyBatch, TextureHandle, WorldBatch};
+pub use world::{MeshHandle, SkinnedDraw, SkinnedMeshHandle, SkyBatch, TextureHandle, WorldBatch};

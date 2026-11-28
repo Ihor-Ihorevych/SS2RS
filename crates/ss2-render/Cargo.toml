@@ -25,3 +25,8 @@ tracing.workspace = true
 
 [dev-dependencies]
 ss2-world = { path = "../ss2-world" }
+ss2-format-ans = { path = "../ss2-format-ans" }
+ss2-format-bmf = { path = "../ss2-format-bmf" }
+ss2-format-skl = { path = "../ss2-format-skl" }
+ss2-testkit = { path = "../ss2-testkit" }
+ss2-vfs = { path = "../ss2-vfs" }

@@ -52,6 +52,7 @@ mod resources;
 mod scene;
 pub mod scene_data;
 pub mod screen_effects;
+pub mod skinning;
 pub mod texture_sampling;
 pub mod transparency;
 
