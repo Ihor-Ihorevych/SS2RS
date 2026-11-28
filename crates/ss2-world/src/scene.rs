@@ -353,6 +353,10 @@ pub struct SkinnedInstance {
     /// [`SkinnedModelData::default_player`]; the app poses the placement from it every frame
     /// ([`SkinnedModelData::palette_of`]) instead of every placement of a model sharing one clock.
     pub animation: AnimationPlayer,
+    /// This placement's own lightmap: an index into [`LevelScene::textures`], drawn with the lightmap UVs of the
+    /// model's parts ([`SkinnedPart::mesh`]'s `lightmap_uvs`); `None`: not lightmapped, with the rules of
+    /// [`Instance::lightmap`] (RFC 0013 amendment 10, T04-047).
+    pub lightmap: Option<u32>,
 }
 
 /// A place a player can start.
@@ -788,6 +792,14 @@ impl LevelScene {
                     inst.transform
                 ));
             }
+            if let Some(l) = inst.lightmap
+                && l as usize >= self.textures.len()
+            {
+                return bad(format!(
+                    "skinned instance {i} names lightmap {l} of {}",
+                    self.textures.len()
+                ));
+            }
             let animations = self.skinned_models[inst.model as usize].animations.len();
             if inst.animation.animation as usize >= animations {
                 return bad(format!(
@@ -1023,6 +1035,7 @@ impl LevelScene {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
             collidable: true,
             animation: AnimationPlayer::looping(0, 0.0),
+            lightmap: None,
         });
         room
     }
@@ -1074,6 +1087,7 @@ pub fn test_skinned_bar() -> SkinnedModelData {
                 vertices,
                 indices,
                 inverse_bind: skeleton.inverse_binds(),
+                lightmap_uvs: None,
             },
             material: 0,
         }],
@@ -1794,6 +1808,11 @@ mod skinned_tests {
         // Infinity (`AnimationPlayer::held`) is not NaN: not rejected by itself.
         assert!(!check(
             &|s| s.skinned_instances[0].animation = AnimationPlayer::held(0)
+        ));
+        // A lightmap (T04-047) follows the same rule as a static instance's.
+        assert!(check(&|s| s.skinned_instances[0].lightmap = Some(999)));
+        assert!(!check(
+            &|s| s.skinned_instances[0].lightmap = Some(TEST_LIGHTMAP_TEXTURE)
         ));
     }
 

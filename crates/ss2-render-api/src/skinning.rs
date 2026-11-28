@@ -92,6 +92,10 @@ pub struct SkinnedMeshData {
     /// time); a vertex joint indexes this list, and a palette has one matrix per entry. 1 to
     /// [`MAX_BONES`] entries.
     pub inverse_bind: Vec<Mat4>,
+    /// The lightmap UV of each vertex in the bind pose (as many as `vertices`), chosen by the same rule as a
+    /// static mesh's ([`crate::scene_data::MeshData::lightmap_uvs`], RFC 0013 amendment 10); `None` for a mesh with
+    /// none.
+    pub lightmap_uvs: Option<Vec<[f32; 2]>>,
 }
 
 impl SkinnedMeshData {
@@ -146,6 +150,18 @@ impl SkinnedMeshData {
                     "vertex {i} uses bone {j} but the mesh has {}",
                     self.inverse_bind.len()
                 ));
+            }
+        }
+        if let Some(uvs) = &self.lightmap_uvs {
+            if uvs.len() != self.vertices.len() {
+                return bad(format!(
+                    "{} lightmap UVs for {} vertices",
+                    uvs.len(),
+                    self.vertices.len()
+                ));
+            }
+            if let Some(i) = uvs.iter().position(|uv| !uv.iter().all(|c| c.is_finite())) {
+                return bad(format!("lightmap UV {i} is not finite"));
             }
         }
         Ok(())
@@ -538,6 +554,7 @@ mod tests {
             ],
             indices: vec![0, 1, 2],
             inverse_bind: skeleton.inverse_binds(),
+            lightmap_uvs: None,
         }
     }
 
@@ -782,6 +799,13 @@ mod tests {
         m.indices[0] = 3;
         assert!(m.validate().is_err(), "index out of range");
         assert_eq!(strip(&s).bounds().unwrap().max, Vec3::new(1.0, 2.0, 0.0));
+        let mut m = strip(&s);
+        m.lightmap_uvs = Some(vec![[0.0, 0.0]; 2]);
+        assert!(m.validate().is_err(), "a lightmap UV missing");
+        m.lightmap_uvs = Some(vec![[0.0, 0.0], [1.0, f32::NAN], [0.5, 0.5]]);
+        assert!(m.validate().is_err(), "a NaN lightmap UV");
+        m.lightmap_uvs = Some(vec![[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]]);
+        m.validate().unwrap();
     }
 
     #[test]
