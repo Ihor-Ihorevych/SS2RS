@@ -56,12 +56,13 @@ impl PlatformClass {
     }
 }
 
-const OVERRIDE_KEYS: [&str; 5] = [
+const OVERRIDE_KEYS: [&str; 6] = [
     "vsync",
     "fullscreen",
     "master_volume",
     "music_volume",
     "sfx_volume",
+    "sky_fog",
 ];
 
 /// Video/audio settings.
@@ -78,6 +79,9 @@ pub struct Settings {
     pub music_volume: f32,
     /// Sound-effects volume, 0.0..=1.0.
     pub sfx_volume: f32,
+    /// Draw the sky as the flat fog colour while a haze is active, as the original does (`docs/re/environment.md`,
+    /// T01-429); off keeps the sky visible in fog.
+    pub sky_fog: bool,
 }
 
 /// Free-function form of [`Settings::default_path`].
@@ -93,6 +97,7 @@ impl Default for Settings {
             master_volume: 0.8,
             music_volume: 0.6,
             sfx_volume: 0.8,
+            sky_fog: false,
         }
     }
 }
@@ -146,6 +151,7 @@ impl Settings {
             "master_volume" => next.master_volume = parse_volume()?,
             "music_volume" => next.music_volume = parse_volume()?,
             "sfx_volume" => next.sfx_volume = parse_volume()?,
+            "sky_fog" => next.sky_fog = parse_bool()?,
             _ => {
                 return Err(bad(format!(
                     "unknown setting {key:?}; valid settings: {}",
