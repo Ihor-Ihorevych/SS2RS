@@ -254,6 +254,7 @@ python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown do
 python -I tools/re/sky_faces_verify.py "C:\path\to\Serious Sam 2" [--dump DIR] [--top3]    # which CCubeRenderable face member is which cube direction and how its image tiles with its neighbours, from decoded-pixel edge matching (about 3 minutes)
 python -I tools/re/water_models_verify.py "C:\path\to\Serious Sam 2"    # T01-070: which .mtr/.bmf/.mdl files embed a CWaterShaderArgs config, and which static model instances of which world resolve to one (a few minutes)
 python -I tools/re/wld_bloom_cameratest_verify.py "C:\path\to\Serious Sam 2"    # T01-423: every world with 2+ CBloomEntitys (dm_hole), each one's world position, box, edge-fade inset and numeric members, and whether their boxes/insets can both be occupied by one camera position at once (a few minutes)
+python -I tools/re/wld_bloom_members_verify.py "C:\path\to\Serious Sam 2" [--worlds dm_hole,1_3_village]    # T01-424: every CBloomProperties/CBloomRenderable instance's members read by STMB file position (not by name), telling apart the record's two same-named "21" members and labelling every renderable member with its settled BloomEffect role (a few minutes for the whole install, instant with --worlds)
 ```
 
 Destruction evidence (docs/re/destruction.md, destruction-models.md):
