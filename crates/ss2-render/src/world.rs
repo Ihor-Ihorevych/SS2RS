@@ -60,7 +60,7 @@ pub struct SkyBatch {
     pub tint: [f32; 4],
     /// How the cube is turned in the world; it keeps this orientation whichever way the camera looks.
     pub rotation: Quat,
-    /// The level's cube edge length (only the ratio to `viewer_height` matters: the drawn cube has its own size).
+    /// The level's cube half-extent, centre to face (only the ratio to `viewer_height` matters: the drawn cube has its own size).
     pub size: f32,
     /// The viewer's height inside the cube relative to its centre, in the units of `size` (RFC 0013 amendment 3).
     pub viewer_height: f32,
@@ -657,7 +657,7 @@ impl WorldGpu {
         self.sky = Some(GpuSky {
             faces,
             rotation: sky.rotation.normalize(),
-            viewer_offset: sky.viewer_height / sky.size * 2.0 * SKY_HALF_SIZE,
+            viewer_offset: sky.viewer_height / sky.size * SKY_HALF_SIZE,
         });
         Ok(())
     }
