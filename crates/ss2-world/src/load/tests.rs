@@ -562,6 +562,12 @@ fn f32s(values: &[f32]) -> Vec<u8> {
 /// A model (`mdl.md`) with one embedded mesh (`bmf.md`): one LOD for every platform, one quad
 /// surface (y = 0, from -1 to 1 in x and z) whose material is the external `Box.mtr`.
 fn model_file() -> Vec<u8> {
+    model_file_with(false)
+}
+
+/// [`model_file`], with `collision` a collision mesh (`bmf.md`, "Collision mesh") on the render
+/// vertices that holds only the quad's first triangle, so a test can tell it from the render LOD.
+fn model_file_with(collision: bool) -> Vec<u8> {
     let mut b = MetaBuilder::new();
     let mtr = b.file_ref(BOX_MTR, 0);
     b.type_block(TypeBlock::primitive(0, "SLONG", 4, 4));
@@ -710,8 +716,9 @@ fn model_file() -> Vec<u8> {
         1,
         5,
         Some(9),
-        &[("1", 27), ("2", 27)],
+        &[("1", 27), ("2", 48)],
     ));
+    collision_types(&mut b);
     let config_members = [("1", 19), ("2", 19), ("3", 2)];
     b.type_block(TypeBlock::class(
         29,
@@ -790,9 +797,12 @@ fn model_file() -> Vec<u8> {
             .i32(-1)
             .object_ref(Some(0))
             .object_ref(Some(3))
-            .object_ref(None)
+            .object_ref(collision.then_some(9))
             .finish(),
     );
+    if collision {
+        b.object(9, 47, collision_object());
+    }
     // Indices at 0 of the index buffer; positions at 0, normals at 48 and UVs (map id 3) at 96 of
     // the vertex buffer.
     let mut surface = ObjectBytes::new()
@@ -862,6 +872,105 @@ fn model_file() -> Vec<u8> {
     b.object(4, 10, buffer(0x5F, &indices));
     b.object(5, 10, buffer(0x1F, &vertices));
     b.build().unwrap()
+}
+
+/// The types of a `CCollisionMesh` (`bmf.md`), ids 36 to 48, in the member order of the files.
+fn collision_types(b: &mut MetaBuilder) {
+    b.type_block(TypeBlock::primitive(36, "UWORD", 2, 2));
+    b.type_block(TypeBlock::short(37, "CStaticArray<UWORD>", 0, 6, 36));
+    b.type_block(TypeBlock::short(38, "CStaticArray<ULONG>", 0, 6, 2));
+    b.type_block(TypeBlock::alias(39, "BOOL", 0));
+    b.type_block(TypeBlock::class(
+        40,
+        "CCollisionMeshSurface",
+        3,
+        5,
+        None,
+        &[("4", 39), ("5", 19)],
+    ));
+    b.type_block(TypeBlock::short(
+        41,
+        "CStaticArray<CCollisionMeshSurface>",
+        0,
+        6,
+        40,
+    ));
+    b.type_block(TypeBlock::short(42, "CStaticStackArray<UBYTE>", 0, 7, 4));
+    let node = [("1", 36), ("2", 36), ("3", 36), ("4", 36)];
+    b.type_block(TypeBlock::class(
+        43,
+        "CCollisionMeshNode",
+        1,
+        5,
+        None,
+        &node,
+    ));
+    b.type_block(TypeBlock::short(
+        44,
+        "CStaticArray<CCollisionMeshNode>",
+        0,
+        6,
+        43,
+    ));
+    let xyz = [("1", 3), ("2", 3), ("3", 3)];
+    b.type_block(TypeBlock::class(45, "Vector3f", 1, 5, None, &xyz));
+    b.type_block(TypeBlock::short(46, "CStaticArray<Vector3f>", 0, 6, 45));
+    let members = [
+        ("12", 46),
+        ("13", 37),
+        ("14", 38),
+        ("9", 6),
+        ("11", 41),
+        ("26", 42),
+        ("16", 44),
+        ("17", 17),
+        ("18", 13),
+        ("19", 39),
+        ("20", 4),
+        ("21", 2),
+        ("23", 2),
+        ("22", 1),
+    ];
+    b.type_block(TypeBlock::class(
+        47,
+        "CCollisionMesh",
+        18,
+        5,
+        None,
+        &members,
+    ));
+    b.type_block(TypeBlock::pointer(48, "CCollisionMesh*", 47));
+}
+
+/// One triangle (0, 2, 1) on the model's four render vertices (positions at 0, normals at 48 of
+/// vertex buffer 0), one surface, one leaf holding the triangle.
+fn collision_object() -> Vec<u8> {
+    let mut o = ObjectBytes::new()
+        .array_header(b"STAR", 0)
+        .array_header(b"STAR", 3);
+    for i in [0u16, 2, 1] {
+        o = o.u16(i);
+    }
+    o = o
+        .array_header(b"STAR", 0)
+        .array_header(b"STAR", 1)
+        .raw(&[0])
+        .array_header(b"STAR", 1)
+        .u32(0)
+        .object_ref(None)
+        .array_header(b"SSAR", 1)
+        .raw(&[0])
+        .array_header(b"STAR", 1)
+        .u16(0xFFFF)
+        .u16(0xFFFF)
+        .u16(1)
+        .u16(0)
+        .array_header(b"STAR", 1)
+        .i32(0);
+    for v in [-1.0, 0.0, -1.0, 1.0, 0.0, 1.0] {
+        o = o.f32(v);
+    }
+    o.u32(1).u8(0).u32(0).u32(48).u32(4).finish()
 }
 
 /// A material file (`mtr.md`) with one preset: one specular config (PC and Xbox) with blend
@@ -1257,9 +1366,11 @@ fn a_world_places_one_model_twice_once_mirrored() {
     assert_eq!(mesh.vertices[3].position, [1.0, 0.0, 1.0]);
     assert_eq!(mesh.vertices[3].normal, [0.0, 1.0, 0.0]);
     assert_eq!(mesh.vertices[3].uv, [1.0, 1.0]);
+    // The model has no collision mesh: it collides with its (only) render LOD.
     let collision = model.collision.as_ref().unwrap();
     assert_eq!(collision.positions.len(), 4);
     assert_eq!(collision.indices, [0, 2, 1, 1, 2, 3]);
+    assert!(!collision.from_collision_mesh);
 
     // The material keeps its texture, an 8 x 8 BC1 with its whole chain.
     assert_eq!(scene.materials.len(), 1);
@@ -1388,6 +1499,30 @@ fn append_surface_keeps_lightmap_uvs_in_step_with_the_vertices() {
     assert_eq!(&uvs[..3], &[[1.0, 0.0], [1.0, 0.1], [1.0, 0.2]]);
     assert_eq!(&uvs[3..], &[[0.0, 0.0]; 4]);
     mesh.validate().unwrap();
+}
+
+#[test]
+fn a_model_with_a_collision_mesh_collides_with_it_and_draws_its_render_lod() {
+    let files: Vec<_> = all_files()
+        .into_iter()
+        .map(|(p, bytes)| {
+            if p == BOX_MDL {
+                (p, model_file_with(true))
+            } else {
+                (p, bytes)
+            }
+        })
+        .collect();
+    let vfs = MemoryVfs::from_files(files.iter().map(|(p, b)| (*p, b.as_slice()))).unwrap();
+    let (scene, _) = load(&vfs);
+    let model = &scene.models[0];
+    assert_eq!(model.parts[0].mesh.indices, [0, 2, 1, 1, 2, 3]);
+    let collision = model.collision.as_ref().unwrap();
+    assert!(collision.from_collision_mesh);
+    assert_eq!(collision.indices, [0, 2, 1]);
+    assert_eq!(collision.positions.len(), 4);
+    assert_eq!(collision.positions[3], Vec3::new(1.0, 0.0, 1.0));
+    assert!(scene.instances.iter().any(|i| i.collidable));
 }
 
 #[test]
