@@ -35,6 +35,8 @@ const SKY_COLOR: u32 = 0x00D9_E1F0;
 /// 90 degrees about +y, as stored (x, y, z, w).
 const ROT_Y90: [f32; 4] = [0.0, FRAC_1_SQRT_2, 0.0, FRAC_1_SQRT_2];
 const IDENTITY: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+/// The sky's heading in the synthetic world: 30 degrees about +y.
+const SKY_TURN: f32 = 30.0;
 
 fn quat_vect(b: ObjectBytes, rotation: [f32; 4], translation: [f32; 3]) -> ObjectBytes {
     let mut b = b;
@@ -67,7 +69,8 @@ fn world_file(with_spawn: bool) -> Vec<u8> {
 
 /// [`world_file`], with `with_sky` also entity 9: a sky (no property record) whose faces are North
 /// `north.tex`, West `body.tex` (the material's texture too), South a missing file, no East and
-/// no Floor, Ceiling `up.tex`; colour [`SKY_COLOR`].
+/// no Floor, Ceiling `up.tex`; colour [`SKY_COLOR`]; placed at (100, -50, 7) turned by
+/// [`SKY_TURN`] stored at twice its length; size 48 and viewer height -2.5.
 fn world_file_with(with_spawn: bool, with_sky: bool) -> Vec<u8> {
     world_file_full(with_spawn, with_sky, None)
 }
@@ -511,16 +514,16 @@ fn world_file_full(with_spawn: bool, with_sky: bool, lit: Option<(u32, &[u8])>) 
             47,
             quat_vect(
                 entity(7).object_ref(Some(40)).object_ref(None),
-                IDENTITY,
-                [0.0; 3],
+                (Quat::from_rotation_y(SKY_TURN.to_radians()) * 2.0).to_array(),
+                [100.0, -50.0, 7.0],
             )
-            .f32(64.0)
-            .f32(0.0)
+            .f32(48.0)
+            .f32(-2.5)
             .u32(1)
             .finish(),
         );
         let mut cube = aspect(None, (IDENTITY, [0.0; 3]), 9)
-            .f32(64.0)
+            .f32(48.0)
             .f32(1.0)
             .u32(SKY_COLOR);
         for face in [Some(70), Some(71), Some(72), None, None, Some(74)] {
@@ -1454,7 +1457,7 @@ fn only_the_world_itself_can_fail_the_load() {
 }
 
 #[test]
-fn spawn_markers_come_first_and_chapters_are_the_fallback() {
+fn spawn_markers_come_first_and_chapters_without_a_chain_are_the_fallback() {
     let (scene, _) = load(&CountingVfs::new(&all_files()));
     assert_eq!(scene.spawns.len(), 1);
     assert_eq!(scene.spawns[0].position, Vec3::new(10.0, 0.0, 10.0));
@@ -1629,6 +1632,110 @@ fn the_sky_faces_go_to_their_cube_faces_through_the_texture_path() {
         Some(TexelFormat::Bc1)
     );
     assert_eq!(sky.tint, sky::tint(SKY_COLOR));
+}
+
+#[test]
+fn the_sky_is_turned_by_its_entitys_rotation_and_keeps_its_size_and_viewer_height() {
+    let (scene, _) = load(&CountingVfs::new(&sky_files()));
+    let sky = scene.sky.unwrap();
+    // The stored rotation, normalised; the position (100, -50, 7) is not used anywhere.
+    assert!(
+        sky.rotation
+            .abs_diff_eq(Quat::from_rotation_y(SKY_TURN.to_radians()), 1e-6),
+        "{:?}",
+        sky.rotation
+    );
+    assert!((yaw_of(sky.rotation).to_degrees() - SKY_TURN).abs() < 1e-4);
+    assert_eq!((sky.size, sky.viewer_height), (48.0, -2.5));
+    assert_eq!(skipped_mentions(&scene, "sky:"), 0);
+}
+
+fn test_sky(rotation: Quat, size: f32, viewer_y: f32) -> Sky {
+    Sky {
+        serial: 1,
+        name: String::new(),
+        faces: Default::default(),
+        texture: None,
+        color: 0x00FF_FFFF,
+        size,
+        viewer_y,
+        flag_4: 1.0,
+        flag_5: None,
+        viewer_value: None,
+        rotation,
+        translation: Vec3::new(1.0e4, -3.7e4, 5.0),
+    }
+}
+
+#[test]
+fn an_unusable_sky_placement_is_replaced_with_a_line_each() {
+    let mut skipped = Vec::new();
+    let turned = Quat::from_rotation_y(-110f32.to_radians());
+    let (rotation, size, height) = sky_placement(&test_sky(turned, 64.0, 4.52), &mut skipped);
+    assert!(rotation.abs_diff_eq(turned, 1e-6));
+    assert_eq!((size, height, skipped.len()), (64.0, 4.52, 0));
+
+    let broken = test_sky(Quat::from_xyzw(0.0, 0.0, 0.0, 0.0), -1.0, f32::NAN);
+    let (rotation, size, height) = sky_placement(&broken, &mut skipped);
+    assert_eq!(
+        (rotation, size, height),
+        (Quat::IDENTITY, SkyData::UNPLACED_SIZE, 0.0)
+    );
+    assert_eq!(skipped.len(), 3, "{skipped:?}");
+    let nan = test_sky(Quat::from_xyzw(f32::NAN, 0.0, 0.0, 1.0), f32::INFINITY, 0.0);
+    assert_eq!(sky_placement(&nan, &mut skipped).0, Quat::IDENTITY);
+    assert_eq!(skipped.len(), 5, "{skipped:?}");
+}
+
+fn marker(serial: u32, x: f32, next: Option<usize>) -> Marker {
+    Marker {
+        serial,
+        name: format!("m{serial}"),
+        rotation: Quat::from_rotation_y(f32::from(serial as u8)),
+        translation: Vec3::new(x, 0.0, 0.0),
+        next,
+    }
+}
+
+fn chain_world(spawn_markers: Vec<Marker>, first_chapter: Option<usize>) -> World {
+    World {
+        gravity: Vec3::new(0.0, -30.0, 0.0),
+        entity_count: 0,
+        static_models: Vec::new(),
+        spawn_markers,
+        // The list order is 10, 11, 12, 13; the chain 12 -> 10 -> 13; 11 is off the chain.
+        chapters: vec![
+            marker(10, 0.0, Some(3)),
+            marker(11, 1.0, None),
+            marker(12, 2.0, Some(0)),
+            marker(13, 3.0, None),
+        ],
+        first_chapter,
+        sky: None,
+        lightmap_counts: Default::default(),
+    }
+}
+
+fn serials(markers: &[&Marker]) -> Vec<u32> {
+    markers.iter().map(|m| m.serial).collect()
+}
+
+#[test]
+fn single_player_starts_at_the_chains_first_chapter_and_follows_the_chain() {
+    let world = chain_world(Vec::new(), Some(2));
+    assert_eq!(serials(&start_markers(&world)), [12, 10, 13]);
+}
+
+#[test]
+fn deathmatch_keeps_its_spawn_markers() {
+    let world = chain_world(vec![marker(1, 9.0, None), marker(2, 8.0, None)], Some(2));
+    assert_eq!(serials(&start_markers(&world)), [1, 2]);
+}
+
+#[test]
+fn without_a_chain_the_chapters_keep_their_list_order() {
+    let world = chain_world(Vec::new(), None);
+    assert_eq!(serials(&start_markers(&world)), [10, 11, 12, 13]);
 }
 
 #[test]

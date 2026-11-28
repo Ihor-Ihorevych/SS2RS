@@ -68,8 +68,18 @@
 //! ([`CubeFace::basis`]), so none is turned; the derivation and the machinery that would turn one
 //! are in the private `sky` module. A face the world does not name is `None` and shows the tint.
 //! The tint is the stored colour read as `0xAARRGGBB` with the alpha byte ignored (it is 0 in
-//! most skies), the red, green and blue bytes taken as sRGB and made linear. The cube's size, the
-//! viewer height and the entity's placement are not part of the boundary and are not used.
+//! most skies), the red, green and blue bytes taken as sRGB and made linear.
+//!
+//! The cube's placement (T07-039; `environment.md`, "Placement: the cube is rotated, never
+//! translated", T01-409, and reader invariant 7) is the sky entity's `en_qvPlacement` **rotation**,
+//! applied in full and normalised (44 of the 58 retail skies are turned, all about +Y); its
+//! position is never used, the cube stays centred on the viewer. The size is the record's `.2`
+//! (`en_fSize`, 64 in 56 skies) and the viewer height the record's `.3` (`en_fViewerY`, -6.66 to
+//! 4.52), both as stored: the spec reads `en_fViewerY` as the viewer's vertical offset in the cube,
+//! which is what [`SkyData::viewer_height`] holds (positive: the viewer above the centre; the spec
+//! leaves the exact combination with the camera open). A rotation that cannot be normalised, a
+//! size that is not positive or a height that is not finite is replaced (no turn, 64, 0) with a
+//! skipped line.
 //!
 //! ## Coordinates
 //!
@@ -86,10 +96,26 @@
 //!
 //! An [`Instance`] takes the world rotation, translation and per-axis scale of its static model
 //! (`wld-geometry.md`); a negative scale is kept as it is (the renderer draws both faces). It is
-//! collidable when its entity has a hull and the model has collision. The spawn points are the
-//! world's spawn markers; a world without any uses its chapter markers instead. How single
-//! player and co-op actually choose a start is not specified yet (T01-210). A spawn's yaw is the
-//! heading of the marker's rotated -Z.
+//! collidable when its entity has a hull and the model has collision.
+//!
+//! The spawn points (T07-040; `chapter-restore-players.md` sections 2.8 and 2.9, T01-210) follow
+//! the original's start rule:
+//!
+//! - **deathmatch**: the world's spawn markers (`CSpawnMarkerEntity`), in entity-list order. Only
+//!   deathmatch worlds have any (16 worlds, all `dm_`), so a world with spawn markers is taken as
+//!   a deathmatch world; which marker a player gets is the game's choice
+//!   (`helper-classes-iterators.md` section 2.5), not the loader's.
+//! - **single player and co-op** (every other world): the chapters of the chapter chain, in chain
+//!   order, starting at the world's first chapter ([`World::chapter_chain`]: the world info's
+//!   `CWorldInfoEntity.2`, then each chapter's next chapter). The first spawn, and so
+//!   [`LevelScene::start`], is the chain's first chapter: never the first chapter of the entity
+//!   list (they differ in 31 of the 51 worlds with a chain) and never a spawn marker. Chapters off
+//!   the chain are left out. Co-op slot offsets are the game's, not the loader's.
+//! - a world without spawn markers and without a chain (no first chapter) falls back to its
+//!   chapters in entity-list order; without those, [`LevelScene::start`] uses the level's bounds.
+//!
+//! A spawn's position is the marker's or chapter's world translation and its yaw the heading of
+//! its rotated -Z.
 //!
 //! [`load_level`] keeps no state between calls (the caches live in the call) and may run on any
 //! thread.
@@ -102,7 +128,7 @@ use ss2_format_bmf::{Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
-use ss2_format_wld::{Marker, ModelRef, SkyFace, World};
+use ss2_format_wld::{Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
 use ss2_render_api::scene_data::{
     AlphaMode, CubeFace, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
@@ -375,23 +401,18 @@ pub fn load_level_with_report(
                 index_u32(textures.len() - 1)
             });
         }
+        let (rotation, size, viewer_height) = sky_placement(s, &mut loader.skipped);
         SkyData {
             faces,
             tint: sky::tint(s.color),
-            // The placement is read by T07-039.
-            rotation: Quat::IDENTITY,
-            size: SkyData::UNPLACED_SIZE,
-            viewer_height: 0.0,
+            rotation,
+            size,
+            viewer_height,
         }
     });
 
-    let markers = if world.spawn_markers.is_empty() {
-        &world.chapters
-    } else {
-        &world.spawn_markers
-    };
-    let spawns = markers
-        .iter()
+    let spawns = start_markers(&world)
+        .into_iter()
         .filter_map(|marker| loader.spawn(marker))
         .collect();
 
@@ -421,6 +442,57 @@ pub fn load_level_with_report(
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
     Ok((scene, loader.report))
+}
+
+/// The placement of the sky cube (`environment.md`, T01-409): the entity's rotation normalised
+/// (its position is never used), the size and the viewer height as stored. A value that cannot be
+/// used is replaced by the unplaced one with a line in `skipped`.
+fn sky_placement(s: &Sky, skipped: &mut Vec<String>) -> (Quat, f32, f32) {
+    let length = s.rotation.length();
+    let rotation = if length.is_finite() && length > 1e-6 {
+        s.rotation / length
+    } else {
+        skipped.push(format!(
+            "sky: rotation {:?} cannot be normalised, not turned",
+            s.rotation
+        ));
+        Quat::IDENTITY
+    };
+    let size = if s.size.is_finite() && s.size > 0.0 {
+        s.size
+    } else {
+        skipped.push(format!(
+            "sky: size {} is not positive, using {}",
+            s.size,
+            SkyData::UNPLACED_SIZE
+        ));
+        SkyData::UNPLACED_SIZE
+    };
+    let viewer_height = if s.viewer_y.is_finite() {
+        s.viewer_y
+    } else {
+        skipped.push(format!(
+            "sky: viewer height {} is not finite, using 0",
+            s.viewer_y
+        ));
+        0.0
+    };
+    (rotation, size, viewer_height)
+}
+
+/// The markers the spawn points come from, first the start (`chapter-restore-players.md`
+/// sections 2.8 and 2.9): a deathmatch world's spawn markers; otherwise the chapter chain from the
+/// world's first chapter; without a chain, the chapters in entity-list order.
+fn start_markers(world: &World) -> Vec<&Marker> {
+    if !world.spawn_markers.is_empty() {
+        return world.spawn_markers.iter().collect();
+    }
+    let chain = world.chapter_chain();
+    if chain.is_empty() {
+        world.chapters.iter().collect()
+    } else {
+        chain.into_iter().map(|i| &world.chapters[i]).collect()
+    }
 }
 
 /// The heading of a rotation: the angle about +Y of its rotated -Z, 0 when it looks down -Z and

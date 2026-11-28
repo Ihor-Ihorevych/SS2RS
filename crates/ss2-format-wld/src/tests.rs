@@ -23,6 +23,22 @@ struct Variant {
     sky: SkyKind,
     /// The baked lightmap of the first static model.
     lightmap: LightmapKind,
+    /// The chapter chain.
+    chain: ChainKind,
+}
+
+/// The chapter chain of the synthetic world.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChainKind {
+    /// No world info entity; chapter 6 has no next chapter.
+    Absent,
+    /// A second chapter (entity 8, after chapter 6 in the entity list) and a world info entity
+    /// (9) whose first chapter is 8; 8's next chapter is 6, 6 has none.
+    Linked,
+    /// [`ChainKind::Linked`], but 6's next chapter is 8 again.
+    Cycle,
+    /// [`ChainKind::Linked`], but the world info's first chapter names object 999, not in the file.
+    Dangling,
 }
 
 /// The oven modifiers of the first static model's instance (object 13). Besides it, a model
@@ -65,6 +81,7 @@ const NORMAL: Variant = Variant {
     entity_override: None,
     sky: SkyKind::Absent,
     lightmap: LightmapKind::One,
+    chain: ChainKind::Absent,
 };
 
 /// The lightmap pixels: 4 x 4 BGR (format code 0), so a test can check each texel.
@@ -260,7 +277,16 @@ fn world_file(v: Variant) -> Vec<u8> {
         7,
         5,
         Some(7),
-        &[],
+        &[("2", 34)],
+    ));
+    b.type_block(TypeBlock::pointer(34, "Handle<CChapterInfoEntity>", 28));
+    b.type_block(TypeBlock::class(
+        35,
+        "CWorldInfoEntity",
+        7,
+        5,
+        Some(7),
+        &[("2", 34)],
     ));
     b.type_block(TypeBlock::class(
         29,
@@ -482,6 +508,9 @@ fn world_file(v: Variant) -> Vec<u8> {
     if v.sky != SkyKind::Absent {
         entities.push(7);
     }
+    if v.chain != ChainKind::Absent {
+        entities.extend([8, 9]);
+    }
     if matches!(v.sky, SkyKind::WithRecord | SkyKind::NoFaces) {
         records.push(63);
     }
@@ -532,7 +561,30 @@ fn world_file(v: Variant) -> Vec<u8> {
         27,
         entity(3).object_ref(Some(17)).object_ref(Some(18)).finish(),
     );
-    b.object(6, 28, entity(4).finish());
+    let next_of_6 = (v.chain == ChainKind::Cycle).then_some(8);
+    b.object(6, 28, entity(4).object_ref(next_of_6).finish());
+    // Entity 8: the chain's first chapter (no record), placed by renderable 23; entity 9: the
+    // world info.
+    if v.chain != ChainKind::Absent {
+        b.object(8, 28, entity(6).object_ref(Some(6)).finish());
+        b.object(
+            23,
+            20,
+            aspect(
+                None,
+                (ROT_Y90, [4.0, 5.0, 6.0]),
+                (ROT_Y90, [4.0, 5.0, 6.0]),
+                Some(8),
+            )
+            .finish(),
+        );
+        let first = if v.chain == ChainKind::Dangling {
+            999
+        } else {
+            8
+        };
+        b.object(9, 35, entity(7).object_ref(Some(first)).finish());
+    }
     // Renderable 10 (child of hull 12): local differs from world.
     b.object(
         10,
@@ -865,6 +917,59 @@ fn markers_take_the_world_placement_of_their_top_aspect() {
     assert_eq!((c.serial, c.name.as_str()), (4, "Chapter001"));
     assert_quat(c.rotation, IDENTITY);
     assert_vec(c.translation, [1.0, 2.0, 3.0]);
+}
+
+#[test]
+fn without_a_world_info_there_is_no_chain() {
+    let world = World::from_bytes(&world_file(NORMAL)).unwrap();
+    assert_eq!(world.first_chapter, None);
+    assert_eq!(world.chapters[0].next, None);
+    assert_eq!(world.spawn_markers[0].next, None);
+    assert!(world.chapter_chain().is_empty());
+}
+
+#[test]
+fn the_chain_starts_at_the_world_infos_first_chapter_not_the_first_in_the_list() {
+    let world = World::from_bytes(&world_file(Variant {
+        chain: ChainKind::Linked,
+        ..NORMAL
+    }))
+    .unwrap();
+    assert_eq!(world.entity_count, 6);
+    let names: Vec<_> = world.chapters.iter().map(|c| c.serial).collect();
+    assert_eq!(names, [4, 6]);
+    assert_eq!(world.first_chapter, Some(1));
+    assert_eq!(
+        (world.chapters[0].next, world.chapters[1].next),
+        (None, Some(0))
+    );
+    assert_eq!(world.chapter_chain(), [1, 0]);
+    let first = &world.chapters[1];
+    assert_quat(first.rotation, ROT_Y90);
+    assert_vec(first.translation, [4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn a_chain_that_comes_back_stops_before_the_repeat() {
+    let world = World::from_bytes(&world_file(Variant {
+        chain: ChainKind::Cycle,
+        ..NORMAL
+    }))
+    .unwrap();
+    assert_eq!(world.chapters[0].next, Some(1));
+    assert_eq!(world.chapter_chain(), [1, 0]);
+}
+
+#[test]
+fn a_first_chapter_handle_that_names_no_chapter_gives_no_chain() {
+    let world = World::from_bytes(&world_file(Variant {
+        chain: ChainKind::Dangling,
+        ..NORMAL
+    }))
+    .unwrap();
+    assert_eq!(world.first_chapter, None);
+    assert_eq!(world.chapters[1].next, Some(0));
+    assert!(world.chapter_chain().is_empty());
 }
 
 #[test]
