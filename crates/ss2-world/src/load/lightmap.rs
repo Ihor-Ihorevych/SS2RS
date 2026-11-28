@@ -10,17 +10,18 @@
 //! is covered twice or more. Streams are identified by their position in each surface's
 //! [`Surface::uv_sets`] (slot order, `bmf.md` member 12/14).
 //!
-//! Exactly one candidate is the lightmap's stream. For the other cases the spec's data says the
+//! Exactly one candidate is the lightmap's stream. With no candidate, the spec's data says the
 //! lightmap stream is usually one the surface's own material does not use for any of its texture
 //! groups (T01-407: 83 % of the single-candidate instances), so a stream is **material-unused**
-//! when, on no surface with triangles, the material's UV map ids (every `CShaderArgValUVMap` of
-//! every config, `mtr.md`) include the id that surface declares at that position. Then:
-//! - several candidates: the lowest-indexed material-unused candidate, else the lowest-indexed
-//!   candidate (T01-414's rule);
-//! - no candidate: of the streams every surface with triangles has, the lowest-indexed
-//!   material-unused one, else slot 0 (T01-414's rule), regardless of range or overlap.
+//! when, on no surface with triangles, the material's UV map ids (the UV map of each non-empty
+//! texture group of every config, `mtr.md`) include the id that surface declares at that
+//! position; of the streams every surface with triangles has, the lowest-indexed material-unused
+//! one is taken, else slot 0 (T01-414's fallback), regardless of range or overlap.
 //!
-//! Only a mesh where some surface with triangles has no stream at all is left without one.
+//! With several candidates no stream is chosen yet: T01-414's lowest-index rule picked a stream
+//! that renders visibly wrong on a real level, and preferring a material-unused one does not
+//! separate the candidates there, so these meshes wait on T01-420. A mesh where some surface with
+//! triangles has no stream at all gets none either.
 
 use ss2_format_bmf::Surface;
 
@@ -37,13 +38,8 @@ const GRID: usize = 256;
 pub(crate) enum StreamChoice {
     /// Exactly one candidate: the stream at this position.
     One(usize),
-    /// Several streams qualify (`candidates`, ascending); `stream` is taken: the lowest
-    /// material-unused one when `unused`, else the lowest one.
-    Several {
-        candidates: Vec<usize>,
-        stream: usize,
-        unused: bool,
-    },
+    /// Several streams qualify (their positions, ascending): none is taken (T01-420).
+    Several(Vec<usize>),
     /// No stream qualifies; `stream` is taken: the lowest material-unused one when `unused`,
     /// else slot 0.
     NoCandidate { stream: usize, unused: bool },
@@ -56,8 +52,8 @@ impl StreamChoice {
     pub(crate) fn stream(&self) -> Option<usize> {
         match self {
             Self::One(k) => Some(*k),
-            Self::Several { stream, .. } | Self::NoCandidate { stream, .. } => Some(*stream),
-            Self::Nothing => None,
+            Self::NoCandidate { stream, .. } => Some(*stream),
+            Self::Several(_) | Self::Nothing => None,
         }
     }
 }
@@ -101,17 +97,7 @@ pub(crate) fn choose(surfaces: &[Surface], material_uv_ids: &[Vec<u32>]) -> Stre
             }
         }
         [k] => StreamChoice::One(*k),
-        _ => {
-            let (stream, unused) = match candidates.iter().find(|&&k| unused(k)) {
-                Some(&k) => (k, true),
-                None => (candidates[0], false),
-            };
-            StreamChoice::Several {
-                candidates,
-                stream,
-                unused,
-            }
-        }
+        _ => StreamChoice::Several(candidates),
     }
 }
 
@@ -279,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn several_candidates_prefer_the_lowest_material_unused_one() {
+    fn several_candidates_choose_nothing_even_if_the_material_uses_some() {
         // Slot 0 tiles; slots 1 and 2 (UV ids 4 and 5) are both unwraps.
         let s = surface(
             2,
@@ -290,36 +276,18 @@ mod tests {
             ],
         );
         let s = std::slice::from_ref(&s);
-        let several = |stream, unused| StreamChoice::Several {
-            candidates: vec![1, 2],
-            stream,
-            unused,
-        };
-        // No material: the lowest candidate, which is unused.
-        assert_eq!(pick(s), several(1, true));
-        // The material uses ids 3 and 4 (slots 0 and 1): slot 2.
-        let choice = choose(s, &[vec![3, 4]]);
-        assert_eq!(choice, several(2, true));
-        assert_eq!(choice.stream(), Some(2));
-        // It uses both candidates: the lowest one.
-        let choice = choose(s, &[vec![5, 4]]);
-        assert_eq!(choice, several(1, false));
-        assert_eq!(choice.stream(), Some(1));
+        for used in [vec![], vec![4], vec![4, 5]] {
+            let choice = choose(s, &[used]);
+            assert_eq!(choice, StreamChoice::Several(vec![1, 2]));
+            assert_eq!(choice.stream(), None);
+        }
     }
 
     #[test]
     fn an_id_used_on_any_surface_makes_the_stream_used() {
-        let a = surface(
-            1,
-            vec![stream(1, |q| strip(q, 4)), stream(1, |q| strip(q, 4))],
-        );
-        let b = surface(
-            1,
-            vec![
-                stream(1, |q| strip(q + 1, 4)),
-                stream(1, |q| strip(q + 1, 4)),
-            ],
-        );
+        // No candidate: both slots tile outside [0, 1].
+        let a = surface(1, vec![stream(1, |_| tile(2.0)), stream(1, |_| tile(2.0))]);
+        let b = surface(1, vec![stream(1, |_| tile(2.0)), stream(1, |_| tile(2.0))]);
         // Surface 1's material uses id 3 (slot 0), surface 0 has none.
         assert_eq!(choose(&[a, b], &[vec![], vec![3]]).stream(), Some(1));
     }

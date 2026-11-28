@@ -56,13 +56,14 @@
 //! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407): of the UV
 //! streams of the drawn level of detail, the one whose coordinates all lie in [0, 1] and whose
 //! triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized area
-//! covered twice). The spec's data also says the lightmap stream is usually one the surface's
-//! own material does not use (T01-407), so the other cases prefer such a stream: of several
-//! candidates the lowest-indexed one no surface's material uses (any UV map id of any config),
-//! else the lowest-indexed candidate; with none the lowest-indexed stream no material uses, else
-//! slot 0 (the T01-414 fallbacks). Every part of the model gets [`MeshData::lightmap_uvs`] from
-//! the chosen stream. Only a model where some drawn surface has no UV stream at all gets none:
-//! its lit placements stay unlit and one skipped line says why. This is done only for models
+//! covered twice). With no such stream, the spec's data also says the lightmap stream is usually
+//! one the surface's own material does not use (T01-407), so the lowest-indexed stream that every
+//! drawn surface has and no surface's material uses (the UV map of a non-empty texture group of
+//! any config) is taken, else slot 0 (T01-414's fallback). Every part of the model gets
+//! [`MeshData::lightmap_uvs`] from the chosen stream. A model with several such streams gets
+//! none yet (T01-414's lowest-index rule looked wrong on a real level; the case waits on
+//! T01-420), nor does one where some drawn surface has no UV stream at all: their lit placements
+//! stay unlit and one skipped line says why. This is done only for models
 //! that some lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
 //! converted by the same texture path as the others (the size limit, BC kept, RGBA8 from
 //! BGR/BGRA, appended after the file textures); a lightmap that cannot be read or converted
@@ -202,8 +203,8 @@ pub struct LightmapReport {
     pub lit_placements: usize,
     /// Placements that got a lightmap ([`Instance::lightmap`]).
     pub lightmapped: usize,
-    /// Lit placements left unlit because their model has no lightmap UVs (no candidate stream
-    /// and a drawn surface without slot 0).
+    /// Lit placements left unlit because their model has no lightmap UVs (several candidate
+    /// streams, or no candidate and a drawn surface without any stream).
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
@@ -215,15 +216,8 @@ pub struct LightmapReport {
     /// Of those, models with exactly one candidate stream, by the stream's position in the
     /// surfaces' UV streams (slot order).
     pub one_candidate: BTreeMap<usize, usize>,
-    /// Lit models with several candidate streams, given the lowest-indexed one their material
-    /// does not use.
-    pub several_unused: usize,
-    /// Lit models with several candidate streams, all used by their material, given the
-    /// lowest-indexed one.
-    pub several_lowest: usize,
-    /// Of the models with several candidates, those whose stream is not the lowest-indexed
-    /// candidate (the material uses that one).
-    pub several_moved: usize,
+    /// Lit models with several candidate streams: no lightmap UVs (until T01-420).
+    pub several_left_unlit: usize,
     /// Lit models without any candidate stream, given the lowest-indexed stream their material
     /// does not use.
     pub none_unused: usize,
@@ -835,17 +829,18 @@ impl Loader<'_> {
         report.lit_models += 1;
         match choice {
             lightmap::StreamChoice::One(k) => *report.one_candidate.entry(*k).or_default() += 1,
-            lightmap::StreamChoice::Several {
-                candidates,
-                stream,
-                unused,
-            } => {
-                *if *unused {
-                    &mut report.several_unused
-                } else {
-                    &mut report.several_lowest
-                } += 1;
-                report.several_moved += usize::from(candidates.first() != Some(stream));
+            lightmap::StreamChoice::Several(ks) => {
+                report.several_left_unlit += 1;
+                let slots = ks
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let placements = if lit == 1 { "placement" } else { "placements" };
+                self.skip(format!(
+                    "model `{name}`: several lightmap streams (slots {slots}): no lightmap UVs \
+                     until T01-420 ({lit} lit {placements} drawn unlit)"
+                ));
             }
             lightmap::StreamChoice::NoCandidate { stream, unused } => {
                 *if *unused {

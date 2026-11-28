@@ -672,9 +672,17 @@ fn dm_stadium_is_lightmapped() {
         .count();
     assert!(lit_fences > 0);
     assert_eq!(report.lit_placements, 133);
-    // Every lit placement draws its lightmap (the tie-breaks of reader invariant 3 cover the
-    // models without a single candidate stream).
-    assert_eq!(report.lightmapped, report.lit_placements, "{report:?}");
+    // Every lit placement draws its lightmap but the one of the model with several candidate
+    // streams (unlit until T01-420).
+    assert_eq!(
+        (
+            report.lightmapped,
+            report.unlit_no_uvs,
+            report.several_left_unlit
+        ),
+        (132, 1, 1),
+        "{report:?}"
+    );
 }
 
 /// With `SS2_LOAD_ALL=1` (release build): every level loads with its lightmaps; prints, per
@@ -714,7 +722,7 @@ fn every_level_is_lightmapped() {
         lit_instances += lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
-             models {:>3}: one {:?}, several {}+{} ({} moved), none {}+{} ({} moved), no stream {}",
+             models {:>3}: one {:?}, several {} unlit, none {}+{} ({} moved), no stream {}",
             info.id,
             r.lightmapped,
             r.lit_placements,
@@ -723,9 +731,7 @@ fn every_level_is_lightmapped() {
             r.dropped,
             r.lit_models,
             r.one_candidate,
-            r.several_unused,
-            r.several_lowest,
-            r.several_moved,
+            r.several_left_unlit,
             r.none_unused,
             r.slot_zero,
             r.none_moved,
@@ -737,9 +743,7 @@ fn every_level_is_lightmapped() {
         all.unlit_texture += r.unlit_texture;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
-        all.several_unused += r.several_unused;
-        all.several_lowest += r.several_lowest;
-        all.several_moved += r.several_moved;
+        all.several_left_unlit += r.several_left_unlit;
         all.none_unused += r.none_unused;
         all.slot_zero += r.slot_zero;
         all.none_moved += r.none_moved;
@@ -752,10 +756,10 @@ fn every_level_is_lightmapped() {
     assert!(failures.is_empty(), "{failures:#?}");
     assert_eq!(lit_instances, all.lightmapped);
     assert_eq!(all.unlit_texture, 0, "{all:?}");
-    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels), all drawn with
-    // their lightmap except one placement of `dm_cockaleekie` that is not in the scene. Before
-    // the tie-breaks of reader invariant 3 (T07-044), 2,198 were drawn unlit for lack of a single
-    // candidate stream.
+    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels); 902
+    // placements of models with several candidate streams are drawn unlit until T01-420, and one
+    // placement of `dm_cockaleekie` is not in the scene. Before the no-candidate fallback
+    // (T07-044), 2,198 were drawn unlit for lack of a single candidate stream.
     assert_eq!(
         (
             all.lit_placements,
@@ -763,12 +767,11 @@ fn every_level_is_lightmapped() {
             all.unlit_no_uvs,
             all.dropped
         ),
-        (18_195, 18_194, 0, 1)
+        (18_195, 17_292, 902, 1)
     );
-    // The models, by the rule that chose their stream: one candidate (by its slot); several
-    // (material-unused, else lowest); none (material-unused, else slot 0); no model is left
-    // without a stream. "Moved" counts the models whose stream differs from T01-414's plain
-    // lowest-index / slot-0 rule.
+    // The models, by the rule that applied: one candidate (by its slot); several (left unlit);
+    // none (material-unused, else slot 0; "moved" when that is not slot 0); no model is left
+    // without a stream for lack of one.
     assert_eq!(
         all.one_candidate,
         BTreeMap::from([(0, 2_021), (1, 195), (2, 36), (3, 2), (4, 1)])
@@ -776,14 +779,12 @@ fn every_level_is_lightmapped() {
     assert_eq!(
         (
             all.lit_models,
-            all.several_unused,
-            all.several_lowest,
-            all.several_moved,
+            all.several_left_unlit,
             all.none_unused,
             all.slot_zero,
             all.none_moved,
             all.no_stream
         ),
-        (2_645, 171, 38, 17, 158, 23, 16, 0)
+        (2_645, 209, 158, 23, 16, 0)
     );
 }
