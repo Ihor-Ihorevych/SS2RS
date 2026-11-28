@@ -702,8 +702,13 @@ fn the_settings_file_values_go_in_and_out() {
         master_volume: 0.25,
         music_volume: 0.5,
         sfx_volume: 0.75,
+        sky_fog: true,
     };
     let s = GameSettings::from_core(&core);
+    // Values the settings screen does not edit survive writing it back.
+    let mut back = core.clone();
+    s.write_core(&mut back);
+    assert!(back.sky_fog);
     assert!(!s.video.vsync);
     assert_eq!(s.video.window_mode, WindowMode::Borderless);
     assert_eq!(
