@@ -18,6 +18,7 @@ use crate::images::{GpuImage, ImageStore, Recipe, Source};
 use crate::plan::{BatchKind, Plan};
 use crate::text::TextPainter;
 use crate::ui_frame::{ImageHandle, UiFrame, UiScene, replay_order, would_loop};
+use crate::viewmodel::ViewModel;
 use crate::world::{
     MeshHandle, SkinnedDraw, SkinnedMeshHandle, SkyBatch, TextureHandle, WorldBatch, WorldGpu,
 };
@@ -873,6 +874,10 @@ impl Renderer {
             self.bloom
                 .encode(&self.device, encoder, view, size, &self.blooms);
         }
+        // The viewmodel pass (T04-030) lands on top of the world (and bloom) result in `view`, before the 2D
+        // pass draws over everything.
+        self.world
+            .encode_viewmodel(&self.device, &self.queue, encoder, view, size);
         None
     }
 
@@ -1071,6 +1076,14 @@ impl Renderer {
     /// Nothing changes if it returns an error (a stale or unknown texture, a non-finite tint).
     pub fn set_sky(&mut self, sky: Option<SkyBatch>) -> Result<(), RenderError> {
         self.world.set_sky(&self.device, sky)
+    }
+
+    /// Replace what the viewmodel pass draws (`None`: nothing) from the next frame on: the first-person weapon,
+    /// drawn after the world in its own projection, landing on top of everything (T04-030,
+    /// `ss2_render::viewmodel`). Nothing changes if it returns an error (an out-of-range field of view or near
+    /// plane, or a draw with a stale or unknown mesh, a wrong-length palette or a non-finite value).
+    pub fn set_viewmodel(&mut self, viewmodel: Option<ViewModel>) -> Result<(), RenderError> {
+        self.world.set_viewmodel(&self.device, viewmodel)
     }
 
     /// Fog the world from the next frame on (`None`: no fog; RFC 0013 amendment 4). The sky is not fogged unless

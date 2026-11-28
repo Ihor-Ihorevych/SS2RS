@@ -17,6 +17,9 @@ mod text;
 mod ui_frame;
 #[cfg(test)]
 mod ui_gpu_tests;
+mod viewmodel;
+#[cfg(test)]
+mod viewmodel_gpu_tests;
 mod world;
 #[cfg(test)]
 mod world_gpu_tests;
@@ -27,4 +30,5 @@ pub use image_diff::*;
 pub use nine_slice::*;
 pub use scissor::*;
 pub use ui_frame::{Filter, ImageDraw, ImageHandle, NineSliceDraw, UiCommand, UiFrame};
+pub use viewmodel::ViewModel;
 pub use world::{MeshHandle, SkinnedDraw, SkinnedMeshHandle, SkyBatch, TextureHandle, WorldBatch};
