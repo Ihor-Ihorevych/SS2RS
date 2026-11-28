@@ -38,6 +38,10 @@ pub struct CollisionData {
     pub positions: Vec<Vec3>,
     /// Three indices per triangle, into `positions`.
     pub indices: Vec<u32>,
+    /// `true` when these are the model's own collision mesh (`bmf.md`, "Collision mesh"); `false`
+    /// for the fallback (the coarsest PC render level of detail of a model without one) and for
+    /// procedural geometry.
+    pub from_collision_mesh: bool,
 }
 
 /// A model that instances place: its drawable parts and, optionally, its collision.
@@ -47,8 +51,8 @@ pub struct ModelData {
     pub name: String,
     /// What to draw.
     pub parts: Vec<ModelPart>,
-    /// What collides; `None` means the model does not collide. For now this is the coarsest
-    /// render level of detail; the real collision mesh replaces it once specified (T01-055).
+    /// What collides; `None` means the model does not collide. The model's own collision mesh
+    /// where it has a non-empty one, else its coarsest PC render level of detail (T07-036).
     pub collision: Option<CollisionData>,
 }
 
@@ -427,6 +431,7 @@ impl LevelScene {
         let collision = CollisionData {
             positions: vertices.iter().map(|v| Vec3::from(v.position)).collect(),
             indices: indices.clone(),
+            from_collision_mesh: false,
         };
         Self {
             name: "test room".to_string(),

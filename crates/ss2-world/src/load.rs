@@ -18,10 +18,13 @@
 //! ## What is drawn
 //!
 //! - **Meshes** (`bmf.md`): the first level of detail whose platform mask includes the PC
-//!   ([`ss2_format_bmf::Lod::is_for_pc`]) is drawn; the last one (the coarsest) is the collision
-//!   of models that some placement gives a hull, until the real collision mesh is specified
-//!   (T01-055). Only a model's first mesh instance is used (`mdl.md`: how the engine uses the
-//!   second instance of 7 models is not specified). Surfaces sharing a material are merged into
+//!   ([`ss2_format_bmf::Lod::is_for_pc`]) is drawn. Models that some placement gives a hull
+//!   collide with their own **collision mesh** ([`ss2_format_bmf::CollisionMesh`], `bmf.md`;
+//!   `wld-geometry.md`: a `CModelHull` uses the model's collision mesh), in model space like the
+//!   render meshes; a model without one (or with an empty one) collides with its last PC level of
+//!   detail (the coarsest) instead ([`CollisionData::from_collision_mesh`] tells which). Only a
+//!   model's first mesh instance is used (`mdl.md`: how the engine uses the second instance of 7
+//!   models is not specified). Surfaces sharing a material are merged into
 //!   one [`ModelPart`].
 //! - **UVs**: the stream whose UV map id is the one the material's base colour slot names
 //!   (`mtr.md`, reader rule 4), else the first stream. Coordinates are kept as authored: `bmf.md`
@@ -124,7 +127,7 @@ use std::collections::BTreeMap;
 
 use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
-use ss2_format_bmf::{Lod, MaterialRef, Mesh, Surface};
+use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
@@ -654,7 +657,10 @@ impl Loader<'_> {
                 .rev()
                 .find(|l| l.is_for_pc())
                 .unwrap_or(lod);
-            let c = collision_of(coarsest);
+            let c = match mesh.collision.as_deref().filter(|c| !c.is_empty()) {
+                Some(own) => collision_from_mesh(own),
+                None => collision_of(coarsest),
+            };
             if c.positions.iter().all(|p| p.is_finite()) {
                 Some(c)
             } else {
@@ -903,7 +909,16 @@ fn append_surface(
         .extend(surface.indices.iter().map(|i| base + u32::from(*i)));
 }
 
-/// All triangles of one level of detail as collision.
+/// A model's own collision mesh as collision: its vertices and triangles as stored.
+fn collision_from_mesh(mesh: &CollisionMesh) -> CollisionData {
+    CollisionData {
+        positions: mesh.positions.iter().map(|p| Vec3::from(*p)).collect(),
+        indices: mesh.triangles.iter().flatten().copied().collect(),
+        from_collision_mesh: true,
+    }
+}
+
+/// All triangles of one level of detail as collision (the fallback).
 fn collision_of(lod: &Lod) -> CollisionData {
     let mut c = CollisionData::default();
     for s in &lod.surfaces {
