@@ -8,9 +8,12 @@
 //! inside another file (a world's baked lightmaps). Converting DXT blocks to RGBA or uploading them is the job of the
 //! transcoder (T02-013).
 //!
-//! Only format version 8 is read: the 155 development-build textures of versions 4 to 7 store
-//! their pixels in another way that no spec covers yet (T01-083); they fail with an error that
-//! says so.
+//! Format version 8 is the format of nearly every file. The 155 development-build textures of
+//! container versions 4 to 7 (125 of them the copy the game reads) store their pixels in the
+//! legacy `CBaseTexture` layouts of `tex-legacy.md` (raw or zlib, with or without a length
+//! prefix, the pixel layout from `TexStoredFormat` or `TexFormat`); [`Texture::from_bytes`] reads
+//! them into the same [`Texture`] (T02-041), with [`Texture::format_version`], the stored
+//! [`Texture::frames`] count and the [`Texture::palette`] array kept for inspection.
 //!
 //! ```ignore
 //! use ss2_format_tex::{PixelFormat, TexLoader, Texture};
@@ -29,6 +32,8 @@ use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::{Error, Result};
 use ss2_meta::{Bytes, Container, MetaDeserialize, TypeSystem, Value};
 
+mod legacy;
+
 const WHAT: &str = ".tex texture";
 /// `TexFlags` bit: the pixel data is a cube map (six faces, each with its mip chain).
 pub const FLAG_CUBE_MAP: u32 = 0x02;
@@ -38,8 +43,8 @@ pub const WRAP_REPEAT: u32 = 0x50;
 pub const WRAP_CLAMP: u32 = 0x51;
 /// Most pixel bytes accepted after inflating (the largest real texture, 4096 x 2048 x 4, is 32 MiB;
 /// a cube map of 2048 x 2048 DXT1 is 16 MiB).
-const MAX_PIXEL_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_SIDE: u32 = 16_384;
+pub(crate) const MAX_PIXEL_BYTES: u64 = 256 * 1024 * 1024;
+pub(crate) const MAX_SIDE: u32 = 16_384;
 
 /// How the pixels of a texture are stored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -122,8 +127,18 @@ pub struct Texture {
     pub faces: u32,
     /// Number of mip levels per face: the whole chain down to 1 x 1 for DXT, 1 otherwise.
     pub mip_levels: u32,
-    /// All pixels: face after face, each face its levels largest first, without padding.
+    /// All pixels of the first frame: face after face, each face its levels largest first,
+    /// without padding.
     pub data: Vec<u8>,
+    /// The CTSEMETA format version of the file: 8, or 4 to 7 for the legacy layouts of
+    /// `tex-legacy.md`.
+    pub format_version: u32,
+    /// The stored frame count (`CBaseTexture.5`; 1 where the layout has no such member). Only the
+    /// first frame is in [`Texture::data`]; every retail texture has exactly one.
+    pub frames: u32,
+    /// The `COLOR` array `CBaseTexture.8` of class layout 5, as stored; empty in every retail
+    /// file and in every other layout. The pixels do not refer to it.
+    pub palette: Vec<u32>,
 }
 
 #[derive(MetaDeserialize)]
@@ -147,7 +162,7 @@ struct RawTexture {
     border_color: u32,
 }
 
-fn bad(detail: impl Into<String>) -> Error {
+pub(crate) fn bad(detail: impl Into<String>) -> Error {
     Error::invalid(WHAT, detail)
 }
 
@@ -159,16 +174,15 @@ impl Texture {
     /// allocated from a declared size before it is bounded.
     ///
     /// # Errors
-    /// [`Error::Invalid`] naming what is wrong (including "format version N" for the old
-    /// development textures).
+    /// [`Error::Invalid`] naming what is wrong. Versions 4 to 7 follow the rules of
+    /// `tex-legacy.md` instead: the class layout is known, the pixel array is exactly one raw
+    /// frame set or one complete zlib stream (layout 6: with a matching byte count in front) of
+    /// the predicted size.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let container = Container::parse(bytes)?;
         let version = container.header.format_version;
         if version != 8 {
-            return Err(bad(format!(
-                "format version {version}: the old development-build textures (versions 4 to 7) \
-                 are not supported (no spec for their pixel storage yet, T01-083)"
-            )));
+            return legacy::read(&container);
         }
         let decoded = container.decode_objects()?;
         let object = decoded
@@ -252,6 +266,9 @@ impl Texture {
             faces,
             mip_levels,
             data,
+            format_version: 8,
+            frames: 1,
+            palette: Vec::new(),
         })
     }
 
@@ -303,113 +320,7 @@ impl AssetLoader for TexLoader {
 
 /// Builders of synthetic `.tex` files for the tests (no game data).
 #[cfg(test)]
-mod testing {
-    use flate2::Compression;
-    use flate2::write::ZlibEncoder;
-    use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
-    use std::io::Write;
-
-    /// A version-8 `.tex` file with `pixels` zlib-compressed into its blob.
-    pub(crate) fn texture_file(
-        width: i32,
-        height: i32,
-        flags: u32,
-        format_code: u32,
-        wrap_u: u32,
-        wrap_v: u32,
-        pixels: &[u8],
-    ) -> Vec<u8> {
-        let mut z = ZlibEncoder::new(Vec::new(), Compression::default());
-        z.write_all(pixels).expect("writing to a Vec");
-        texture_file_with_blob(
-            width,
-            height,
-            flags,
-            format_code,
-            wrap_u,
-            wrap_v,
-            &z.finish().expect("finish"),
-        )
-    }
-
-    /// Like [`texture_file`] with an already compressed (or deliberately broken) blob.
-    pub(crate) fn texture_file_with_blob(
-        width: i32,
-        height: i32,
-        flags: u32,
-        format_code: u32,
-        wrap_u: u32,
-        wrap_v: u32,
-        blob: &[u8],
-    ) -> Vec<u8> {
-        let mut b = MetaBuilder::new();
-        b.type_block(TypeBlock::primitive(0, "SLONG", 4, 4));
-        b.type_block(TypeBlock::alias(1, "INDEX", 0));
-        b.type_block(TypeBlock::alias(2, "PIX", 0));
-        b.type_block(TypeBlock::primitive(3, "ULONG", 4, 4));
-        b.type_block(TypeBlock::alias(4, "COLOR", 3));
-        b.type_block(TypeBlock::enumeration(5, "TexFlags", 4));
-        b.type_block(TypeBlock::enumeration(6, "TexFormat", 4));
-        b.type_block(TypeBlock::enumeration(7, "GfxTexWrap", 4));
-        b.type_block(TypeBlock::primitive(8, "UBYTE", 1, 1));
-        b.type_block(TypeBlock::short(9, "CStaticArray<UBYTE>", 0, 6, 8));
-        b.type_block(TypeBlock::class(
-            10,
-            "CResourceFile",
-            3,
-            5,
-            None,
-            &[("1", 1)],
-        ));
-        b.type_block(TypeBlock::pointer(11, "CResourceFile*", 10));
-        b.type_block(TypeBlock::class(
-            12,
-            "CResource",
-            4,
-            5,
-            None,
-            &[("1", 1), ("2", 11)],
-        ));
-        b.type_block(TypeBlock::class(
-            13,
-            "CBaseTexture",
-            9,
-            5,
-            Some(12),
-            &[
-                ("1", 2),
-                ("2", 2),
-                ("4", 5),
-                ("6", 6),
-                ("18", 9),
-                ("9", 7),
-                ("10", 7),
-                ("14", 4),
-            ],
-        ));
-        b.type_block(TypeBlock::class(14, "CTexture", 1, 5, Some(13), &[]));
-        b.type_block(TypeBlock::class(15, "CStaticTexture", 1, 5, Some(14), &[]));
-        b.object(0, 10, ObjectBytes::new().i32(1).finish());
-        b.object(
-            1,
-            15,
-            ObjectBytes::new()
-                .i32(1)
-                .object_ref(Some(0))
-                .i32(width)
-                .i32(height)
-                .u32(flags)
-                .u32(format_code)
-                .array_header(b"STAR", blob.len() as u32)
-                .raw(blob)
-                .u32(wrap_u)
-                .u32(wrap_v)
-                .u32(0)
-                .finish(),
-        );
-        b.build().expect("a consistent synthetic texture")
-    }
-}
+mod testing;
 
 #[cfg(test)]
 mod tests {
@@ -607,9 +518,9 @@ mod tests {
         }
     }
 
-    /// Data-gated: every `.tex` of the retail install. Version-8 files must load; the old
-    /// development textures must fail with the explicit "version" error. Skips without
-    /// `SS2_DATA_DIR`.
+    /// Data-gated: every `.tex` of the retail install loads, the version-8 files and the legacy
+    /// textures of versions 4 to 7 that the game reads (125 effective paths, `tex-legacy.md`).
+    /// Skips without `SS2_DATA_DIR`.
     #[test]
     fn every_texture_of_the_real_install_loads() {
         use ss2_vfs::{EntryKind, Vfs, VfsPath};
@@ -634,14 +545,14 @@ mod tests {
                     Ok(t) => {
                         *counts.entry(format!("{:?}", t.format)).or_default() += 1;
                         cubes += usize::from(t.is_cube_map());
+                        old += usize::from(t.format_version < 8);
                     }
-                    Err(e) if e.to_string().contains("format version") => old += 1,
                     Err(e) => failures.push(format!("{}: {e}", path.as_str())),
                 }
             }
         }
         eprintln!(
-            "formats {counts:?}; {cubes} cube maps; {old} old-version files refused; {} failures",
+            "formats {counts:?}; {cubes} cube maps; {old} legacy (version 4 to 7) files read; {} failures",
             failures.len()
         );
         assert!(
@@ -651,6 +562,6 @@ mod tests {
         );
         assert!(counts.values().sum::<usize>() > 2400, "{counts:?}");
         assert!(cubes >= 30, "only {cubes} cube maps");
-        assert!(old >= 100, "only {old} old-version textures");
+        assert!(old >= 100, "only {old} legacy textures");
     }
 }

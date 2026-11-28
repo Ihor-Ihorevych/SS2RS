@@ -297,6 +297,41 @@ pub struct FaceBasis {
     pub down: Vec3,
 }
 
+/// One linear distance fog for a frame (RFC 0013 amendment 4): a fragment at view distance `d` is mixed towards
+/// `colour` by [`Fog::factor`]. The original's screen fog is plain linear fog between `near` and `far`
+/// (`docs/re/environment.md`); `strength` is the haze volume's edge fade for the camera's position.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fog {
+    /// Linear RGB the far distance fades to.
+    pub colour: [f32; 3],
+    /// Distance where the fog starts (may be negative: fogged from the eye).
+    pub near: f32,
+    /// Distance where the fog is full; at least `near`.
+    pub far: f32,
+    /// Overall weight in 0..=1 (0: no fog).
+    pub strength: f32,
+}
+
+impl Fog {
+    /// How much of the fog colour a fragment `distance` away takes, in 0..=1.
+    pub fn factor(&self, distance: f32) -> f32 {
+        let span = (self.far - self.near).max(1e-4);
+        self.strength * ((distance - self.near) / span).clamp(0.0, 1.0)
+    }
+
+    /// Every number finite, `far >= near`, `strength` in 0..=1.
+    pub fn validate(&self) -> Result<()> {
+        let finite = self.colour.iter().all(|c| c.is_finite())
+            && self.near.is_finite()
+            && self.far.is_finite()
+            && self.strength.is_finite();
+        if !finite || self.far < self.near || !(0.0..=1.0).contains(&self.strength) {
+            return Err(Error::invalid("fog", format!("{self:?}")));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,6 +486,46 @@ mod tests {
         let mut t = chain(TexelFormat::Bc1, 8, 8, 2);
         t.mips[1].pop();
         assert!(t.validate().is_err(), "short level");
+    }
+
+    #[test]
+    fn fog_is_linear_between_near_and_far_and_scaled_by_its_strength() {
+        let fog = Fog {
+            colour: [0.5; 3],
+            near: 10.0,
+            far: 30.0,
+            strength: 0.5,
+        };
+        fog.validate().unwrap();
+        assert_eq!(fog.factor(5.0), 0.0);
+        assert_eq!(fog.factor(20.0), 0.25);
+        assert_eq!(fog.factor(100.0), 0.5);
+        let flat = Fog {
+            near: 3.0,
+            far: 3.0,
+            strength: 1.0,
+            ..fog
+        };
+        flat.validate().unwrap();
+        assert_eq!(flat.factor(2.9), 0.0);
+        assert_eq!(flat.factor(3.1), 1.0);
+        assert!(Fog { far: 9.0, ..fog }.validate().is_err());
+        assert!(
+            Fog {
+                strength: 1.5,
+                ..fog
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            Fog {
+                near: f32::NAN,
+                ..fog
+            }
+            .validate()
+            .is_err()
+        );
     }
 
     #[test]

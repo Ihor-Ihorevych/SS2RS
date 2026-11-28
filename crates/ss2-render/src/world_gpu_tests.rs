@@ -693,3 +693,74 @@ fn a_viewer_high_in_the_cube_sees_the_ceiling_sooner() {
         px(&img, 32, 32)
     );
 }
+
+#[test]
+fn fog_greys_out_the_far_surface_and_leaves_the_near_one_and_the_sky_alone() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    let mesh = r.create_mesh(&square()).unwrap();
+    let blue = ss2_render_api::scene_data::Fog {
+        colour: [0.0, 0.0, 1.0],
+        near: 10.0,
+        far: 20.0,
+        strength: 1.0,
+    };
+    // A red square 3 m away is before the fog starts.
+    r.set_world(vec![batch(mesh, RED, -3.0)]).unwrap();
+    r.set_fog(Some(blue)).unwrap();
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), [255, 0, 0, 255], 2),
+        "{:?}",
+        px(&img, 32, 32)
+    );
+    // 30 m away (scaled to fill the same view) it is past the far distance: all fog.
+    let mut far = batch(mesh, RED, -30.0);
+    far.instances = vec![Mat4::from_scale_rotation_translation(
+        Vec3::splat(10.0),
+        Quat::IDENTITY,
+        Vec3::new(0.0, 0.0, -30.0),
+    )];
+    r.set_world(vec![far]).unwrap();
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), [0, 0, 255, 255], 2),
+        "{:?}",
+        px(&img, 32, 32)
+    );
+    // Half strength: half way (the target is sRGB, so compare in linear terms loosely: neither pure colour).
+    r.set_fog(Some(ss2_render_api::scene_data::Fog {
+        strength: 0.5,
+        ..blue
+    }))
+    .unwrap();
+    let mid = px(
+        &r.render_world_to_image(&camera(), None, SKY).unwrap(),
+        32,
+        32,
+    );
+    assert!(mid[0] > 100 && mid[2] > 100, "{mid:?}");
+    // No fog: the far square shows its own colour again.
+    r.set_fog(None).unwrap();
+    let img = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert!(
+        close(px(&img, 32, 32), [255, 0, 0, 255], 2),
+        "{:?}",
+        px(&img, 32, 32)
+    );
+    // The sky is never fogged.
+    r.clear_world();
+    r.set_fog(Some(blue)).unwrap();
+    test_sky(&mut r);
+    let fogged = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    r.set_fog(None).unwrap();
+    let clear = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    assert_eq!(fogged.pixels, clear.pixels);
+    // A bad fog is refused and the old one kept.
+    assert!(
+        r.set_fog(Some(ss2_render_api::scene_data::Fog { far: 1.0, ..blue }))
+            .is_err()
+    );
+}
