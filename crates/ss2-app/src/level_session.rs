@@ -260,8 +260,11 @@ pub(crate) fn take_level_screenshot(
     let loaded = started.elapsed();
     let mut renderer = Renderer::new_offscreen(size).map_err(|e| e.to_string())?;
     let report = upload(&mut renderer, &scene)?;
+    let camera = start_camera(&scene);
+    let fog = scene.fog_at(camera.position);
+    renderer.set_fog(fog).map_err(|e| e.to_string())?;
     let image = renderer
-        .render_world_to_image(&start_camera(&scene), None, SKY)
+        .render_world_to_image(&camera, None, SKY)
         .map_err(|e| e.to_string())?;
     crate::screenshot::save_png(out, &image)?;
     tracing::info!(
@@ -272,6 +275,8 @@ pub(crate) fn take_level_screenshot(
         textures = report.textures,
         textures_replaced = report.textures_replaced,
         skipped = scene.skipped.len(),
+        hazes = scene.hazes.len(),
+        fog = ?fog,
         out = %out.display(),
         "level screenshot saved"
     );
@@ -395,6 +400,32 @@ mod tests {
         assert!(
             (ratio - 0.3).abs() < 0.05,
             "shadow/light ratio on the floor: {ratio}"
+        );
+        // Inside the room's haze (its far half) the far wall takes on the fog colour; at the start there is none.
+        assert_eq!(room.fog_at(start_camera(&room).position), None);
+        let inside = Camera {
+            position: Vec3::new(0.0, 1.6, -4.0),
+            ..start_camera(&room)
+        };
+        let fog = room.fog_at(inside.position).expect("in the haze");
+        renderer.set_fog(None).unwrap();
+        let clear_view = renderer.render_world_to_image(&inside, None, SKY).unwrap();
+        renderer.set_fog(Some(fog)).unwrap();
+        let fogged_view = renderer.render_world_to_image(&inside, None, SKY).unwrap();
+        renderer.set_fog(None).unwrap();
+        let fog_px = fog.colour.map(|c| c.powf(1.0 / 2.2) * 255.0);
+        let distance = |p: &[u8]| -> f32 {
+            (0..3)
+                .map(|i| (f32::from(p[i]) - fog_px[i]).abs())
+                .sum::<f32>()
+        };
+        let centre = ((45 * 160 + 80) * 4)..((45 * 160 + 80) * 4 + 4);
+        assert!(
+            distance(&fogged_view.pixels[centre.clone()])
+                < distance(&clear_view.pixels[centre.clone()]),
+            "the fog pulls the far wall towards {fog_px:?}: {:?} -> {:?}",
+            &clear_view.pixels[centre.clone()],
+            &fogged_view.pixels[centre]
         );
         // A level without a sky clears to the sky colour.
         let mut bare = LevelScene::test_room();

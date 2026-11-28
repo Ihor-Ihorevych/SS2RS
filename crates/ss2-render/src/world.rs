@@ -713,7 +713,14 @@ impl WorldGpu {
         uniform[16..19].copy_from_slice(&camera.forward().to_array());
         uniform[20..23].copy_from_slice(&camera.position.to_array());
         if let Some(fog) = self.fog {
-            uniform[24..27].copy_from_slice(&fog.colour);
+            // On a target that is not sRGB the pass works in sRGB values (textures are sampled raw), so the fog colour
+            // is encoded the same way to show the same colour on both.
+            let colour = if self.srgb {
+                fog.colour
+            } else {
+                fog.colour.map(linear_to_srgb)
+            };
+            uniform[24..27].copy_from_slice(&colour);
             uniform[27] = fog.strength;
             uniform[28] = fog.near;
             uniform[29] = fog.far;
@@ -842,4 +849,14 @@ fn lightmap_uv_buffer(
         contents: bytemuck::cast_slice(data),
         usage: wgpu::BufferUsages::VERTEX,
     })
+}
+
+/// One linear channel in 0..=1 as sRGB.
+fn linear_to_srgb(c: f32) -> f32 {
+    let c = c.clamp(0.0, 1.0);
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
 }
