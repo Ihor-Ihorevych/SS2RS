@@ -344,6 +344,151 @@ fn every_sky_loads() {
     assert_eq!(faces, 55 * 5 + 11);
 }
 
+/// Every haze volume of the install reaches the scene (`environment.md`, "Haze": 65 in 45
+/// worlds, T07-042), in the world's order, and `1_3_village`'s worked example comes out as the
+/// spec works it: colour `0x2a383d`, a 300 x 100 x 400 box, a hard edge (`.5` = 0 → 0.001),
+/// near -150 and far 1,860.
+#[test]
+fn every_haze_loads() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let without_models = WithoutModels(&vfs);
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut hazes, mut worlds) = (0, 0);
+    let mut failures = Vec::new();
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let world = World::from_bytes(&bytes).unwrap();
+        let scene = load_level(
+            &without_models,
+            &info.wld,
+            &LoadOptions::default(),
+            &mut |_| {},
+        )
+        .unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        if scene.skipped.iter().any(|l| l.starts_with("haze"))
+            || scene.hazes.len() != world.hazes.len()
+        {
+            failures.push(format!(
+                "{}: {} of {} hazes",
+                info.id,
+                scene.hazes.len(),
+                world.hazes.len()
+            ));
+            continue;
+        }
+        hazes += scene.hazes.len();
+        worlds += usize::from(!scene.hazes.is_empty());
+        for (got, want) in scene.hazes.iter().zip(&world.hazes) {
+            // The box is the record's size about the renderable's world position, in its turned
+            // frame.
+            let centre = got.rotation * ((got.min + got.max) / 2.0);
+            if !centre.abs_diff_eq(want.translation, 1e-2)
+                || !(got.max - got.min).abs_diff_eq(want.size, 1e-2)
+                || got.fade(want.translation) != 1.0
+            {
+                failures.push(format!("{}: haze {} as {got:?}", info.id, want.serial));
+            }
+        }
+        if info.id == "1_3_village" {
+            let [h] = scene.hazes.as_slice() else {
+                panic!("1_3_village: {:?}", scene.hazes);
+            };
+            assert!(
+                (h.max - h.min).abs_diff_eq(Vec3::new(300.0, 100.0, 400.0), 1e-3),
+                "{h:?}"
+            );
+            assert_eq!((h.fade_margin, h.near, h.far), (0.001, -150.0, 1860.0));
+            let lin = |b: f32| ((b / 255.0 + 0.055) / 1.055).powf(2.4);
+            let want = [lin(42.0), lin(56.0), lin(61.0), 0.0];
+            assert!(
+                h.colour.iter().zip(want).all(|(a, b)| (a - b).abs() < 1e-6),
+                "{h:?}"
+            );
+        }
+    }
+    eprintln!("{hazes} hazes in {worlds} worlds");
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert_eq!((hazes, worlds), (65, 45));
+}
+
+/// The models embedded in the worlds (`wld-geometry.md`, 109 placements, T07-043) are built like
+/// external ones: no skipped line says an embedded model is not read, and of the 82 distinct
+/// ones only the 10 with nothing to draw or collide with are left out, with a line each: 9 whose
+/// mesh is an empty `CMesh` (no render and no collision mesh, which `ss2-format-bmf` refuses)
+/// and one (`dm_cockaleekie`) whose render mesh has no level of detail and which has no
+/// collision mesh.
+#[test]
+fn every_embedded_model_loads() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let without_models = WithoutModels(&vfs);
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut built, mut placed, mut colliding) = (0, 0, 0);
+    let mut left_out = Vec::new();
+    let mut failures = Vec::new();
+    let options = LoadOptions {
+        max_texture_size: 4,
+    };
+    for info in &levels {
+        let bytes = vfs.read(&info.wld).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let scene = load_level(&without_models, &info.wld, &options, &mut |_| {}).unwrap();
+        if let Err(e) = scene.validate() {
+            failures.push(format!("{}: {e}", info.id));
+        }
+        for line in &scene.skipped {
+            if line.contains("is not read") {
+                failures.push(format!("{}: {line}", info.id));
+            } else if line.contains("(embedded model") {
+                left_out.push(format!("{}: {line}", info.id));
+            }
+        }
+        let embedded: Vec<usize> = (0..scene.models.len())
+            .filter(|&i| scene.models[i].name.contains(".wld#"))
+            .collect();
+        built += embedded.len();
+        colliding += embedded
+            .iter()
+            .filter(|&&i| {
+                scene.models[i]
+                    .collision
+                    .as_ref()
+                    .is_some_and(|c| c.from_collision_mesh)
+            })
+            .count();
+        placed += scene
+            .instances
+            .iter()
+            .filter(|i| embedded.contains(&(i.model as usize)))
+            .count();
+    }
+    eprintln!(
+        "{built} embedded models built ({colliding} colliding with their collision mesh), {placed} placements; left out: {left_out:#?}"
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+    let empty = left_out
+        .iter()
+        .filter(|l| l.contains("the mesh has no render mesh"))
+        .count();
+    let no_lod = left_out
+        .iter()
+        .filter(|l| l.contains("no level of detail is for the PC"))
+        .count();
+    assert_eq!((empty, no_lod, left_out.len()), (9, 1, 10), "{left_out:#?}");
+    assert_eq!((built, placed), (72, 99));
+}
+
 /// The heading of a rotation in degrees: the angle about +Y of its rotated -Z.
 fn heading(rotation: Quat) -> f32 {
     let forward = rotation.normalize() * Vec3::NEG_Z;

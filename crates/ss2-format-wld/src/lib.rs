@@ -22,7 +22,13 @@
 //!   "Baked lightmaps"): the `CTextureOvenShaderModifier` in its model instance's modifier list
 //!   and the `CStaticTexture` stored in the world that it names, decoded with `ss2-format-tex`
 //!   ([`Lightmap`]); and, over every model instance of the world, how many are lit
-//!   ([`LightmapCounts`]).
+//!   ([`LightmapCounts`]),
+//! - the **models embedded in the world** (T07-043; spec `docs/re/wld-geometry.md`, "Embedded
+//!   models"): each `CModelConfiguration` object a static model names instead of an external
+//!   `.mdl`, read once with `ss2-format-mdl`'s [`Model::from_object`] ([`EmbeddedModel`]),
+//! - the **haze volumes** (`CHazeEntity`, T07-042; spec `docs/re/environment.md`, section
+//!   "Haze"): colour, box size and the `.5`/`.6`/`.7`/`.10` numbers from the property record,
+//!   the world placement of the haze renderable and the optional parent entity ([`Haze`]).
 //!
 //! Everything else (lights, the grids, the physics bodies, scripts, the other entity classes) is
 //! left out; [`World::entity_count`] says how many entities the file has in all.
@@ -43,6 +49,7 @@ use std::collections::HashMap;
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
+use ss2_format_mdl::Model;
 use ss2_format_tex::Texture;
 use ss2_meta::{Container, Decoded, FromValue, MetaDeserialize, Object, ObjectRef, TypeSystem};
 
@@ -59,7 +66,8 @@ pub enum ModelRef {
     /// `Content/SeriousSam2/Levels/Multiplayer/DM_DockingBay/DockingBay.mdl`).
     External(String),
     /// A `CModelConfiguration` object stored in the world itself (the object id). 109 of the
-    /// 25,383 retail static models do this; reading such a model is not part of this crate.
+    /// 25,383 retail static models do this; the model is in [`World::embedded_models`]
+    /// ([`World::embedded_model`]).
     Embedded(u32),
 }
 
@@ -171,6 +179,60 @@ pub struct Marker {
     /// index into [`World::chapters`]; `None` at the end of the chain, when the handle names no
     /// chapter of the entity list, and always for a spawn marker.
     pub next: Option<usize>,
+}
+
+/// A model stored in the world itself (`wld-geometry.md`, "Embedded models": a complete
+/// `CModelConfiguration` of the format in `mdl.md`), which a static model names in place of an
+/// external `.mdl`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EmbeddedModel {
+    /// The object id of the `CModelConfiguration` ([`ModelRef::Embedded`]).
+    pub object: u32,
+    /// The model ([`Model::from_object`]; its external references resolve through the world's
+    /// file table), or why it cannot be read.
+    pub model: std::result::Result<Model, String>,
+}
+
+/// One haze volume (`CHazeEntity`, `docs/re/environment.md`, section "Haze"): a box with a
+/// colour and four numbers.
+///
+/// The numbers are read from the property record (`CHazeProperties`), as the spec's reader
+/// invariant 1 asks; a haze without a record takes them from its renderable
+/// (`CHazeEffectRenderable`) instead, which holds the same values (65 of 65 retail hazes).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Haze {
+    /// The entity's serial (`CEntity.1`).
+    pub serial: u32,
+    /// The editor name from the property record, empty without a record.
+    pub name: String,
+    /// The colour as the stored 32-bit value, `0xAARRGGBB` (`.1`, else the renderable's `.3`);
+    /// the engine reads the alpha byte too, its use is open.
+    pub color: u32,
+    /// The box's size along x, y and z (`.2`, `.3`, `.4`, else the size of the renderable's
+    /// box).
+    pub size: Vec3,
+    /// The edge fade distance (`.5`, else the renderable's `.2`), as stored (the engine clamps
+    /// it to at least 0.001).
+    pub fade: f32,
+    /// `.6` (else the renderable's `.4`): the near value of the near/far pair, may be negative.
+    pub near: f32,
+    /// `.7` (else the renderable's `.5`): the far value, as stored (the engine raises it to
+    /// `max(.6, 0.01, .7)`).
+    pub far: f32,
+    /// `.10` (else the renderable's `.7`): passed to the renderer unchanged, role not
+    /// established.
+    pub value_10: f32,
+    /// The renderable's own box (`CHazeEffectRenderable.1`, `Box3f`) in its local frame: minimum
+    /// and maximum corner.
+    pub local_box: (Vec3, Vec3),
+    /// World rotation of the haze renderable (`CAspect.7`).
+    pub rotation: Quat,
+    /// World translation of the haze renderable (`CAspect.7`).
+    pub translation: Vec3,
+    /// The parent entity (`CHazeEntity.en_henParent`, 5 of 65 retail hazes) as its serial;
+    /// `None` without a parent or when the handle names no entity of the file. The renderable's
+    /// world placement is stored as such, the parent's included.
+    pub parent: Option<u32>,
 }
 
 /// One face of the sky cube: the `CCubeRenderable` face members `.10` to `.15`, in that order
@@ -304,6 +366,11 @@ pub struct World {
     pub sky: Option<Sky>,
     /// How many model instances of the world are lit, and by how many oven modifiers.
     pub lightmap_counts: LightmapCounts,
+    /// The models embedded in the world that a static model names, each once, sorted by object
+    /// id ([`World::embedded_model`]).
+    pub embedded_models: Vec<EmbeddedModel>,
+    /// Every `CHazeEntity`, in entity-list order.
+    pub hazes: Vec<Haze>,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -453,6 +520,71 @@ struct SkyRecord {
     flag_5: bool,
     #[meta(owner = "CCubeBackgroundProperties", name = "6")]
     color: u32,
+}
+
+#[derive(MetaDeserialize)]
+struct Box3f {
+    #[meta(owner = "Box3f", name = "1")]
+    x0: f32,
+    #[meta(owner = "Box3f", name = "2")]
+    y0: f32,
+    #[meta(owner = "Box3f", name = "3")]
+    z0: f32,
+    #[meta(owner = "Box3f", name = "4")]
+    x1: f32,
+    #[meta(owner = "Box3f", name = "5")]
+    y1: f32,
+    #[meta(owner = "Box3f", name = "6")]
+    z1: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct HazeEntity {
+    #[meta(owner = "CHazeEntity", name = "1")]
+    renderable: ObjectRef,
+}
+
+/// Read on its own: a haze that lacks the member just has no parent.
+#[derive(MetaDeserialize)]
+struct HazeParent {
+    #[meta(owner = "CHazeEntity", name = "en_henParent")]
+    parent: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct HazeRenderable {
+    #[meta(owner = "CHazeEffectRenderable", name = "1")]
+    bounds: Box3f,
+    #[meta(owner = "CHazeEffectRenderable", name = "2")]
+    fade: f32,
+    #[meta(owner = "CHazeEffectRenderable", name = "3")]
+    color: u32,
+    #[meta(owner = "CHazeEffectRenderable", name = "4")]
+    near: f32,
+    #[meta(owner = "CHazeEffectRenderable", name = "5")]
+    far: f32,
+    #[meta(owner = "CHazeEffectRenderable", name = "7")]
+    value_10: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct HazeRecord {
+    #[meta(owner = "CHazeProperties", name = "1")]
+    color: u32,
+    #[meta(owner = "CHazeProperties", name = "2")]
+    x: f32,
+    #[meta(owner = "CHazeProperties", name = "3")]
+    y: f32,
+    #[meta(owner = "CHazeProperties", name = "4")]
+    z: f32,
+    #[meta(owner = "CHazeProperties", name = "5")]
+    fade: f32,
+    #[meta(owner = "CHazeProperties", name = "6")]
+    near: f32,
+    #[meta(owner = "CHazeProperties", name = "7")]
+    far: f32,
+    #[meta(owner = "CHazeProperties", name = "10")]
+    value_10: f32,
 }
 
 #[derive(MetaDeserialize)]
@@ -728,6 +860,8 @@ impl World {
             first_chapter: None,
             sky: None,
             lightmap_counts: LightmapCounts::default(),
+            embedded_models: Vec::new(),
+            hazes: Vec::new(),
         };
         for o in &decoded.objects {
             if g.class_of(o) != "CModelInstance" {
@@ -762,6 +896,7 @@ impl World {
                     | "CSpawnMarkerEntity"
                     | "CChapterInfoEntity"
                     | "CCubeBackgroundEntity"
+                    | "CHazeEntity"
             ) {
                 continue;
             }
@@ -777,6 +912,10 @@ impl World {
                 "CCubeBackgroundEntity" => {
                     let record = records.get(&o.id).copied();
                     world.sky = Some(sky(&g, o, record, serial, name)?);
+                }
+                "CHazeEntity" => {
+                    let record = records.get(&o.id).copied();
+                    world.hazes.push(haze(&g, o, record, serial, name)?);
                 }
                 _ => {
                     let (rotation, translation) = aspects.placement(o.id).ok_or_else(|| {
@@ -808,7 +947,34 @@ impl World {
             chapter.next = chapter_index(next);
         }
         world.first_chapter = chapter_index(first_chapter.flatten());
+
+        let mut embedded: Vec<u32> = world
+            .static_models
+            .iter()
+            .filter_map(|m| match m.model {
+                ModelRef::Embedded(id) => Some(id),
+                ModelRef::External(_) => None,
+            })
+            .collect();
+        embedded.sort_unstable();
+        embedded.dedup();
+        world.embedded_models = embedded
+            .into_iter()
+            .map(|object| EmbeddedModel {
+                object,
+                model: Model::from_object(&container, &decoded, object).map_err(|e| e.to_string()),
+            })
+            .collect();
         Ok(world)
+    }
+
+    /// The embedded model with object id `object` ([`ModelRef::Embedded`]); `None` when no
+    /// static model names it.
+    pub fn embedded_model(&self, object: u32) -> Option<&EmbeddedModel> {
+        self.embedded_models
+            .binary_search_by_key(&object, |m| m.object)
+            .ok()
+            .map(|i| &self.embedded_models[i])
     }
 
     /// The chapter chain as indices into [`World::chapters`]: [`World::first_chapter`], then each
@@ -911,6 +1077,65 @@ fn sky(
             rotation,
             translation,
         },
+    })
+}
+
+fn haze(
+    g: &Graph<'_>,
+    o: &Object,
+    record: Option<&Object>,
+    serial: u32,
+    name: String,
+) -> Result<Haze> {
+    let entity: HazeEntity = g.typed(o, "a haze entity")?;
+    let what = format!("the renderable of haze {}", o.id);
+    let renderable = g.object(entity.renderable.0, &what)?;
+    let aspect: Aspect = g.typed(renderable, &what)?;
+    let r: HazeRenderable = g.typed(renderable, &what)?;
+    let record: Option<HazeRecord> = record
+        .map(|rec| g.typed(rec, &format!("the property record of haze {}", o.id)))
+        .transpose()?;
+    let parent = g
+        .typed::<HazeParent>(o, "")
+        .ok()
+        .and_then(|p| p.parent.0)
+        .and_then(|id| g.by_id.get(&id))
+        .and_then(|p| g.typed::<Entity>(p, "").ok())
+        .map(|e| e.serial);
+    let b = &r.bounds;
+    let local_box = (Vec3::new(b.x0, b.y0, b.z0), Vec3::new(b.x1, b.y1, b.z1));
+    let (rotation, translation) = aspect.world.split();
+    let (color, size, fade, near, far, value_10) = match record {
+        Some(rec) => (
+            rec.color,
+            Vec3::new(rec.x, rec.y, rec.z),
+            rec.fade,
+            rec.near,
+            rec.far,
+            rec.value_10,
+        ),
+        None => (
+            r.color,
+            local_box.1 - local_box.0,
+            r.fade,
+            r.near,
+            r.far,
+            r.value_10,
+        ),
+    };
+    Ok(Haze {
+        serial,
+        name,
+        color,
+        size,
+        fade,
+        near,
+        far,
+        value_10,
+        local_box,
+        rotation,
+        translation,
+        parent,
     })
 }
 

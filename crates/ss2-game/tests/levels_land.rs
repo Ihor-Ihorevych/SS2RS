@@ -1,8 +1,8 @@
 //! Data-gated (skips without `SS2_DATA_DIR`): every level of the retail install loads and
 //! validates, its collision comes from the models' own collision meshes where they have one
 //! (T07-036), and a walker dropped at the level's start lands on ground within a few seconds of
-//! simulated time (except where the ground is a model embedded in the world, which the loader
-//! does not read yet).
+//! simulated time, also where the ground is a model embedded in the world (`dm_cliff`'s
+//! `Terrain` and `dm_stadium`'s `StaticModel096`, read since T07-043).
 //!
 //! Slow in a debug build (it loads all 58 levels); `cargo test --release -p ss2-game --test
 //! levels_land -- --nocapture` prints the per-level table in a minute or two.
@@ -32,7 +32,6 @@ fn every_level_collides_with_its_collision_meshes_and_a_walker_lands_at_its_star
     let (mut inst_real, mut inst_fallback) = (0usize, 0usize);
     let mut failures = Vec::new();
     let mut landed = 0usize;
-    let mut on_embedded = Vec::new();
     // Distinct colliding models over all levels, by path: from a collision mesh or not.
     let mut distinct: BTreeMap<String, bool> = BTreeMap::new();
     for info in &levels {
@@ -82,9 +81,6 @@ fn every_level_collides_with_its_collision_meshes_and_a_walker_lands_at_its_star
             }
         };
         let start = scene.start().position;
-        // The ground of a few levels is a model embedded in the world, which the loader does not
-        // read yet (`load_level`'s docs): a walker there falls through, whatever the collision.
-        let embedded_unread = scene.skipped.iter().any(|l| l.contains("embedded model"));
         let mut session = PlaySession::new(Arc::new(scene), physics);
         let idle = PlayInput::default();
         let mut time = 0.0f32;
@@ -106,20 +102,12 @@ fn every_level_collides_with_its_collision_meshes_and_a_walker_lands_at_its_star
                     format!("{}/{}", info.group, info.id)
                 );
             }
-            None => {
-                let line = format!(
-                    "{}: the walker did not land within {LAND_WITHIN} s (start {start}, feet {}, {} respawns)",
-                    info.id,
-                    session.feet(),
-                    session.respawns()
-                );
-                if embedded_unread {
-                    eprintln!("{line}; the level has unread embedded models");
-                    on_embedded.push(info.id.clone());
-                } else {
-                    failures.push(line);
-                }
-            }
+            None => failures.push(format!(
+                "{}: the walker did not land within {LAND_WITHIN} s (start {start}, feet {}, {} respawns)",
+                info.id,
+                session.feet(),
+                session.respawns()
+            )),
         }
     }
     eprintln!(
@@ -137,12 +125,10 @@ fn every_level_collides_with_its_collision_meshes_and_a_walker_lands_at_its_star
         fallback_names.len()
     );
     assert!(failures.is_empty(), "{failures:#?}");
-    // Measured: the two levels whose start stands on an embedded world model (a `Terrain` or
-    // `StaticModel096` entity that `load_level` skips); the fallback render LOD fails there
-    // the same way. Every other level's walker lands.
-    on_embedded.sort();
-    assert_eq!(on_embedded, ["dm_cliff", "dm_stadium"]);
-    assert_eq!(landed + on_embedded.len(), levels.len());
+    // Every level's walker lands, `dm_cliff` and `dm_stadium` too: their starts stand on models
+    // embedded in the world (a `Terrain` and a `StaticModel096` entity), which fell through
+    // before the loader read them (T07-043).
+    assert_eq!(landed, levels.len());
     assert!(
         total_real > total_fallback,
         "most colliding models have a collision mesh"

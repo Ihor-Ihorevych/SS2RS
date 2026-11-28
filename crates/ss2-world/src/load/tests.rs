@@ -58,7 +58,8 @@ fn aspect(parent: Option<u32>, world: ([f32; 4], [f32; 3]), owner: u32) -> Objec
 ///
 /// - entity 3: `Box.mdl` with a hull, world placement 90 degrees about +y at (6, 0, 0), scale
 ///   (2, 2, -1) (mirrored);
-/// - entity 4: an embedded model (not read by the loader);
+/// - entity 4: an embedded model, at (0, 2, 0), no hull: object 15, an empty configuration that
+///   the world reader cannot read (a test can swap in a readable one);
 /// - entity 7: `Box.mdl` again, no hull, at (0, 0, -5), scale 1;
 /// - entity 8: `Missing.mdl` with a hull;
 /// - entity 5: a spawn marker at (10, 0, 10) turned 90 degrees about +y;
@@ -1543,6 +1544,158 @@ fn the_missing_and_the_embedded_model_are_skipped_with_a_line_each() {
     assert_eq!(scene.skipped.len(), 2, "{:?}", scene.skipped);
 }
 
+/// The world of [`all_files`] read, with its embedded model (object 15) replaced by `Box.mdl`'s
+/// model, as `ss2-format-wld` would have read it from the world.
+fn world_with_readable_embedded_model() -> World {
+    let mut world = World::from_bytes(&world_file(true)).unwrap();
+    assert!(world.embedded_model(15).unwrap().model.is_err());
+    world.embedded_models[0].model = Ok(Model::from_bytes(&model_file()).unwrap());
+    world
+}
+
+#[test]
+fn an_embedded_model_is_built_like_an_external_one() {
+    let vfs = CountingVfs::new(&all_files());
+    let world = world_with_readable_embedded_model();
+    let (scene, _) = scene_of_world(
+        &vfs,
+        &VfsPath::new(WLD).unwrap(),
+        &world,
+        &OPTIONS,
+        &mut |_| {},
+    );
+    scene.validate().unwrap();
+    assert_eq!(
+        skipped_mentions(&scene, "embedded"),
+        0,
+        "{:?}",
+        scene.skipped
+    );
+    assert_eq!(scene.models.len(), 2, "{:?}", scene.skipped);
+    let embedded = scene
+        .models
+        .iter()
+        .position(|m| m.name == format!("{}#15", VfsPath::new(WLD).unwrap().as_str()))
+        .expect("the embedded model");
+    let file = 1 - embedded;
+    // The same parts and material as the file it was taken from; no hull, so no collision.
+    assert_eq!(scene.models[embedded].parts, scene.models[file].parts);
+    assert!(scene.models[embedded].collision.is_none());
+    let placed: Vec<&Instance> = scene
+        .instances
+        .iter()
+        .filter(|i| i.model as usize == embedded)
+        .collect();
+    assert_eq!(placed.len(), 1);
+    assert_eq!(placed[0].transform.translation, Vec3::new(0.0, 2.0, 0.0));
+    assert!(!placed[0].collidable);
+}
+
+#[test]
+fn an_embedded_model_that_cannot_be_read_says_why() {
+    let (scene, _) = load(&CountingVfs::new(&all_files()));
+    let lines: Vec<&String> = scene
+        .skipped
+        .iter()
+        .filter(|l| l.contains("(embedded model 15)"))
+        .collect();
+    assert_eq!(lines.len(), 1, "{:?}", scene.skipped);
+    assert!(lines[0].contains("#15`"), "{}", lines[0]);
+    assert!(lines[0].ends_with("(1 placement left out)"), "{}", lines[0]);
+}
+
+/// `1_3_village`'s haze (`environment.md`, worked example and test vector), turned 90 degrees
+/// about +y at (100, 10, -50).
+fn village_haze() -> Haze {
+    Haze {
+        serial: 3691,
+        name: "Haze001".into(),
+        color: 0x002a_383d,
+        size: Vec3::new(300.0, 100.0, 400.0),
+        fade: 0.0,
+        near: -150.0,
+        far: 1860.0,
+        value_10: 0.0,
+        local_box: (
+            Vec3::new(-150.0, -50.0, -200.0),
+            Vec3::new(150.0, 50.0, 200.0),
+        ),
+        rotation: Quat::from_xyzw(ROT_Y90[0], ROT_Y90[1], ROT_Y90[2], ROT_Y90[3]),
+        translation: Vec3::new(100.0, 10.0, -50.0),
+        parent: None,
+    }
+}
+
+#[test]
+fn the_village_haze_becomes_a_hard_edged_turned_volume() {
+    let mut skipped = Vec::new();
+    let v = haze_volume(&village_haze(), &mut skipped).unwrap();
+    assert!(skipped.is_empty(), "{skipped:?}");
+    // `.5` = 0 clamps to 0.001: a hard edge; `.6` as stored; `.7`'s clamp leaves 1,860.
+    assert_eq!(v.fade_margin, HazeVolume::MIN_FADE_MARGIN);
+    assert_eq!((v.near, v.far), (-150.0, 1860.0));
+    // 0x2a, 0x38, 0x3d taken as sRGB, made linear; the alpha byte 0x00 carried.
+    let lin = |b: f32| ((b / 255.0 + 0.055) / 1.055).powf(2.4);
+    for (got, want) in v.colour.iter().zip([lin(42.0), lin(56.0), lin(61.0), 0.0]) {
+        assert!((got - want).abs() < 1e-6, "{:?}", v.colour);
+    }
+    // The box is 300 x 100 x 400 in the haze's own (turned) frame, centred on its placement.
+    assert!((v.max - v.min).abs_diff_eq(Vec3::new(300.0, 100.0, 400.0), 1e-3));
+    assert!(v.rotation.abs_diff_eq(village_haze().rotation, 1e-6));
+    let centre = Vec3::new(100.0, 10.0, -50.0);
+    assert_eq!(v.fade(centre), 1.0);
+    // Turned 90 degrees about +y, the 400-long local z runs along world x: 190 m from the centre
+    // along world x is inside, along world z (the 300-long local x) is outside.
+    assert_eq!(v.fade(centre + Vec3::new(190.0, 0.0, 0.0)), 1.0);
+    assert_eq!(v.fade(centre + Vec3::new(0.0, 0.0, 190.0)), 0.0);
+    assert_eq!(v.fade(centre + Vec3::new(0.0, 0.0, 140.0)), 1.0);
+    let mut scene = LevelScene::test_room();
+    scene.hazes = vec![v];
+    scene.validate().unwrap();
+}
+
+#[test]
+fn a_hazes_far_is_clamped_and_its_colour_alpha_carried() {
+    let mut skipped = Vec::new();
+    // `1_6_inside_temple`'s third haze: `.6` = -25, `.7` = 0 → far = max(-25, 0.01, 0) = 0.01;
+    // `6_1_compound`'s first: `.6` = 0, `.7` = 20, `.5` = 0; an ARGB colour with alpha 0xD5.
+    let mut h = village_haze();
+    (h.near, h.far, h.fade, h.color) = (-25.0, 0.0, 0.5, 0xd53a_994b);
+    let v = haze_volume(&h, &mut skipped).unwrap();
+    assert_eq!((v.near, v.far, v.fade_margin), (-25.0, 0.01, 0.5));
+    assert!((v.colour[3] - 213.0 / 255.0).abs() < 1e-6);
+    (h.near, h.far) = (38.28, 20.0);
+    assert_eq!(haze_volume(&h, &mut skipped).unwrap().far, 38.28);
+    assert!(skipped.is_empty(), "{skipped:?}");
+}
+
+#[test]
+fn an_unusable_haze_is_left_out_or_unturned_with_a_line() {
+    let mut skipped = Vec::new();
+    let mut flat = village_haze();
+    flat.size.y = 0.0;
+    assert!(haze_volume(&flat, &mut skipped).is_none());
+    let mut nan = village_haze();
+    nan.far = f32::NAN;
+    assert!(haze_volume(&nan, &mut skipped).is_none());
+    let mut unturnable = village_haze();
+    unturnable.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 0.0);
+    let v = haze_volume(&unturnable, &mut skipped).unwrap();
+    assert_eq!(v.rotation, Quat::IDENTITY);
+    assert!(
+        v.min.abs_diff_eq(Vec3::new(-50.0, -40.0, -250.0), 1e-4),
+        "{}",
+        v.min
+    );
+    assert_eq!(skipped.len(), 3, "{skipped:?}");
+}
+
+#[test]
+fn a_world_without_hazes_loads_none() {
+    let (scene, _) = load(&CountingVfs::new(&all_files()));
+    assert!(scene.hazes.is_empty());
+}
+
 #[test]
 fn a_missing_texture_becomes_white_and_keeps_the_material() {
     let (scene, _) = load(&CountingVfs::new(&without(BODY_TEX)));
@@ -1611,9 +1764,9 @@ fn progress_goes_through_world_models_and_textures() {
     let (_, events) = load(&CountingVfs::new(&all_files()));
     let last = |stage: LoadStage| events.iter().rev().find(|e| e.stage == stage).copied();
     assert_eq!(events.first().map(|e| e.stage), Some(LoadStage::World));
-    // Two distinct external models (Box and Missing), one texture.
+    // Three distinct models (Box, the embedded one and Missing), one texture.
     let models = last(LoadStage::Models).unwrap();
-    assert_eq!((models.done, models.total), (2, 2));
+    assert_eq!((models.done, models.total), (3, 3));
     let textures = last(LoadStage::Textures).unwrap();
     assert_eq!((textures.done, textures.total), (1, 1));
     let order: Vec<LoadStage> = events.iter().map(|e| e.stage).collect();
@@ -1851,6 +2004,8 @@ fn chain_world(spawn_markers: Vec<Marker>, first_chapter: Option<usize>) -> Worl
         first_chapter,
         sky: None,
         lightmap_counts: Default::default(),
+        embedded_models: Vec::new(),
+        hazes: Vec::new(),
     }
 }
 

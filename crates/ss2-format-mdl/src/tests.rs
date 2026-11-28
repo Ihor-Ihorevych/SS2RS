@@ -512,6 +512,32 @@ fn only_the_main_configuration_counts() {
 }
 
 #[test]
+fn a_configuration_object_reads_on_its_own_whatever_its_role() {
+    // As a world embeds it: any configuration object of a decoded container, the
+    // `CResource.1` rule of a `.mdl` file aside.
+    let mut spec = Spec::new(&[Inst::Embedded]);
+    spec.role = -1;
+    spec.second = Some(-1);
+    let bytes = model_file(&spec);
+    let container = Container::parse(&bytes).unwrap();
+    let decoded = container.decode_objects().unwrap();
+    let model = Model::from_object(&container, &decoded, 1).unwrap();
+    assert_eq!(model, read(&Spec::new(&[Inst::Embedded])).unwrap());
+    let helper = Model::from_object(&container, &decoded, 9).unwrap();
+    assert!(helper.meshes.is_empty());
+    // Not a configuration, or no object at all.
+    let not = Model::from_object(&container, &decoded, 2).unwrap_err();
+    assert!(
+        not.to_string().contains("not a CModelConfiguration"),
+        "{not}"
+    );
+    assert!(matches!(
+        Model::from_object(&container, &decoded, 99),
+        Err(Error::NotFound(_))
+    ));
+}
+
+#[test]
 fn broken_references_are_refused() {
     assert!(err(&Spec::new(&[Inst::Dangling])).contains("object 99"));
     let mut not_a_preset = Spec::new(&[Inst::Embedded]);

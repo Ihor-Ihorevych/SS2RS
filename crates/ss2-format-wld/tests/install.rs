@@ -487,3 +487,101 @@ fn every_lightmap_of_the_install() {
     // flags 0x20, is not a static model's).
     assert!(flags.keys().all(|f| f & 0x10 != 0), "{flags:x?}");
 }
+
+/// The haze volumes of every distinct world (`environment.md`, "Haze"): 65 in 45 worlds, the
+/// record's numbers repeated by the renderable, the renderable's box the record's size centred
+/// on the placement, and `1_3_village`'s test vector.
+#[test]
+fn every_haze_of_the_install() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut seen = HashSet::new();
+    let (mut hazes, mut worlds, mut parented, mut turned) = (0, 0, 0, 0);
+    let mut odd = Vec::new();
+    for path in files_with_extension(&vfs, "wld") {
+        let bytes = vfs.read(&path).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let world = World::from_bytes(&bytes).unwrap();
+        hazes += world.hazes.len();
+        worlds += usize::from(!world.hazes.is_empty());
+        for h in &world.hazes {
+            let (lo, hi) = h.local_box;
+            if !(lo.abs_diff_eq(-h.size / 2.0, 1e-2) && hi.abs_diff_eq(h.size / 2.0, 1e-2)) {
+                odd.push(format!(
+                    "{}: box {lo} .. {hi}, size {}",
+                    path.as_str(),
+                    h.size
+                ));
+            }
+            parented += usize::from(h.parent.is_some());
+            let identity = h.rotation.abs_diff_eq(Quat::IDENTITY, 1e-4)
+                || h.rotation.abs_diff_eq(-Quat::IDENTITY, 1e-4);
+            turned += usize::from(!identity);
+        }
+        if path.as_str().ends_with("1_3_village.wld") {
+            let [h] = world.hazes.as_slice() else {
+                panic!("1_3_village: {:?}", world.hazes);
+            };
+            assert_eq!(h.color, 0x002a_383d);
+            assert!(close(h.size, [300.0, 100.0, 400.0]), "{h:?}");
+            assert_eq!(
+                (h.fade, h.near, h.far, h.value_10),
+                (0.0, -150.0, 1860.0, 0.0)
+            );
+        }
+    }
+    eprintln!("{hazes} hazes in {worlds} worlds, {parented} with a parent, {turned} turned");
+    assert!(odd.is_empty(), "{odd:#?}");
+    // Turned: 13 hazes, 11 of them without a parent, all about +y but one tilted 0.5 degrees
+    // about z (`dm_littletrouble`); the spec computes in the haze box's own rotated frame.
+    assert_eq!((hazes, worlds, parented, turned), (65, 45, 5, 13));
+}
+
+/// The models embedded in the worlds (`wld-geometry.md`: 109 static models name a
+/// `CModelConfiguration` stored in the world): 82 distinct ones in 24 worlds, each read once.
+/// All read but 9 whose mesh is an empty `CMesh` (neither a render nor a collision mesh), which
+/// `ss2-format-bmf` refuses.
+#[test]
+fn every_embedded_model_of_the_install_reads() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut seen = HashSet::new();
+    let (mut placements, mut models, mut worlds) = (0, 0, 0);
+    let mut empty = 0;
+    let mut failures = Vec::new();
+    for path in files_with_extension(&vfs, "wld") {
+        let bytes = vfs.read(&path).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let world = World::from_bytes(&bytes).unwrap();
+        let mut n = 0;
+        for m in &world.static_models {
+            if let ModelRef::Embedded(id) = m.model {
+                n += 1;
+                assert!(
+                    world.embedded_model(id).is_some(),
+                    "{}: {id}",
+                    path.as_str()
+                );
+            }
+        }
+        placements += n;
+        models += world.embedded_models.len();
+        worlds += usize::from(n > 0);
+        for e in &world.embedded_models {
+            match &e.model {
+                Ok(_) => {}
+                Err(why) if why.contains("the mesh has no render mesh") => empty += 1,
+                Err(why) => failures.push(format!("{} object {}: {why}", path.as_str(), e.object)),
+            }
+        }
+    }
+    eprintln!(
+        "{placements} placements of {models} embedded models in {worlds} worlds, {empty} empty"
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert_eq!((placements, models, worlds, empty), (109, 82, 24, 9));
+}
