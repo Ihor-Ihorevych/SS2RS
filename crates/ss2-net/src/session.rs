@@ -437,7 +437,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// A configuration with sensible limits: 8 players, no password, 30 Hz, a 10 s idle timeout,
+    /// A configuration with sensible limits: 8 players, no password, 60 Hz (T01-089), a 10 s idle timeout,
     /// a keepalive every 2 s, and five wrong passwords in a minute earning a five minute lockout.
     pub fn new(handshake: Handshake) -> Self {
         Self {
@@ -445,7 +445,7 @@ impl ServerConfig {
             mod_hash: 0,
             max_players: 8,
             password: None,
-            tick_hz: 30,
+            tick_hz: 60,
             idle_timeout_us: 10_000_000,
             keepalive_us: 2_000_000,
             max_failed_attempts: 5,
@@ -1340,7 +1340,7 @@ mod tests {
                 w.state(c),
                 ClientState::Connected {
                     slot: 0,
-                    tick_hz: 30,
+                    tick_hz: 60,
                     ..
                 }
             ),

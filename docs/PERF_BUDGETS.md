@@ -16,7 +16,7 @@ and the owners accept them (`docs/PC_1_0_CHECKLIST.md` §2).
 - **Scope:** PC first: Windows, then Linux and macOS (design spec §2, G1). Renderer target: "PC
   (Vulkan/DX12/Metal), 60 fps with hordes" (`docs/roadmap/T04-renderer.md`).
 - **Mobile is not here.** Memory: T12-005. Perf and thermal: T12-019. Device tiers: T12-006. All PHASE 2, after M8.
-- **Not here:** the tick rate (T01-022) and network bandwidth (T08-007).
+- **Not here:** network bandwidth (T08-007). The tick rate is decided: 60 Hz, physics at 120 Hz (T01-089).
 
 ## 2. Reference PC tiers (PROPOSED, by hardware class)
 
@@ -53,14 +53,14 @@ HDD is not a reference tier.
 
 ### 3.2 Simulation step
 
-- Tick rate: **TBD**. The design spec leaves it to T01-022 (§11). The original's tick rate is not in
-  `docs/re/` (`docs/re/help-digest.md` excludes it).
-- Sim budget: a share of one tick, set after T01-022 (share TBD). Workloads already named: 300 AI and
+- Tick rate: **60 Hz** (a tick is 16.7 ms), physics sub-stepped at 120 Hz (T01-089, the owner's decision; the original has no
+  fixed tick, `docs/re/main-loop.md`).
+- Sim budget: a share of one tick (share TBD). Workloads already named: 300 AI and
   500 debris on a mid-range CPU (T07-017); a horde of hundreds (T09-017, T04-023).
 - **Physics queries of the named workload (MEASURED once, section 5.7):** one tick of 300 sight rays, 300 ground probes, 100 projectile
   casts and 20 blasts over 800 moving colliders and a 131,000-triangle terrain took **about 5.8 ms** plus **0.8 ms** to rebuild the
-  moving colliders, on one laptop that is not a reference tier. At 30 ticks per second (a tick is 33 ms) that is about 20 %. **No
-  budget is set**: the tick rate and the share are T01-022, and the workload has no AI or gameplay in it yet.
+  moving colliders, on one laptop that is not a reference tier. At 60 ticks per second (a tick is 16.7 ms) that is about 40 %. **No
+  budget is set**: the share is still open, and the workload has no AI or gameplay in it yet.
 
 ## 4. Memory, load time, and what the original data implies
 
@@ -285,7 +285,7 @@ frame pacing T03-022. All start after M8 (`docs/roadmap/README.md`).
 
 ## 8. Gaps and open questions
 
-1. Tick rate and sim share: T01-022.
+1. Sim share of a tick (the rate is 60 Hz, T01-089).
 2. Original frame times, load times and memory are not in the repository (T01-038 would give frame times).
 3. Per-world maxima for entities, renderables and draw calls: only totals exist. The census scripts in
    `tools/re/` print counts that are not committed. The dense-interior scene (S4) needs a numbers-only table.

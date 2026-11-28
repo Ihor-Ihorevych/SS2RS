@@ -143,12 +143,12 @@ type Action<W> = Box<dyn FnOnce(&mut W)>;
 /// use ss2_sim::{Phase, TickConfig};
 ///
 /// // A health that drains 10 per second, in a world that is just a number.
-/// let mut s = Scenario::new(TickConfig::default(), 100.0_f32).unwrap(); // 30 ticks a second
+/// let mut s = Scenario::new(TickConfig::default(), 100.0_f32).unwrap(); // 60 ticks a second
 /// s.system(Phase::Damage, "drain", 0, |health, ctx| *health -= 10.0 * ctx.dt_seconds()).unwrap();
 /// s.probe("health", |h| f64::from(*h)).unwrap();
 /// let outcome = s.run_until(10_000, |h| *h <= 0.0);
 /// let ticks = outcome.reached().unwrap();
-/// assert!((299..=301).contains(&ticks), "ten seconds is about 300 ticks: {ticks}");
+/// assert!((599..=601).contains(&ticks), "ten seconds is about 600 ticks: {ticks}");
 /// assert!((s.seconds_of(ticks) - 10.0).abs() < 0.1);
 /// assert!(s.series("health").unwrap().total_drop() > 99.0);
 /// ```
@@ -379,6 +379,16 @@ mod tests {
     use crate::reflect::PropertyValue;
     use crate::world::{SimpleWorld, conformance};
 
+    /// The loop settings these tests were written for (30 Hz, frames capped at 250 ms), pinned so they test the loop's
+    /// mechanics independently of the engine's default rate (T01-089).
+    fn thirty() -> TickConfig {
+        TickConfig {
+            tick_hz: 30,
+            max_ticks_per_frame: 8,
+            max_frame_micros: 250_000,
+        }
+    }
+
     fn mob_world() -> (SimpleWorld, crate::EntityId) {
         let mut w = SimpleWorld::new(conformance::registry());
         let mob = w.registry().class_id("Mob").unwrap();
@@ -396,7 +406,7 @@ mod tests {
     /// A scenario with a mob that loses `dps` health per second.
     fn burning(dps: f32) -> (Scenario<SimpleWorld>, crate::EntityId) {
         let (w, id) = mob_world();
-        let mut s = Scenario::new(TickConfig::default(), w).unwrap();
+        let mut s = Scenario::new(thirty(), w).unwrap();
         s.system(Phase::Damage, "burn", 0, move |w, ctx| {
             if let Ok(PropertyValue::F32(h)) = w.get(id, "health") {
                 let _ = w.set(
@@ -433,7 +443,7 @@ mod tests {
 
     #[test]
     fn systems_run_in_phase_order_and_see_the_tick_number() {
-        let mut s = Scenario::new(TickConfig::default(), Vec::<String>::new()).unwrap();
+        let mut s = Scenario::new(thirty(), Vec::<String>::new()).unwrap();
         s.system(Phase::Damage, "b", 0, |w, c| {
             w.push(format!("damage@{}", c.tick))
         })
@@ -456,13 +466,13 @@ mod tests {
             Scenario::new(
                 TickConfig {
                     tick_hz: 0,
-                    ..TickConfig::default()
+                    ..thirty()
                 },
                 0u8
             )
             .is_err()
         );
-        let mut s = Scenario::new(TickConfig::default(), 0u8).unwrap();
+        let mut s = Scenario::new(thirty(), 0u8).unwrap();
         s.run(0);
         assert_eq!((s.ticks(), s.seconds()), (0, 0.0));
         assert_eq!(s.seconds_of(30), 1.0);
@@ -470,7 +480,7 @@ mod tests {
 
     #[test]
     fn the_world_can_be_changed_between_steps() {
-        let mut s = Scenario::new(TickConfig::default(), 0u64).unwrap();
+        let mut s = Scenario::new(thirty(), 0u64).unwrap();
         s.system(Phase::Move, "add", 0, |w, _| *w += 10).unwrap();
         s.run(1);
         *s.world_mut() = 1000;
@@ -510,7 +520,7 @@ mod tests {
 
     #[test]
     fn a_probe_added_late_starts_with_the_value_it_has_then() {
-        let mut s = Scenario::new(TickConfig::default(), 0u64).unwrap();
+        let mut s = Scenario::new(thirty(), 0u64).unwrap();
         s.system(Phase::Move, "add", 0, |w, _| *w += 1).unwrap();
         s.run(5);
         s.probe("n", |w| *w as f64).unwrap();
@@ -520,7 +530,7 @@ mod tests {
 
     #[test]
     fn probe_names_must_be_new_and_not_empty() {
-        let mut s = Scenario::new(TickConfig::default(), 0u8).unwrap();
+        let mut s = Scenario::new(thirty(), 0u8).unwrap();
         s.probe("a", |_| 0.0).unwrap();
         assert_eq!(
             s.probe("a", |_| 1.0),
@@ -610,10 +620,10 @@ mod tests {
 
     #[test]
     fn the_condition_that_holds_exactly_at_the_limit_counts_as_reached() {
-        let mut s = Scenario::new(TickConfig::default(), 0u64).unwrap();
+        let mut s = Scenario::new(thirty(), 0u64).unwrap();
         s.system(Phase::Move, "add", 0, |w, _| *w += 1).unwrap();
         assert_eq!(s.run_until(5, |w| *w >= 5), Outcome::Reached(5));
-        let mut t = Scenario::new(TickConfig::default(), 0u64).unwrap();
+        let mut t = Scenario::new(thirty(), 0u64).unwrap();
         t.system(Phase::Move, "add", 0, |w, _| *w += 1).unwrap();
         assert_eq!(t.run_until(4, |w| *w >= 5), Outcome::TimedOut(4));
     }
@@ -622,7 +632,7 @@ mod tests {
 
     #[test]
     fn a_scripted_action_runs_once_before_the_systems_of_its_tick() {
-        let mut s = Scenario::new(TickConfig::default(), Vec::<String>::new()).unwrap();
+        let mut s = Scenario::new(thirty(), Vec::<String>::new()).unwrap();
         s.system(Phase::Move, "log", 0, |w, c| {
             w.push(format!("tick{}", c.tick))
         })
@@ -644,7 +654,7 @@ mod tests {
 
     #[test]
     fn actions_for_one_tick_run_in_the_order_they_were_added_and_later_ones_wait() {
-        let mut s = Scenario::new(TickConfig::default(), Vec::<u8>::new()).unwrap();
+        let mut s = Scenario::new(thirty(), Vec::<u8>::new()).unwrap();
         s.at(1, |w| w.push(1)).unwrap();
         s.at(1, |w| w.push(2)).unwrap();
         s.at(5, |w| w.push(9)).unwrap();
@@ -657,7 +667,7 @@ mod tests {
 
     #[test]
     fn an_action_for_a_tick_that_has_run_is_refused_and_the_current_tick_is_allowed() {
-        let mut s = Scenario::new(TickConfig::default(), 0u8).unwrap();
+        let mut s = Scenario::new(thirty(), 0u8).unwrap();
         s.run(3);
         let err = s.at(2, |_| {}).unwrap_err();
         assert_eq!(
@@ -679,9 +689,7 @@ mod tests {
     #[test]
     fn scripted_setup_can_spawn_an_enemy_mid_scenario_and_time_to_kill_counts_from_the_run() {
         let (w, _) = mob_world();
-        let mut s = Scenario::new(TickConfig::default(), w)
-            .unwrap()
-            .with_lifecycle_log();
+        let mut s = Scenario::new(thirty(), w).unwrap().with_lifecycle_log();
         s.at(10, |w| {
             let mob = w.registry().class_id("Mob").unwrap();
             let _ = w.spawn(mob, None);
@@ -707,9 +715,7 @@ mod tests {
     #[test]
     fn spawns_and_despawns_are_logged_with_their_tick() {
         let (w, id) = mob_world(); // spawned during setup
-        let mut s = Scenario::new(TickConfig::default(), w)
-            .unwrap()
-            .with_lifecycle_log();
+        let mut s = Scenario::new(thirty(), w).unwrap().with_lifecycle_log();
         s.system(Phase::Cleanup, "reaper", 0, move |w, ctx| {
             if ctx.tick == 3 {
                 let _ = w.despawn(id);
@@ -737,7 +743,7 @@ mod tests {
         assert_eq!(s.net_spawned(), 1);
         // Without the log nothing is recorded.
         let (w2, _) = mob_world();
-        let mut plain = Scenario::new(TickConfig::default(), w2).unwrap();
+        let mut plain = Scenario::new(thirty(), w2).unwrap();
         plain.run(3);
         assert!(plain.lifecycle().is_empty());
     }
@@ -772,7 +778,7 @@ mod tests {
         static RUNS: AtomicU64 = AtomicU64::new(0);
         let make = || {
             let offset = RUNS.fetch_add(1, Ordering::SeqCst); // each run starts differently
-            Scenario::new(TickConfig::default(), offset).unwrap()
+            Scenario::new(thirty(), offset).unwrap()
         };
         assert_deterministic(make, 3, |w| *w);
     }

@@ -25,7 +25,7 @@ All problems with the values are reported at once and the server exits with stat
 | `bind` | `"0.0.0.0:27960"` | an **IP address and port**, not a host name |
 | `max_players` | `8` | 1 to 64 |
 | `password` | none | the session password (1 to 128 bytes); never printed (`Debug` shows `<set>`) |
-| `tick_hz` | `30` | 1 to 1000. The original's rate comes from T01-022; 30 is a placeholder |
+| `tick_hz` | `60` | 1 to 1000. 60 is the engine's rate (T01-089); the original has no fixed tick |
 | `level`, `data_dir` | none | the level and the player's own install |
 | `log_dir` | none | write a rotating log file here (`ss2.log`, 5 MiB, 5 old files) as well as to the terminal |
 | `metrics_bind` | none | serve metrics here (`127.0.0.1:9100`); **off unless set** |

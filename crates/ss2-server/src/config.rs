@@ -60,7 +60,7 @@ impl Default for ServerSettings {
             bind: "0.0.0.0:27960".into(),
             max_players: 8,
             password: None,
-            tick_hz: 30,
+            tick_hz: 60,
             level: None,
             data_dir: None,
             log_dir: None,
@@ -191,7 +191,7 @@ mod tests {
         let s = ServerSettings::from_toml("").unwrap();
         assert_eq!(s, ServerSettings::default());
         assert_eq!(s.bind, "0.0.0.0:27960");
-        assert_eq!((s.max_players, s.tick_hz), (8, 30));
+        assert_eq!((s.max_players, s.tick_hz), (8, 60));
         assert!(s.password.is_none() && s.metrics_bind.is_none() && s.level.is_none());
         assert!(s.validate().is_empty());
     }
