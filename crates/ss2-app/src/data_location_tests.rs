@@ -10,7 +10,7 @@ use ss2_ui::UiInput;
 use ss2_ui::data_wizard::{DataWizard, WizardCommand, WizardInput, WizardView};
 use ss2_vfs::{Environment, LoadedChoice, Os, Startup, StartupSource, WizardReason, load_choice};
 
-use crate::data_location::{Host, Step, startup, store_path, unix_now, wizard_for};
+use crate::data_location::{Host, Step, forget, startup, store_path, unix_now, wizard_for};
 
 const COMPLETE: [&str; 9] = [
     "All_PC_01.gro",
@@ -528,4 +528,60 @@ fn the_real_install_goes_through_the_wizard_and_is_remembered() {
         ),
         "{next:?}"
     );
+}
+
+#[test]
+fn forget_data_drops_the_remembered_folder_so_the_wizard_shows_again() {
+    let rig = Rig::new();
+    let install = rig.dir("Serious Sam 2");
+    make_install(&install, &COMPLETE);
+    let env = TestEnv::none();
+    let host = Host::new(&env, rig.store(), 7);
+    let mut w = wizard_for(&WizardReason::FirstRun);
+    assert_eq!(
+        host.run(&mut w, WizardCommand::Accept(install.clone())),
+        Step::Chosen(install.clone())
+    );
+    assert!(matches!(
+        startup(&env, None, &rig.store()),
+        Startup::Ready {
+            source: StartupSource::Remembered,
+            ..
+        }
+    ));
+    forget(&rig.store()).unwrap();
+    assert_eq!(
+        startup(&env, None, &rig.store()),
+        Startup::NeedsWizard(WizardReason::FirstRun)
+    );
+    // Forgetting twice (no file) is fine, and --data still wins over a forgotten choice.
+    forget(&rig.store()).unwrap();
+    assert!(matches!(
+        startup(&env, Some(&install), &rig.store()),
+        Startup::Ready {
+            source: StartupSource::Explicit,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn answer_then_apply_is_what_run_does() {
+    use crate::data_location::Answer;
+    let rig = Rig::new();
+    let env = TestEnv::none();
+    let host = Host::new(
+        &env,
+        rig.dir("no-such-folder")
+            .join("x")
+            .join("data_location.toml"),
+        7,
+    );
+    let mut w = wizard_for(&WizardReason::FirstRun);
+    let _ = w.start();
+    let found = host.answer(WizardCommand::Search);
+    assert_eq!(found, Answer::Candidates(Vec::new()));
+    assert_eq!(found.apply(&mut w), Step::Continue);
+    assert_eq!(w.view(), WizardView::Candidates);
+    assert_eq!(host.answer(WizardCommand::Quit).apply(&mut w), Step::Quit);
 }

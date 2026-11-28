@@ -264,3 +264,118 @@ fn f12_without_a_screenshot_folder_does_nothing() {
     assert!(!a.capture_pending);
     assert_eq!(a.state.scene, Scene::Menu);
 }
+
+/// The first-run wizard in the window, with the real host (discovery on a fake machine, the real install check on a real folder,
+/// the choice saved in a real file): keys, typed text, the workers, then the menu with the new levels.
+#[test]
+fn the_wizard_shows_first_takes_a_typed_folder_and_then_opens_the_menu() {
+    use crate::data_location::{Host, store_path};
+    use crate::wizard_scene::{Answerer, Opener};
+    use ss2_ui::data_wizard::{DataWizard, WizardView};
+    use std::sync::Mutex;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let install = tmp.path().join("Serious Sam 2 (copy)");
+    std::fs::create_dir_all(&install).unwrap();
+    for name in [
+        "All_PC_01.gro",
+        "All_PC_02.gro",
+        "All_PC_03.gro",
+        "Movies_PC_01.gro",
+        "Movies_PC_02.gro",
+        "Patch_02_068.gro",
+        "Patch_02_080_210639.gro",
+        "Patch_02_090_593613.gro",
+        "Patch_02_100_800000.gro",
+    ] {
+        let bytes = ss2_testkit::fixtures::ZipBuilder::new()
+            .add("a.txt", b"x".to_vec())
+            .finish()
+            .unwrap();
+        std::fs::write(install.join(name), bytes).unwrap();
+    }
+    let store = store_path(&tmp.path().join("config"));
+    // Nothing to find on this machine: the player types the path.
+    let env = Arc::new(ss2_vfs::FakeEnvironment::new(ss2_vfs::Os::current()));
+    let host_store = store.clone();
+    let answerer: Answerer =
+        Arc::new(move |command| Host::new(&*env, host_store.clone(), 42).answer(command));
+    let opened = Arc::new(Mutex::new(None));
+    let o = opened.clone();
+    let opener: Opener = Arc::new(move |dir: &Path| {
+        *o.lock().unwrap() = Some(dir.to_path_buf());
+        Levels::new(None)
+    });
+    let mut a = app();
+    a.wizard = Some(WizardScene::new(DataWizard::new(None), answerer, opener));
+    a.start_level = Some(TEST_ROOM_ID.to_string());
+
+    let view = |a: &App| a.wizard.as_ref().map(|w| w.wizard().view());
+    let frames_until = |a: &mut App, done: &dyn Fn(&App) -> bool| {
+        let until = Instant::now() + Duration::from_secs(20);
+        while !done(a) {
+            assert!(Instant::now() < until, "the wizard's worker never answered");
+            run_script(a, [ScriptStep::Frame]);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    };
+    frames_until(&mut a, &|a| view(a) == Some(WizardView::Candidates));
+    assert!(a.phase.is_none(), "--level waits for the wizard");
+    // Nothing found: the first row is "Enter a folder path". Space opens it, and its space is not typed.
+    let path = install.display().to_string();
+    let mut steps: Vec<ScriptStep> = vec![
+        key(KeyCode::Space, true),
+        InputEvent::Text(" ".into()).into(),
+    ];
+    // The S key while the field has the focus does not move the focus as it does in the menus (its text would be typed).
+    steps.push(key(KeyCode::S, true));
+    for ch in path.chars() {
+        steps.push(InputEvent::Text(ch.to_string()).into());
+    }
+    steps.push(key(KeyCode::Enter, true));
+    run_script(&mut a, steps);
+    assert_eq!(view(&a), Some(WizardView::Validating));
+    frames_until(&mut a, &|a| view(a) == Some(WizardView::Result));
+    run_script(&mut a, tap(KeyCode::Enter)); // Use this folder
+    frames_until(&mut a, &|a| a.wizard.is_none());
+    assert_eq!(opened.lock().unwrap().as_deref(), Some(install.as_path()));
+    match ss2_vfs::load_choice(&store) {
+        ss2_vfs::LoadedChoice::Found(choice) => assert_eq!(choice.dir, install),
+        other => panic!("the choice was not saved: {other:?}"),
+    }
+    // --level starts in the frame that closed the wizard.
+    assert!(matches!(
+        a.phase,
+        Some(Phase::Loading(_) | Phase::Playing(_))
+    ));
+    assert_eq!(a.state.scene, Scene::Playing);
+}
+
+#[test]
+fn quitting_the_wizard_closes_the_window() {
+    use crate::data_location::Answer;
+    use crate::wizard_scene::{Answerer, Opener};
+    use ss2_ui::data_wizard::DataWizard;
+
+    let answerer: Answerer = Arc::new(|_| Answer::Candidates(Vec::new()));
+    let opener: Opener = Arc::new(|_| Levels::new(None));
+    let mut a = app();
+    a.wizard = Some(WizardScene::new(DataWizard::new(None), answerer, opener));
+    let until = Instant::now() + Duration::from_secs(10);
+    while a.wizard.as_ref().is_some_and(WizardScene::busy) {
+        assert!(Instant::now() < until);
+        run_script(&mut a, [ScriptStep::Frame]);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let report = run_script(
+        &mut a,
+        [
+            tap(KeyCode::Escape),
+            tap(KeyCode::Escape),
+            [ScriptStep::Frame, ScriptStep::Frame],
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    assert!(report.exited);
+}

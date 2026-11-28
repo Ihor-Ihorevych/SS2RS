@@ -4,13 +4,18 @@ use ss2_core::cli::{LaunchOptions, Parsed, Role, parse_launch_options};
 use ss2_ui::ScreenId;
 use std::path::PathBuf;
 
-const USAGE: &str = "usage:\n  ss2-app [launch options]   (see --help)\n  ss2-app --screenshot <main|options|pause|about> <out.png> [--size WxH]\n  ss2-app --level <name> --screenshot <out.png> [--size WxH] [--data <folder>]\n  ss2-app --smoke-frames <N>";
+const USAGE: &str = "usage:\n  ss2-app [launch options] [--forget-data]   (see --help)\n  ss2-app --screenshot <main|options|pause|about> <out.png> [--size WxH]\n  ss2-app --level <name> --screenshot <out.png> [--size WxH] [--data <folder>]\n  ss2-app --smoke-frames <N>";
 
 /// What `ss2-app` was asked to do.
 #[derive(Debug, PartialEq)]
 pub enum Mode {
-    /// Open the window and run interactively with these launch options.
-    Window(LaunchOptions),
+    /// Open the window and run interactively.
+    Window {
+        /// The launch options shared with ss2-server.
+        options: LaunchOptions,
+        /// `--forget-data`: forget the remembered game folder first, so that the first-run wizard shows again.
+        forget_data: bool,
+    },
     /// Print the usage text and exit.
     Help,
     /// Print the version and exit.
@@ -74,11 +79,18 @@ fn parse_size(text: &str) -> Result<(u32, u32), String> {
     Ok((w, h))
 }
 
+/// What `--help` adds to the shared launch options.
+pub const APP_HELP: &str =
+    "  --forget-data          forget the remembered game folder and choose it again\n";
+
 /// Parse the arguments after the program name.
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, String> {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
-        return Ok(Mode::Window(LaunchOptions::default()));
+        return Ok(Mode::Window {
+            options: LaunchOptions::default(),
+            forget_data: false,
+        });
     };
     match first.as_str() {
         "--screenshot" => {
@@ -132,10 +144,17 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Mode, Strin
             if all.iter().any(|a| a == "--screenshot") {
                 return parse_level_screenshot(all);
             }
-            // Everything else is a launch option shared with ss2-server.
-            let all = all.into_iter();
+            // `--forget-data` belongs to the app alone; everything else is a launch option shared with ss2-server.
+            let forgets = all.iter().filter(|a| *a == "--forget-data").count();
+            if forgets > 1 {
+                return Err("--forget-data given twice".to_owned());
+            }
+            let all = all.into_iter().filter(|a| a != "--forget-data");
             match parse_launch_options(Role::Client, all).map_err(|e| e.to_string())? {
-                Parsed::Run(options) => Ok(Mode::Window(*options)),
+                Parsed::Run(options) => Ok(Mode::Window {
+                    options: *options,
+                    forget_data: forgets == 1,
+                }),
                 Parsed::Help => Ok(Mode::Help),
                 Parsed::Version => Ok(Mode::Version),
             }
@@ -155,19 +174,45 @@ mod tests {
 
     #[test]
     fn no_args_is_window() {
-        assert_eq!(parse(&[]), Ok(Mode::Window(LaunchOptions::default())));
+        assert_eq!(
+            parse(&[]),
+            Ok(Mode::Window {
+                options: LaunchOptions::default(),
+                forget_data: false
+            })
+        );
+    }
+
+    #[test]
+    fn forget_data_goes_with_the_launch_options_once() {
+        let Ok(Mode::Window {
+            options,
+            forget_data,
+        }) = parse(&["--portable", "--forget-data", "--data", "C:/SS2"])
+        else {
+            panic!("expected a window mode");
+        };
+        assert!(forget_data && options.portable);
+        assert_eq!(options.data_dir, Some(PathBuf::from("C:/SS2")));
+        let Ok(Mode::Window { forget_data, .. }) = parse(&["--portable"]) else {
+            panic!("expected a window mode");
+        };
+        assert!(!forget_data);
+        let e = parse(&["--forget-data", "--forget-data"]).unwrap_err();
+        assert!(e.contains("twice"), "{e}");
     }
 
     #[test]
     fn launch_options_open_the_window_with_those_options() {
-        let Ok(Mode::Window(o)) = parse(&["--level", "1_1_jungle", "--data=C:/SS2", "--portable"])
+        let Ok(Mode::Window { options: o, .. }) =
+            parse(&["--level", "1_1_jungle", "--data=C:/SS2", "--portable"])
         else {
             panic!("expected a window mode");
         };
         assert_eq!(o.level.as_deref(), Some("1_1_jungle"));
         assert_eq!(o.data_dir, Some(PathBuf::from("C:/SS2")));
         assert!(o.portable);
-        let Ok(Mode::Window(o)) = parse(&["--connect", "example.org:27960"]) else {
+        let Ok(Mode::Window { options: o, .. }) = parse(&["--connect", "example.org:27960"]) else {
             panic!("expected a window mode");
         };
         assert_eq!(o.connect.as_deref(), Some("example.org:27960"));
