@@ -2,7 +2,7 @@
 
 - **Roadmap task:** T01-410 (feeds T07-037, the retuning of the provisional walker of T07-030; the
   measured version stays T01-024, blocked because the original cannot be run here)
-- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
+- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** @Ihor-Ihorevych/agent (T01-049, 2026-11-28, pass 1)
 - **Confidence:** **high** for every number read directly from `EntityParams/PlayerPuppet.ep` and
   `PlayerPuppet_DM.ep` and reproduced by `tools/re/player_movement_verify.py`; **medium** for the
   roles that rest on one reading of a small function (air control, the jump-slope test, the
@@ -263,3 +263,7 @@ Reproduced by `tools/re/player_movement_verify.py` (exits 1 on a mismatch):
   freeze time **60**, not 30 (the correction above).
 - Water record (both files): acceleration 50, deceleration 10, nominal speed 6, turn rate 600–800°/s.
 - "Air" record / `PP_FLY` pose (both files): acceleration and deceleration 1000.
+
+## Review log
+
+- **2026-11-28, @Ihor-Ihorevych/agent (T01-049, pass 1):** re-ran `tools/re/player_movement_verify.py` against the retail install (`EntityParams/PlayerPuppet.ep`, `PlayerPuppet_DM.ep`); it printed `result: ok` and every single-player/multiplayer/water/air constant in the table and the "Test vectors" section reproduced exactly, including the `ppp_fFreezeTime` correction (60 in both files, not 30). No internal contradictions, stale open questions or decompiler addresses/`FUN_` names found in this page.
