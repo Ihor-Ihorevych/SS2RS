@@ -1,8 +1,10 @@
 //! The static collision world of a level (RFC 0013).
 //!
-//! Every collidable instance's [`CollisionData`](crate::scene::CollisionData), moved into world
-//! space by its transform, goes into one triangle mesh with one physics material. Mirrored
-//! placements need no special care: the queries treat triangles as two-sided.
+//! Every collidable instance's [`CollisionData`], moved into world
+//! space by its transform, goes into one triangle mesh with one physics material. Collidable
+//! animated placements ([`LevelScene::skinned_instances`]) add their model's collision in the bind
+//! pose: the collision does not follow the animation. Mirrored placements need no special care:
+//! the queries treat triangles as two-sided.
 //!
 //! ```
 //! use ss2_core::math::Vec3;
@@ -16,12 +18,12 @@
 //! assert!(hit.point.y.abs() < 1e-4); // the floor's top
 //! ```
 
-use ss2_core::math::Vec3;
+use ss2_core::math::{Mat4, Vec3};
 use ss2_core::{Error, Result};
 use ss2_physics::query::{PhysMaterialId, QueryWorld};
 use ss2_physics::spatial::TriMesh;
 
-use crate::scene::LevelScene;
+use crate::scene::{CollisionData, LevelScene};
 
 /// Build the static collision world of `scene`.
 ///
@@ -32,6 +34,8 @@ pub fn build_static(scene: &LevelScene) -> Result<QueryWorld> {
     let bad = |detail: String| Error::invalid("collision", detail);
     let mut positions: Vec<Vec3> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
+    // (what, model name, collision, model to world) of every collidable placement.
+    let mut placed: Vec<(String, &str, &CollisionData, Mat4)> = Vec::new();
     for (i, inst) in scene.instances.iter().enumerate() {
         if !inst.collidable {
             continue;
@@ -40,18 +44,38 @@ pub fn build_static(scene: &LevelScene) -> Result<QueryWorld> {
             .models
             .get(inst.model as usize)
             .ok_or_else(|| bad(format!("instance {i} names a missing model {}", inst.model)))?;
-        let Some(c) = &model.collision else { continue };
+        if let Some(c) = &model.collision {
+            let what = format!("model {}", inst.model);
+            placed.push((what, &model.name, c, inst.transform.matrix()));
+        }
+    }
+    for (i, inst) in scene.skinned_instances.iter().enumerate() {
+        if !inst.collidable {
+            continue;
+        }
+        let model = scene
+            .skinned_models
+            .get(inst.model as usize)
+            .ok_or_else(|| {
+                bad(format!(
+                    "skinned instance {i} names a missing model {}",
+                    inst.model
+                ))
+            })?;
+        if let Some(c) = &model.collision {
+            let what = format!("skinned model {}", inst.model);
+            placed.push((what, &model.name, c, inst.transform.matrix()));
+        }
+    }
+    for (what, name, c, m) in placed {
         let base = u32::try_from(positions.len())
             .map_err(|_| bad("more vertices than a u32 index reaches".to_string()))?;
         if let Some(x) = c.indices.iter().find(|x| **x as usize >= c.positions.len()) {
             return Err(bad(format!(
-                "model {} ({}) index {x} of {} positions",
-                inst.model,
-                model.name,
+                "{what} ({name}) index {x} of {} positions",
                 c.positions.len()
             )));
         }
-        let m = inst.transform.matrix();
         positions.extend(c.positions.iter().map(|p| m.transform_point3(*p)));
         indices.extend(c.indices.iter().map(|x| base + x));
     }
@@ -120,6 +144,25 @@ mod tests {
         room.models[0].collision = None;
         let world = build_static(&room).unwrap();
         assert_eq!(down_from(0.0, 6.0, &world), None);
+    }
+
+    #[test]
+    fn an_animated_placement_collides_in_its_bind_pose() {
+        let room = LevelScene::test_room_animated();
+        let world = build_static(&room).unwrap();
+        // The test bar stands 2 m tall at (0, _, 2).
+        assert!((down_from(0.0, 2.0, &world).unwrap() - 2.0).abs() < 1e-4);
+        let mut room = LevelScene::test_room_animated();
+        room.skinned_instances[0].collidable = false;
+        let world = build_static(&room).unwrap();
+        assert!(
+            down_from(0.0, 2.0, &world).unwrap().abs() < 1e-4,
+            "the floor"
+        );
+        room.skinned_instances[0].model = 7;
+        assert!(build_static(&room).is_ok(), "not collidable: not looked at");
+        room.skinned_instances[0].collidable = true;
+        assert!(build_static(&room).is_err());
     }
 
     #[test]

@@ -4,11 +4,16 @@
 //! a list of **mesh instances** (each an embedded `CMesh`, an external `.bmf`, or null), and
 //! optional skeleton, animation host, attachment children, physics, destruction and custom data.
 //!
-//! This reader takes only what a static renderer needs: the bounding box, the distances, the
-//! meshes (embedded ones read by [`ss2_format_bmf::Mesh::from_object`]) and the **material
-//! presets** the embedded meshes' surfaces use (read by [`ss2_format_mtr::Material::from_preset`]).
-//! Skeleton, animation, attachment children, physics, destruction, custom data and the editor
-//! records after `EDOB` are not read.
+//! This reader takes what a renderer needs: the bounding box, the distances, the meshes
+//! (embedded ones read by [`ss2_format_bmf::Mesh::from_object`]), the **material presets** the
+//! embedded meshes' surfaces use (read by [`ss2_format_mtr::Material::from_preset`]), the
+//! **skeleton** (`CModelConfiguration.2`: embedded, read by
+//! [`ss2_format_skl::Skeleton::from_object`], or an external file) and the **animation sets** of
+//! the animation host (`CModelConfiguration.9`, `CAnimHost.1`: embedded, read by
+//! [`ss2_format_ans::AnimSet::from_object`], or external `.ans` files). A skeleton or animation
+//! set that cannot be read does not fail the model ([`SkeletonSource::Unreadable`],
+//! [`AnimSetSource::Unreadable`]). Attachment children, physics, destruction, custom data and the
+//! editor records after `EDOB` are not read.
 //!
 //! ```ignore
 //! let model = ss2_format_mdl::Model::from_bytes(&bytes)?;
@@ -26,8 +31,10 @@
 
 use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::{Error, Result};
+use ss2_format_ans::AnimSet;
 use ss2_format_bmf::{Aabb, MaterialRef, Mesh, Surface};
 use ss2_format_mtr::Material;
+use ss2_format_skl::Skeleton;
 use ss2_meta::{Container, Decoded, MetaDeserialize, ObjectRef};
 
 const WHAT: &str = ".mdl model";
@@ -48,7 +55,36 @@ pub enum MeshSource {
     None,
 }
 
-/// A decoded `.mdl` file, reduced to its static mesh and materials.
+/// Where a model's skeleton comes from (`CModelConfiguration.2`, `docs/re/mdl.md`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum SkeletonSource {
+    /// A `CSkeleton` stored inside the model (518 models in the retail data). Its bone names come
+    /// from the model's identifier table.
+    Embedded(Skeleton),
+    /// An external file, the path as listed in the model's `RFIL`: a `.skl` (60 models) or a
+    /// `.rsc` (10 models, not specified).
+    External(String),
+    /// The skeleton is stored inside the model but could not be read: why.
+    Unreadable(String),
+    /// No skeleton (3,119 models).
+    None,
+}
+
+/// Where one animation set of a model's animation host comes from (`CAnimSetInstance.1`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum AnimSetSource {
+    /// A `CAnimSet` stored inside the model (354 instances). Its track and animation names come
+    /// from the model's identifier table.
+    Embedded(AnimSet),
+    /// An external `.ans` file, the path as listed in the model's `RFIL` (681 instances).
+    External(String),
+    /// The set is stored inside the model but could not be read: why.
+    Unreadable(String),
+    /// A null reference (10 instances).
+    None,
+}
+
+/// A decoded `.mdl` file, reduced to its meshes, materials, skeleton and animation sets.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Model {
     /// The model's bounding box (`CModelConfiguration.1`).
@@ -64,6 +100,11 @@ pub struct Model {
     /// by object id ([`Material::id`], the id in [`MaterialRef::Embedded`]). Look one up with
     /// [`Model::material`] or [`Model::material_of`].
     pub materials: Vec<Material>,
+    /// The skeleton (`CModelConfiguration.2`).
+    pub skeleton: SkeletonSource,
+    /// The animation sets of the animation host, in host order (`CModelConfiguration.9` →
+    /// `CAnimHost.1`); empty without a host.
+    pub anim_sets: Vec<AnimSetSource>,
 }
 
 #[derive(MetaDeserialize)]
@@ -71,8 +112,12 @@ pub struct Model {
 struct RawConfiguration {
     #[meta(name = "1")]
     bounds: RawBox,
+    #[meta(name = "2", default)]
+    skeleton: ObjectRef,
     #[meta(name = "3", default)]
     instances: Vec<RawInstance>,
+    #[meta(name = "9", default)]
+    anim_host: ObjectRef,
     #[meta(name = "6", default)]
     d6: f32,
     #[meta(name = "7", default)]
@@ -86,6 +131,18 @@ struct RawConfiguration {
 struct RawInstance {
     #[meta(name = "1")]
     mesh: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct RawAnimHost {
+    #[meta(owner = "CAnimHost", name = "1", default)]
+    sets: Vec<RawSetInstance>,
+}
+
+#[derive(MetaDeserialize)]
+struct RawSetInstance {
+    #[meta(owner = "CAnimSetInstance", name = "1", default)]
+    set: ObjectRef,
 }
 
 #[derive(MetaDeserialize)]
@@ -203,6 +260,23 @@ impl Model {
             .map(|id| Material::from_preset(container, decoded, id))
             .collect::<Result<Vec<_>>>()?;
 
+        let skeleton = match raw.skeleton.0 {
+            None => SkeletonSource::None,
+            Some(id) if decoded.object(id).is_some() => {
+                match Skeleton::from_object(container, decoded, id) {
+                    Ok(s) => SkeletonSource::Embedded(s),
+                    Err(e) => SkeletonSource::Unreadable(e.to_string()),
+                }
+            }
+            Some(id) => match external_path(container, id) {
+                Some(path) => SkeletonSource::External(path),
+                None => SkeletonSource::Unreadable(format!(
+                    "the skeleton is object {id}, which is neither an object of the file nor an external reference"
+                )),
+            },
+        };
+        let anim_sets = Self::anim_sets(container, decoded, raw.anim_host.0);
+
         let b = &raw.bounds;
         Ok(Self {
             bounds: Aabb {
@@ -212,7 +286,43 @@ impl Model {
             distances: [raw.d6, raw.d7, raw.d12],
             meshes,
             materials,
+            skeleton,
+            anim_sets,
         })
+    }
+
+    /// The animation sets of the host object `host` (none without one; a host that cannot be
+    /// read gives one [`AnimSetSource::Unreadable`]).
+    fn anim_sets(
+        container: &Container<'_>,
+        decoded: &Decoded,
+        host: Option<u32>,
+    ) -> Vec<AnimSetSource> {
+        let Some(host) = host else {
+            return Vec::new();
+        };
+        let raw: RawAnimHost = match decoded.typed(host) {
+            Ok(raw) => raw,
+            Err(e) => return vec![AnimSetSource::Unreadable(format!("animation host: {e}"))],
+        };
+        raw.sets
+            .iter()
+            .map(|instance| match instance.set.0 {
+                None => AnimSetSource::None,
+                Some(id) if decoded.object(id).is_some() => {
+                    match AnimSet::from_object(container, decoded, id) {
+                        Ok(set) => AnimSetSource::Embedded(set),
+                        Err(e) => AnimSetSource::Unreadable(e.to_string()),
+                    }
+                }
+                Some(id) => match external_path(container, id) {
+                    Some(path) => AnimSetSource::External(path),
+                    None => AnimSetSource::Unreadable(format!(
+                        "animation set object {id} is neither an object of the file nor an external reference"
+                    )),
+                },
+            })
+            .collect()
     }
 
     /// The object id of the one main configuration (`CResource.1` = 1).

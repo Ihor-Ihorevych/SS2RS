@@ -2841,8 +2841,10 @@ version = "0.0.0"
 dependencies = [
  "ss2-assets",
  "ss2-core",
+ "ss2-format-ans",
  "ss2-format-bmf",
  "ss2-format-mtr",
+ "ss2-format-skl",
  "ss2-meta",
  "ss2-testkit",
  "ss2-vfs",
@@ -3111,9 +3113,11 @@ version = "0.0.0"
 dependencies = [
  "flate2",
  "ss2-core",
+ "ss2-format-ans",
  "ss2-format-bmf",
  "ss2-format-mdl",
  "ss2-format-mtr",
+ "ss2-format-skl",
  "ss2-format-tex",
  "ss2-format-wld",
  "ss2-meta",

@@ -31,7 +31,7 @@ use ss2_ui::{Canvas, DrawList, Menu, MenuCommand, UiInput, Vec2, theme};
 use ss2_world::scene::LevelScene;
 
 use crate::input::{WizardKeys, nav_for_button, nav_for_key};
-use crate::level_session::{SKY, upload};
+use crate::level_session::{SKY, pose_skinned, upload};
 use crate::play::{Levels, Loading, draw_hud};
 use crate::play_input::PlayControls;
 use crate::state::{AppState, Effects, Scene};
@@ -54,6 +54,9 @@ struct Playing {
     /// The renderer's world generation right after this level was uploaded; another value means it must be
     /// uploaded again (a GPU device rebuild dropped it).
     uploaded: Option<u64>,
+    /// Seconds of play so far, summed from frame deltas while playing (not paused): the time of every animated
+    /// placement's default animation (T04-044).
+    animation_time: f64,
 }
 
 struct App {
@@ -239,6 +242,7 @@ impl App {
             session: PlaySession::new(scene, physics),
             name,
             uploaded: None,
+            animation_time: 0.0,
         })));
         self.capture_cursor(true);
     }
@@ -440,6 +444,7 @@ impl App {
             Some(Phase::Playing(playing)) if self.state.scene == Scene::Playing => {
                 let input = self.controls.frame(dt);
                 playing.session.update(&input, dt);
+                playing.animation_time += f64::from(dt);
             }
             _ => {}
         }
@@ -488,6 +493,15 @@ impl App {
                             return;
                         }
                     }
+                }
+                if let Some(renderer) = self.renderer.as_mut()
+                    && let Err(e) = pose_skinned(
+                        renderer,
+                        playing.session.scene(),
+                        playing.animation_time as f32,
+                    )
+                {
+                    tracing::warn!(error = %e, "animated placements not posed");
                 }
                 draw_hud(
                     &mut self.draw_list,

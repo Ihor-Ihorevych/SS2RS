@@ -342,6 +342,41 @@ like `scene_data`. All additions:
   at the bone's id) and an animation's `TranslationTrack::target` / `RotationTrack::target` strings. No existing
   signature changes.
 
+### Amendment 8: animated placements (T04-044)
+
+A level's animated models cross the boundary posed by the app, not baked. All additions in `ss2_world::scene`, still
+naming no file format:
+
+- `SkinnedPart { mesh: SkinnedMeshData, material: u32 }`: a part's bone list (`inverse_bind`) is its model's whole
+  skeleton in bone order, so one palette poses every part of a model.
+- `AnimKey<T> { time: f32, value: T }`, `BoneTrack { bone: u32, translations: Vec<AnimKey<[f32; 3]>>, rotations:
+  Vec<AnimKey<[f32; 4]>> }` (bone: an index into the skeleton's bones) and `SkeletalAnimation { name, duration: f32,
+  tracks }`: an animation already bound to one skeleton, looping every `duration` seconds;
+  `local_pose(&SkeletonData, time) -> Vec<BoneTransform>` holds the nearest key outside the keys and interpolates
+  translations linearly and rotations by shortest-arc slerp between them (`docs/re/ans.md` reader invariant 6).
+- `SkinnedModelData { name, skeleton: SkeletonData, parts: Vec<SkinnedPart>, animations: Vec<SkeletalAnimation>,
+  default_animation: u32, collision: Option<CollisionData> }` with `palette(animation, time) -> Vec<Mat4>` (what
+  `Renderer::set_bone_palette` takes), `default_palette(time)` and `bounds()`.
+- `SkinnedInstance { model: u32, transform: Transform, collidable: bool }` (model: an index into
+  `skinned_models`; the transform follows `Instance`'s rules).
+- `LevelScene::skinned_models: Vec<SkinnedModelData>` and `LevelScene::skinned_instances: Vec<SkinnedInstance>`. An
+  animated placement is in `skinned_instances` **instead of** `instances`; static placements are unchanged.
+  `validate()` checks the new lists (meshes, bone counts equal to the skeleton's, material and model indices,
+  animations: positive duration, bones in range, finite keys in time order); `bounds()` includes the animated
+  placements in their bind pose; `LevelScene::test_room_animated()` adds `scene::test_skinned_bar()` (a two-bone bar
+  that bends) in front of the test room's spawn.
+- `collision::build_static` adds each collidable animated placement's collision in the bind pose.
+- The loader's rules (which models are animated, the palette mapping, how animations bind by bone name and which
+  one plays) are in `ss2_world::load`'s documentation, "Animated models". `LightmapReport` gains `unlit_animated`
+  (lit placements drawn animated, without their lightmap: the skinned pipeline has none).
+- The readers gain, additively: `ss2_format_skl::Skeleton::from_object` (a `CSkeleton` embedded in another file) and
+  `ss2_format_mdl::Model::{skeleton: SkeletonSource, anim_sets: Vec<AnimSetSource>}` (embedded, external path,
+  unreadable or none; a skeleton or set that cannot be read never fails the model). `ss2-format-mdl` now depends on
+  `ss2-format-skl` and `ss2-format-ans`.
+- The app uploads one skinned draw per part of each animated placement (placement order, then part order) and each
+  frame sets every draw's palette to its model's `default_palette(t)`, `t` being the seconds of play summed from
+  frame deltas (frozen while paused); every placement of a model shows the same moment.
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource

@@ -152,6 +152,43 @@
 //! (`puppet-attacks.md`, `puppet-legged-sequences.md`), which is a right-handed rotation about
 //! +Y. Units are taken as metres (gravity 30 m/s^2).
 //!
+//! ## Animated models
+//!
+//! An external `.mdl` (T04-044, RFC 0013 amendment 8) whose drawn level of detail has a
+//! **skinned surface** (bone weights, bone indices and a non-empty palette, `bmf.md`
+//! "Skinning"), which has a **skeleton** (embedded, or an external `.skl`; `mdl.md` "Skeleton")
+//! and whose animation host has an **animation that binds** to that skeleton becomes a
+//! [`SkinnedModelData`] instead of a [`ModelData`], and all its placements become
+//! [`SkinnedInstance`]s (not [`Instance`]s); every other model is built exactly as before. In
+//! detail:
+//!
+//! - The skeleton is its first level of detail (`skl.md`; `mdl.md`: palette entries are bone
+//!   ids of LOD 0), bones in file order with their rest pose, stored inverse bind and name. A
+//!   skeleton that cannot be read or used (a `.rsc` skeleton, more than 256 bones) leaves the
+//!   model static with a skipped line.
+//! - Each part (surfaces merged by material, as for static parts, with the same UV stream rule)
+//!   lists the whole skeleton as its bones. A vertex's bone index addresses its surface's palette,
+//!   whose entry is a bone id of the skeleton (`mdl.md`, "Bone palettes in models"); its weight is
+//!   the stored byte over 255. A palette entry that is no bone of the skeleton is "no bone"
+//!   (`mdl.md` reader invariant 4): that weight is dropped (one skipped line per model says how
+//!   many), so the vertex follows its other bones or stays at its bind position. Surfaces without
+//!   skinning stay at their bind position.
+//! - The animations are those of every set of the host (embedded, or external `.ans` files read
+//!   once per load), in host order, bound **by bone name** (`ans.md` reader invariant 3): a
+//!   track whose name is no bone is skipped, an animation with no bound track is left out. Key
+//!   times are seconds since the first frame and one pass lasts `last - first + 1` frames (the
+//!   frame count `ans.md` loops by), so the last key is held for one frame before the loop.
+//!   Scalar tracks and events are not carried.
+//! - The animation a placement plays is the first whose name contains `idle` (ignoring case),
+//!   else the first named `default`, else the first. The specs do not say what the original
+//!   plays on a placed model; mechanisms (doors, lifts) whose animations are all actions loop
+//!   their first one until game logic drives them.
+//! - The collision is the static build's, in the bind pose; a placement collides as a static
+//!   one would. A lit placement of an animated model is drawn without its lightmap
+//!   ([`LightmapReport::unlit_animated`]): the skinned path has none.
+//! - Models stored in the world are never animated: their bone and track names would come from
+//!   the world's identifier table, which does not hold them at the bones' ids.
+//!
 //! ## Placements and starts
 //!
 //! An [`Instance`] takes the world rotation, translation and per-axis scale of its static model
@@ -184,9 +221,11 @@ use std::collections::BTreeMap;
 
 use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
+use ss2_format_ans::AnimSet;
 use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
-use ss2_format_mdl::{MeshSource, Model};
+use ss2_format_mdl::{AnimSetSource, MeshSource, Model, SkeletonSource};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig, TextureRef};
+use ss2_format_skl::Skeleton;
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
 use ss2_format_wld::{Bloom, Haze, Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
@@ -197,7 +236,7 @@ use ss2_vfs::{Vfs, VfsPath};
 
 use crate::scene::{
     BloomVolume, CollisionData, HazeVolume, Instance, LevelScene, LoadProgress, LoadStage,
-    ModelData, ModelPart, SkyData, SpawnPoint,
+    ModelData, ModelPart, SkinnedInstance, SkinnedModelData, SkyData, SpawnPoint,
 };
 
 /// How to load a level.
@@ -233,6 +272,9 @@ pub struct LightmapReport {
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
+    /// Lit placements drawn animated, without their lightmap (the skinned path has none; module
+    /// docs, "Animated models").
+    pub unlit_animated: usize,
     /// Lit placements that are not in the scene at all (their model is missing or broken, or
     /// the placement is unusable).
     pub dropped: usize,
@@ -334,6 +376,8 @@ fn scene_of_world(
         texture_paths: Vec::new(),
         texture_ids: BTreeMap::new(),
         mtr_cache: BTreeMap::new(),
+        skeleton_cache: BTreeMap::new(),
+        anim_cache: BTreeMap::new(),
         report: LightmapReport::default(),
     };
     // Lit models with several candidate streams, by scene index: their streams tied on overlap
@@ -373,6 +417,8 @@ fn scene_of_world(
 
     let mut models: Vec<ModelData> = Vec::new();
     let mut model_index: BTreeMap<ModelKey, u32> = BTreeMap::new();
+    let mut skinned_models: Vec<SkinnedModelData> = Vec::new();
+    let mut skinned_index: BTreeMap<ModelKey, u32> = BTreeMap::new();
     report(progress, LoadStage::Models, 0, model_order.len());
     for (i, key) in model_order.iter().enumerate() {
         let (uses, collide, lit) = model_use[key];
@@ -384,7 +430,9 @@ fn scene_of_world(
             ModelKey::Embedded(id) => {
                 let name = format!("{}#{id}", wld.as_str());
                 let built = match world.embedded_model(*id).map(|e| &e.model) {
-                    Some(Ok(model)) => loader.model_parts(&name, model, collide, lit),
+                    // A model stored in the world names its bones through the world's
+                    // identifier table, so it is drawn static (module docs, "Animated models").
+                    Some(Ok(model)) => loader.model_parts(&name, model, collide, lit, false),
                     Some(Err(why)) => Err(why.clone()),
                     None => Err("the world did not read it".to_string()),
                 };
@@ -392,7 +440,16 @@ fn scene_of_world(
             }
         };
         match built {
-            Ok(Built { model, several: s }) => {
+            Ok(Built {
+                skinned: Some(skinned),
+                ..
+            }) => {
+                skinned_index.insert(key.clone(), index_u32(skinned_models.len()));
+                skinned_models.push(skinned);
+            }
+            Ok(Built {
+                model, several: s, ..
+            }) => {
                 let index = index_u32(models.len());
                 model_index.insert(key.clone(), index);
                 models.push(model);
@@ -414,10 +471,17 @@ fn scene_of_world(
         .filter(|m| m.lightmap.is_some())
         .count();
     let mut instances = Vec::new();
+    let mut skinned_instances = Vec::new();
     // The static model of each instance, for its lightmap.
     let mut instance_source = Vec::new();
     for (m, path) in world.static_models.iter().zip(&placement_model) {
-        let Some(&model) = path.as_ref().and_then(|p| model_index.get(p)) else {
+        let skinned = path.as_ref().and_then(|p| skinned_index.get(p)).copied();
+        let Some(model) = path
+            .as_ref()
+            .and_then(|p| model_index.get(p))
+            .copied()
+            .or(skinned)
+        else {
             continue;
         };
         let rotation = m.rotation;
@@ -432,13 +496,23 @@ fn scene_of_world(
             ));
             continue;
         }
+        let transform = Transform {
+            translation: m.translation,
+            rotation: rotation / length,
+            scale: m.scale,
+        };
+        if skinned.is_some() {
+            loader.report.unlit_animated += usize::from(m.lightmap.is_some());
+            skinned_instances.push(SkinnedInstance {
+                model,
+                transform,
+                collidable: m.has_hull && skinned_models[model as usize].collision.is_some(),
+            });
+            continue;
+        }
         instances.push(Instance {
             model,
-            transform: Transform {
-                translation: m.translation,
-                rotation: rotation / length,
-                scale: m.scale,
-            },
+            transform,
             collidable: m.has_hull && models[model as usize].collision.is_some(),
             // Set after the textures, below.
             lightmap: None,
@@ -528,8 +602,11 @@ fn scene_of_world(
         }
     }
     let report = &mut loader.report;
-    report.dropped =
-        report.lit_placements - report.lightmapped - report.unlit_no_uvs - report.unlit_texture;
+    report.dropped = report.lit_placements
+        - report.lightmapped
+        - report.unlit_no_uvs
+        - report.unlit_texture
+        - report.unlit_animated;
 
     let sky = world.sky.as_ref().map(|s| {
         let mut faces = [None; 6];
@@ -592,6 +669,8 @@ fn scene_of_world(
         spawns,
         skipped: loader.skipped,
         sky,
+        skinned_models,
+        skinned_instances,
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
     (scene, loader.report)
@@ -783,6 +862,9 @@ fn material_key(m: &MaterialData) -> MaterialKey {
 struct Built {
     model: ModelData,
     several: Option<Option<Tie>>,
+    /// The model drawn animated, when it is one (module docs, "Animated models"); its placements
+    /// then become skinned instances and `model` is not used.
+    skinned: Option<SkinnedModelData>,
 }
 
 /// A lit model whose candidate streams tie on overlap: each lit placement chooses among them by
@@ -809,6 +891,10 @@ struct Loader<'a> {
     texture_ids: BTreeMap<VfsPath, u32>,
     /// External `.mtr` files by path (`None`: could not be read, already recorded).
     mtr_cache: BTreeMap<VfsPath, Option<Material>>,
+    /// External `.skl` files by path (`None`: could not be read, already recorded).
+    skeleton_cache: BTreeMap<VfsPath, Option<Skeleton>>,
+    /// External `.ans` files by path (`None`: could not be read, already recorded).
+    anim_cache: BTreeMap<VfsPath, Option<AnimSet>>,
     report: LightmapReport,
 }
 
@@ -827,21 +913,28 @@ impl Loader<'_> {
     ) -> std::result::Result<Built, String> {
         let bytes = self.vfs.read(path).map_err(|e| e.to_string())?;
         let model = Model::from_bytes(&bytes).map_err(|e| e.to_string())?;
-        self.model_parts(path.as_str(), &model, collide, lit)
+        self.model_parts(path.as_str(), &model, collide, lit, true)
     }
 
     /// Build a read model (from a `.mdl` file or embedded in the world); `name` names it in
-    /// [`ModelData::name`] and in messages.
+    /// [`ModelData::name`] and in messages. With `animate`, a model with a skeleton, skinned
+    /// surfaces and animations is also built animated ([`Built::skinned`]).
     fn model_parts(
         &mut self,
         name: &str,
         model: &Model,
         collide: bool,
         lit: usize,
+        animate: bool,
     ) -> std::result::Result<Built, String> {
         match model.mesh() {
             MeshSource::Embedded(mesh) => {
-                self.build(name, mesh, collide, lit, &|id| model.material(id))
+                let lookup = |id| model.material(id);
+                let mut built = self.build(name, mesh, collide, lit, &lookup)?;
+                if animate {
+                    built.skinned = self.skinned(name, model, mesh, &lookup, &built.model);
+                }
+                Ok(built)
             }
             MeshSource::External(raw) => {
                 let bmf = VfsPath::new(raw).map_err(|e| format!("mesh path `{raw}`: {e}"))?;
@@ -863,7 +956,11 @@ impl Loader<'_> {
                         .ok()
                         .map(|i| &materials[i])
                 };
-                self.build(name, &mesh, collide, lit, &lookup)
+                let mut built = self.build(name, &mesh, collide, lit, &lookup)?;
+                if animate {
+                    built.skinned = self.skinned(name, model, &mesh, &lookup, &built.model);
+                }
+                Ok(built)
             }
             MeshSource::None => Err("the model has no mesh".to_string()),
         }
@@ -955,7 +1052,163 @@ impl Loader<'_> {
                 collision,
             },
             several,
+            skinned: None,
         })
+    }
+
+    /// `model` built animated (module docs, "Animated models"), or `None` to draw it static: it
+    /// needs a skinned surface in its drawn level of detail, a readable skeleton and an animation
+    /// that binds to it. `stat` is the static build (its collision is reused). A model that has
+    /// what it takes but whose skeleton or animations cannot be used gets a skipped line.
+    fn skinned<'m>(
+        &mut self,
+        name: &str,
+        model: &Model,
+        mesh: &Mesh,
+        embedded: &dyn Fn(u32) -> Option<&'m Material>,
+        stat: &ModelData,
+    ) -> Option<SkinnedModelData> {
+        let lod = mesh.lods.iter().find(|l| l.is_for_pc())?;
+        if !lod.surfaces.iter().any(skin::is_skinned) || model.anim_sets.is_empty() {
+            return None;
+        }
+        let skeleton = match &model.skeleton {
+            SkeletonSource::None => return None,
+            SkeletonSource::Embedded(s) => s.clone(),
+            SkeletonSource::External(raw) => self.external_skeleton(raw, name)?,
+            SkeletonSource::Unreadable(why) => {
+                self.skip(format!("model `{name}`: skeleton: {why} (drawn static)"));
+                return None;
+            }
+        };
+        let skeleton = match skeleton.lods().first().map(skin::skeleton_data) {
+            Some(Ok(s)) => s,
+            Some(Err(why)) => {
+                self.skip(format!("model `{name}`: skeleton: {why} (drawn static)"));
+                return None;
+            }
+            None => {
+                self.skip(format!(
+                    "model `{name}`: the skeleton has no level of detail (drawn static)"
+                ));
+                return None;
+            }
+        };
+        let mut sets: Vec<AnimSet> = Vec::new();
+        for source in &model.anim_sets {
+            match source {
+                AnimSetSource::Embedded(set) => sets.push(set.clone()),
+                AnimSetSource::External(raw) => {
+                    if let Some(set) = self.external_anim_set(raw, name) {
+                        sets.push(set);
+                    }
+                }
+                AnimSetSource::Unreadable(why) => {
+                    self.skip(format!("model `{name}`: animation set: {why}"));
+                }
+                AnimSetSource::None => {}
+            }
+        }
+        let (animations, default_animation) = skin::bind_animations(&sets, &skeleton);
+        if animations.is_empty() {
+            self.skip(format!(
+                "model `{name}`: no animation binds to its skeleton (drawn static)"
+            ));
+            return None;
+        }
+        let materials: Vec<Option<Material>> = lod
+            .surfaces
+            .iter()
+            .map(|surface| match &surface.material {
+                MaterialRef::None => None,
+                MaterialRef::Embedded(id) => embedded(*id).cloned(),
+                MaterialRef::External(raw) => self.mtr(raw, name),
+            })
+            .collect();
+        let (parts, left_out, dropped) = skin::skinned_parts(&lod.surfaces, &skeleton, |i| {
+            self.material(materials[i].as_ref())
+        });
+        for e in left_out {
+            self.skip(format!("model `{name}`: an animated part is left out: {e}"));
+        }
+        if dropped > 0 {
+            self.skip(format!(
+                "model `{name}`: {dropped} bone weights name a palette entry that is no bone of \
+                 the skeleton (those vertices follow their other bones or stay put)"
+            ));
+        }
+        if parts.is_empty() {
+            self.skip(format!(
+                "model `{name}`: nothing to draw animated (drawn static)"
+            ));
+            return None;
+        }
+        Some(SkinnedModelData {
+            name: name.to_string(),
+            skeleton,
+            parts,
+            animations,
+            default_animation,
+            collision: stat.collision.clone(),
+        })
+    }
+
+    /// An external skeleton file (read once per load); `None` with a skipped line when it cannot
+    /// be read.
+    fn external_skeleton(&mut self, raw: &str, user: &str) -> Option<Skeleton> {
+        let path = match VfsPath::new(raw) {
+            Ok(p) => p,
+            Err(e) => {
+                self.skip(format!(
+                    "skeleton `{raw}` (used by `{user}`): {e} (drawn static)"
+                ));
+                return None;
+            }
+        };
+        if let Some(s) = self.skeleton_cache.get(&path) {
+            return s.clone();
+        }
+        let read = self.vfs.read(&path).and_then(|b| Skeleton::parse(&b));
+        let skeleton = match read {
+            Ok(s) => Some(s),
+            Err(e) => {
+                self.skip(format!(
+                    "skeleton `{}` (used by `{user}`): {e} (drawn static)",
+                    path.as_str()
+                ));
+                None
+            }
+        };
+        self.skeleton_cache.insert(path, skeleton.clone());
+        skeleton
+    }
+
+    /// An external `.ans` file (read once per load); `None` with a skipped line when it cannot be
+    /// read.
+    fn external_anim_set(&mut self, raw: &str, user: &str) -> Option<AnimSet> {
+        let path = match VfsPath::new(raw) {
+            Ok(p) => p,
+            Err(e) => {
+                self.skip(format!("animation set `{raw}` (used by `{user}`): {e}"));
+                return None;
+            }
+        };
+        if let Some(s) = self.anim_cache.get(&path) {
+            return s.clone();
+        }
+        let read = self.vfs.read(&path).and_then(|b| AnimSet::from_bytes(&b));
+        let set = match read {
+            Ok(s) => Some(s),
+            Err(e) => {
+                self.skip(format!(
+                    "animation set `{}` (used by `{user}`): {e}",
+                    path.as_str()
+                ));
+                None
+            }
+        };
+        self.anim_cache.insert(path, set.clone());
+        set
     }
 
     /// The parts of the surfaces of one level of detail (their `materials`), with lightmap UVs
@@ -1421,6 +1674,7 @@ fn halve(rgba: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
 }
 
 mod lightmap;
+mod skin;
 mod sky;
 
 #[cfg(test)]
