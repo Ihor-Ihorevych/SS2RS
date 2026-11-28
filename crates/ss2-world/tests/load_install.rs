@@ -672,11 +672,9 @@ fn dm_stadium_is_lightmapped() {
         .count();
     assert!(lit_fences > 0);
     assert_eq!(report.lit_placements, 133);
-    assert!(
-        report.lightmapped * 10 >= report.lit_placements * 8,
-        "{report:?}"
-    );
-    assert_eq!(report.unlit_texture, 0, "{report:?}");
+    // Every lit placement draws its lightmap (the tie-breaks of reader invariant 3 cover the
+    // models without a single candidate stream).
+    assert_eq!(report.lightmapped, report.lit_placements, "{report:?}");
 }
 
 /// With `SS2_LOAD_ALL=1` (release build): every level loads with its lightmaps; prints, per
@@ -716,7 +714,7 @@ fn every_level_is_lightmapped() {
         lit_instances += lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
-             models {:>3}: one {:?}, none {}, several {}",
+             models {:>3}: one {:?}, several {}, slot 0 {}, no stream {}",
             info.id,
             r.lightmapped,
             r.lit_placements,
@@ -725,8 +723,9 @@ fn every_level_is_lightmapped() {
             r.dropped,
             r.lit_models,
             r.one_candidate,
-            r.no_candidate,
-            r.several_candidates
+            r.several_candidates,
+            r.slot_zero,
+            r.no_stream
         );
         all.lit_placements += r.lit_placements;
         all.lightmapped += r.lightmapped;
@@ -734,8 +733,9 @@ fn every_level_is_lightmapped() {
         all.unlit_texture += r.unlit_texture;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
-        all.no_candidate += r.no_candidate;
         all.several_candidates += r.several_candidates;
+        all.slot_zero += r.slot_zero;
+        all.no_stream += r.no_stream;
         for (k, n) in r.one_candidate {
             *all.one_candidate.entry(k).or_default() += n;
         }
@@ -743,12 +743,11 @@ fn every_level_is_lightmapped() {
     eprintln!("{} worlds, in all: {all:?}", seen.len());
     assert!(failures.is_empty(), "{failures:#?}");
     assert_eq!(lit_instances, all.lightmapped);
-    // Most lit placements are drawn with their lightmap (the spec: 86.6 % of lit instances
-    // have exactly one candidate stream).
-    assert!(all.lightmapped * 10 >= all.lit_placements * 8, "{all:?}");
     assert_eq!(all.unlit_texture, 0, "{all:?}");
-    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels), 15,976 drawn
-    // with their lightmap, 2,182 whose model has no single candidate, 37 not in the scene.
+    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels), all drawn with
+    // their lightmap except one placement of `dm_cockaleekie` that is not in the scene. Before
+    // the tie-breaks of reader invariant 3 (T07-044), 2,198 were drawn unlit for lack of a single
+    // candidate stream.
     assert_eq!(
         (
             all.lit_placements,
@@ -756,6 +755,21 @@ fn every_level_is_lightmapped() {
             all.unlit_no_uvs,
             all.dropped
         ),
-        (18_195, 15_976, 2_182, 37)
+        (18_195, 18_194, 0, 1)
+    );
+    // The models, by the rule that chose their stream: one candidate (by its slot), the lowest of
+    // several, slot 0 for none; no model is left without a stream.
+    assert_eq!(
+        all.one_candidate,
+        BTreeMap::from([(0, 2_021), (1, 195), (2, 36), (3, 2), (4, 1)])
+    );
+    assert_eq!(
+        (
+            all.lit_models,
+            all.several_candidates,
+            all.slot_zero,
+            all.no_stream
+        ),
+        (2_645, 209, 181, 0)
     );
 }
