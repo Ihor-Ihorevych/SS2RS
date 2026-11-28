@@ -248,6 +248,7 @@ Environment evidence (docs/re/environment.md, environment-levels.md, environment
 python -I tools/re/wld_env_verify.py "C:\path\to\Serious Sam 2" [--table docs/re/environment-levels.md] [LIMIT]    # sky, haze, bloom, fluids per level, record/renderable copies, and the sky's en_qvPlacement rotation/position distribution (T01-409) (about 15 minutes)
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/environment-schema.md --match "Haze|Bloom|CubeRenderable|CubeBackground|SimpleBackground|FluidEntity|FluidHull|ShakerEffect|ShakerRenderable|EnvironmentDamager|ForceField|CShakingParams" --title "..."    # the class reference
 python -I tools/re/sky_faces_verify.py "C:\path\to\Serious Sam 2" [--dump DIR] [--top3]    # which CCubeRenderable face member is which cube direction and how its image tiles with its neighbours, from decoded-pixel edge matching (about 3 minutes)
+python -I tools/re/water_models_verify.py "C:\path\to\Serious Sam 2"    # T01-070: which .mtr/.bmf/.mdl files embed a CWaterShaderArgs config, and which static model instances of which world resolve to one (a few minutes)
 ```
 
 Destruction evidence (docs/re/destruction.md, destruction-models.md):
