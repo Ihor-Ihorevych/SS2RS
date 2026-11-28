@@ -1,6 +1,10 @@
 //! The 3D world pass (RFC 0013, slice of T04-005/T04-009): textured static meshes drawn with one matrix per
 //! instance, reverse-Z depth, flat lighting from the camera and alpha cutoff. The 2D pass draws on top.
 //!
+//! Skinned meshes (RFC 0013 amendment 7, T04-006) go through a second pipeline of the same shader: each skinned
+//! instance owns a uniform buffer of [`MAX_BONES`] skin matrices (palette times inverse bind, multiplied on the CPU
+//! when the palette is set) and is drawn with the world's lighting and fog.
+//!
 //! The renderer keeps no CPU copy of world data. When the GPU device is rebuilt (or [`crate::Renderer::clear_world`]
 //! is called) every mesh, texture and batch is dropped and [`crate::Renderer::world_generation`] changes; the
 //! owner of the level uploads it again. Handles from an older generation are refused.
@@ -10,6 +14,7 @@ use std::ops::Range;
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{CubeFace, Fog, MeshData, MeshVertex, TexelFormat, TextureData};
+use ss2_render_api::skinning::{MAX_BONES, SkinnedMeshData, SkinnedVertex};
 use wgpu::util::DeviceExt;
 
 use crate::context::RenderError;
@@ -29,6 +34,31 @@ pub struct MeshHandle {
 pub struct TextureHandle {
     index: u32,
     generation: u64,
+}
+
+/// A skinned mesh uploaded with [`crate::Renderer::create_skinned_mesh`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SkinnedMeshHandle {
+    index: u32,
+    generation: u64,
+}
+
+/// One skinned mesh drawn once, posed by its own bone palette (RFC 0013 amendment 7).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkinnedDraw {
+    /// What to draw.
+    pub mesh: SkinnedMeshHandle,
+    /// The base-colour texture; `None` draws `tint` alone.
+    pub texture: Option<TextureHandle>,
+    /// Multiplies the texture (linear RGBA).
+    pub tint: [f32; 4],
+    /// Texels whose alpha (after the tint) is below this are not drawn; `None` draws all.
+    pub alpha_cutoff: Option<f32>,
+    /// Model-to-world matrix.
+    pub transform: Mat4,
+    /// One bone-to-model matrix per bone of the mesh (its `inverse_bind` list, in order); see
+    /// [`ss2_render_api::skinning`].
+    pub palette: Vec<Mat4>,
 }
 
 /// One mesh drawn with one look at many places.
@@ -86,6 +116,26 @@ struct GpuMesh {
     index_count: u32,
 }
 
+struct GpuSkinnedMesh {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    index_count: u32,
+    inverse_bind: Vec<Mat4>,
+}
+
+struct GpuSkinnedDraw {
+    mesh: u32,
+    material: wgpu::BindGroup,
+    /// The model-to-world matrix (one instance).
+    instance: wgpu::Buffer,
+    /// [`MAX_BONES`] skin matrices.
+    palette: wgpu::Buffer,
+    palette_group: wgpu::BindGroup,
+}
+
+/// The size of a skinned instance's palette buffer.
+const PALETTE_BYTES: u64 = (MAX_BONES * 64) as u64;
+
 struct GpuTexture {
     view: wgpu::TextureView,
     repeat_u: bool,
@@ -103,6 +153,11 @@ pub(crate) struct WorldGpu {
     pipeline: wgpu::RenderPipeline,
     /// The world shader without depth: the sky.
     sky_pipeline: wgpu::RenderPipeline,
+    /// The world shader with the skinning vertex stage.
+    skinned_pipeline: wgpu::RenderPipeline,
+    palette_layout: wgpu::BindGroupLayout,
+    skinned_meshes: Vec<GpuSkinnedMesh>,
+    skinned: Vec<GpuSkinnedDraw>,
     /// The sky cube: six quads, one per face in [`CubeFace::ALL`] order (6 indices each).
     sky_mesh: GpuMesh,
     /// The sky cube's matrix, written every frame (it follows the camera).
@@ -212,65 +267,132 @@ impl WorldGpu {
                 },
             ],
         });
+        let palette_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("skinned palette layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: wgpu::BufferSize::new(PALETTE_BYTES),
+                },
+                count: None,
+            }],
+        });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("world layout"),
             bind_group_layouts: &[Some(&camera_layout), Some(&material_layout)],
             immediate_size: 0,
         });
-        let make_pipeline = |label: &str, depth_write: bool, compare: wgpu::CompareFunction| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(label),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<MeshVertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                    }),
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: 64,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4],
-                    }),
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: 8,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![7 => Float32x2],
-                    }),
-                ],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            // No face culling: the winding of the game's meshes is not verified yet, and mirrored placements
-            // reverse it.
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(depth_write),
-                depth_compare: Some(compare),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-            })
+        let skinned_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("skinned layout"),
+            bind_group_layouts: &[
+                Some(&camera_layout),
+                Some(&material_layout),
+                Some(&palette_layout),
+            ],
+            immediate_size: 0,
+        });
+        let instance_attributes = wgpu::vertex_attr_array![3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4];
+        let instance_buffer = wgpu::VertexBufferLayout {
+            array_stride: 64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &instance_attributes,
         };
-        let pipeline = make_pipeline("world", true, wgpu::CompareFunction::Greater);
+        let static_attributes =
+            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+        let lightmap_attributes = wgpu::vertex_attr_array![7 => Float32x2];
+        let static_buffers = [
+            Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<MeshVertex>() as u64,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &static_attributes,
+            }),
+            Some(instance_buffer.clone()),
+            Some(wgpu::VertexBufferLayout {
+                array_stride: 8,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &lightmap_attributes,
+            }),
+        ];
+        let skinned_attributes = wgpu::vertex_attr_array![
+            0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 8 => Uint16x4, 9 => Float32x4
+        ];
+        let skinned_buffers = [
+            Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<SkinnedVertex>() as u64,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &skinned_attributes,
+            }),
+            Some(instance_buffer),
+        ];
+        let make_pipeline =
+            |label: &str,
+             depth_write: bool,
+             compare: wgpu::CompareFunction,
+             layout: &wgpu::PipelineLayout,
+             entry_point: &str,
+             buffers: &[Option<wgpu::VertexBufferLayout<'_>>]| {
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some(entry_point),
+                        compilation_options: Default::default(),
+                        buffers,
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some("fs_main"),
+                        compilation_options: Default::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    // No face culling: the winding of the game's meshes is not verified yet, and mirrored placements
+                    // reverse it.
+                    primitive: wgpu::PrimitiveState::default(),
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DEPTH_FORMAT,
+                        depth_write_enabled: Some(depth_write),
+                        depth_compare: Some(compare),
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview_mask: None,
+                    cache: None,
+                })
+            };
+        let pipeline = make_pipeline(
+            "world",
+            true,
+            wgpu::CompareFunction::Greater,
+            &layout,
+            "vs_main",
+            &static_buffers,
+        );
         // The sky is drawn first, behind everything, and leaves the depth buffer to the world.
-        let sky_pipeline = make_pipeline("sky", false, wgpu::CompareFunction::Always);
+        let sky_pipeline = make_pipeline(
+            "sky",
+            false,
+            wgpu::CompareFunction::Always,
+            &layout,
+            "vs_main",
+            &static_buffers,
+        );
+        let skinned_pipeline = make_pipeline(
+            "skinned",
+            true,
+            wgpu::CompareFunction::Greater,
+            &skinned_layout,
+            "vs_skinned",
+            &skinned_buffers,
+        );
         let sky_mesh = sky_cube(device);
         let sky_instance = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sky instance"),
@@ -328,6 +450,10 @@ impl WorldGpu {
         Self {
             pipeline,
             sky_pipeline,
+            skinned_pipeline,
+            palette_layout,
+            skinned_meshes: Vec::new(),
+            skinned: Vec::new(),
             sky_mesh,
             sky_instance,
             sky: None,
@@ -368,6 +494,8 @@ impl WorldGpu {
         self.batches.clear();
         self.instances = None;
         self.sky = None;
+        self.skinned_meshes.clear();
+        self.skinned.clear();
         self.generation += 1;
     }
 
@@ -625,6 +753,184 @@ impl WorldGpu {
         })
     }
 
+    pub(crate) fn create_skinned_mesh(
+        &mut self,
+        device: &wgpu::Device,
+        mesh: &SkinnedMeshData,
+    ) -> Result<SkinnedMeshHandle, RenderError> {
+        mesh.validate()
+            .map_err(|e| RenderError::World(e.to_string()))?;
+        if mesh.indices.is_empty() {
+            return Err(RenderError::World(
+                "a skinned mesh needs at least one triangle".into(),
+            ));
+        }
+        let index_count = u32::try_from(mesh.indices.len())
+            .map_err(|_| RenderError::World("too many indices".into()))?;
+        let index = u32::try_from(self.skinned_meshes.len())
+            .map_err(|_| RenderError::World("too many skinned meshes".into()))?;
+        self.skinned_meshes.push(GpuSkinnedMesh {
+            vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("skinned mesh vertices"),
+                contents: bytemuck::cast_slice(&mesh.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }),
+            indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("skinned mesh indices"),
+                contents: bytemuck::cast_slice(&mesh.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }),
+            index_count,
+            inverse_bind: mesh.inverse_bind.clone(),
+        });
+        Ok(SkinnedMeshHandle {
+            index,
+            generation: self.generation,
+        })
+    }
+
+    fn skinned_mesh_index(&self, h: SkinnedMeshHandle) -> Result<u32, RenderError> {
+        if h.generation != self.generation || h.index as usize >= self.skinned_meshes.len() {
+            return Err(RenderError::World(format!(
+                "skinned mesh {h:?} is stale or unknown (world generation {})",
+                self.generation
+            )));
+        }
+        Ok(h.index)
+    }
+
+    /// The skin matrices (`palette[j]` times the mesh's inverse bind `j`) as bytes, or an error for a palette of the
+    /// wrong length or with a non-finite matrix.
+    fn skin_bytes(mesh: &GpuSkinnedMesh, palette: &[Mat4]) -> Result<Vec<f32>, RenderError> {
+        if palette.len() != mesh.inverse_bind.len() {
+            return Err(RenderError::World(format!(
+                "a palette of {} matrices for a mesh of {} bones",
+                palette.len(),
+                mesh.inverse_bind.len()
+            )));
+        }
+        if !palette.iter().all(Mat4::is_finite) {
+            return Err(RenderError::World(
+                "the palette has a non-finite matrix".into(),
+            ));
+        }
+        Ok(palette
+            .iter()
+            .zip(&mesh.inverse_bind)
+            .flat_map(|(p, i)| (*p * *i).to_cols_array())
+            .collect())
+    }
+
+    /// Replace the skinned draws; draw `i` of `draws` becomes skinned instance `i`. Nothing changes if it returns an
+    /// error.
+    pub(crate) fn set_skinned(
+        &mut self,
+        device: &wgpu::Device,
+        draws: Vec<SkinnedDraw>,
+    ) -> Result<(), RenderError> {
+        let mut planned = Vec::with_capacity(draws.len());
+        for (i, d) in draws.iter().enumerate() {
+            let mesh = self.skinned_mesh_index(d.mesh)?;
+            let texture = d.texture.map(|t| self.texture(t)).transpose()?;
+            let cutoff = d.alpha_cutoff.unwrap_or(0.0);
+            if !d.tint.iter().all(|c| c.is_finite())
+                || !cutoff.is_finite()
+                || !d.transform.is_finite()
+            {
+                return Err(RenderError::World(format!(
+                    "skinned draw {i} has a non-finite tint, cutoff or transform"
+                )));
+            }
+            let skin = Self::skin_bytes(&self.skinned_meshes[mesh as usize], &d.palette)
+                .map_err(|e| RenderError::World(format!("skinned draw {i}: {e}")))?;
+            let mut palette_data = vec![0f32; MAX_BONES * 16];
+            palette_data[..skin.len()].copy_from_slice(&skin);
+            let palette = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("skinned palette"),
+                contents: bytemuck::cast_slice(&palette_data),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+            let palette_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("skinned palette"),
+                layout: &self.palette_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: palette.as_entire_binding(),
+                }],
+            });
+            let instance = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("skinned instance"),
+                contents: bytemuck::cast_slice(&d.transform.to_cols_array()),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+            let (view, sampler) = match texture {
+                Some(t) => (
+                    &t.view,
+                    &self.samplers[usize::from(t.repeat_u) + 2 * usize::from(t.repeat_v)],
+                ),
+                None => (&self.white, &self.samplers[3]),
+            };
+            let material = self.material(device, view, sampler, d.tint, cutoff, false, None);
+            planned.push(GpuSkinnedDraw {
+                mesh,
+                material,
+                instance,
+                palette,
+                palette_group,
+            });
+        }
+        self.skinned = planned;
+        Ok(())
+    }
+
+    fn skinned_draw(&self, instance: usize) -> Result<&GpuSkinnedDraw, RenderError> {
+        self.skinned.get(instance).ok_or_else(|| {
+            RenderError::World(format!(
+                "skinned instance {instance} is unknown ({} are drawn)",
+                self.skinned.len()
+            ))
+        })
+    }
+
+    /// Pose skinned instance `instance` with `palette` from the next frame on. Nothing changes if it returns an error.
+    pub(crate) fn set_bone_palette(
+        &mut self,
+        queue: &wgpu::Queue,
+        instance: usize,
+        palette: &[Mat4],
+    ) -> Result<(), RenderError> {
+        let draw = self.skinned_draw(instance)?;
+        let skin = Self::skin_bytes(&self.skinned_meshes[draw.mesh as usize], palette)?;
+        queue.write_buffer(&draw.palette, 0, bytemuck::cast_slice(&skin));
+        Ok(())
+    }
+
+    /// Move skinned instance `instance` to `transform` from the next frame on.
+    pub(crate) fn set_skinned_transform(
+        &mut self,
+        queue: &wgpu::Queue,
+        instance: usize,
+        transform: Mat4,
+    ) -> Result<(), RenderError> {
+        if !transform.is_finite() {
+            return Err(RenderError::World(format!(
+                "skinned instance {instance}: a non-finite transform"
+            )));
+        }
+        let draw = self.skinned_draw(instance)?;
+        queue.write_buffer(
+            &draw.instance,
+            0,
+            bytemuck::cast_slice(&transform.to_cols_array()),
+        );
+        Ok(())
+    }
+
+    /// The number of skinned instances drawn.
+    pub(crate) fn skinned_count(&self) -> usize {
+        self.skinned.len()
+    }
+
     /// Replace the sky (`None`: no sky, the clear colour shows). Nothing changes if it returns an error.
     /// Fog the world from the next frame on (`None`: no fog); refused unless [`Fog::validate`] passes.
     pub(crate) fn set_fog(&mut self, fog: Option<Fog>) -> Result<(), RenderError> {
@@ -798,19 +1104,32 @@ impl WorldGpu {
                 pass.draw_indexed(i * 6..i * 6 + 6, 0, 0..1);
             }
         }
-        let Some(instances) = &self.instances else {
+        if let Some(instances) = &self.instances {
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.camera_group, &[]);
+            pass.set_vertex_buffer(1, instances.slice(..));
+            for b in &self.batches {
+                let mesh = &self.meshes[b.mesh as usize];
+                pass.set_bind_group(1, &b.material, &[]);
+                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                pass.set_vertex_buffer(2, mesh.lightmap_uvs.slice(..));
+                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh.index_count, 0, b.instances.clone());
+            }
+        }
+        if self.skinned.is_empty() {
             return;
-        };
-        pass.set_pipeline(&self.pipeline);
+        }
+        pass.set_pipeline(&self.skinned_pipeline);
         pass.set_bind_group(0, &self.camera_group, &[]);
-        pass.set_vertex_buffer(1, instances.slice(..));
-        for b in &self.batches {
-            let mesh = &self.meshes[b.mesh as usize];
-            pass.set_bind_group(1, &b.material, &[]);
+        for d in &self.skinned {
+            let mesh = &self.skinned_meshes[d.mesh as usize];
+            pass.set_bind_group(1, &d.material, &[]);
+            pass.set_bind_group(2, &d.palette_group, &[]);
             pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-            pass.set_vertex_buffer(2, mesh.lightmap_uvs.slice(..));
+            pass.set_vertex_buffer(1, d.instance.slice(..));
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-            pass.draw_indexed(0..mesh.index_count, 0, b.instances.clone());
+            pass.draw_indexed(0..mesh.index_count, 0, 0..1);
         }
     }
 }

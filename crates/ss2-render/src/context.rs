@@ -3,8 +3,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use ss2_core::math::Mat4;
 use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{Bloom, Fog, MeshData, TexelFormat, TextureData};
+use ss2_render_api::skinning::SkinnedMeshData;
 
 use crate::bloom::BloomGpu;
 use ss2_ui::{Canvas, Color, DrawList, Vec2};
@@ -16,7 +18,9 @@ use crate::images::{GpuImage, ImageStore, Recipe, Source};
 use crate::plan::{BatchKind, Plan};
 use crate::text::TextPainter;
 use crate::ui_frame::{ImageHandle, UiFrame, UiScene, replay_order, would_loop};
-use crate::world::{MeshHandle, SkyBatch, TextureHandle, WorldBatch, WorldGpu};
+use crate::world::{
+    MeshHandle, SkinnedDraw, SkinnedMeshHandle, SkyBatch, TextureHandle, WorldBatch, WorldGpu,
+};
 
 /// Why the renderer could not be created or could not draw.
 #[derive(Debug, thiserror::Error)]
@@ -1021,6 +1025,48 @@ impl Renderer {
         self.world.set_world(&self.device, batches)
     }
 
+    /// Upload a skinned mesh for the world (RFC 0013 amendment 7). The handle lasts until the world is dropped.
+    pub fn create_skinned_mesh(
+        &mut self,
+        mesh: &SkinnedMeshData,
+    ) -> Result<SkinnedMeshHandle, RenderError> {
+        self.world.create_skinned_mesh(&self.device, mesh)
+    }
+
+    /// Replace the skinned meshes the world draws: `draws[i]` becomes skinned instance `i`, posed by its own palette
+    /// and drawn after the static batches with the same lighting and fog. They are dropped with the world. Nothing
+    /// changes if it returns an error (a stale or unknown handle, a palette whose length is not the mesh's bone
+    /// count, a non-finite value).
+    pub fn set_skinned(&mut self, draws: Vec<SkinnedDraw>) -> Result<(), RenderError> {
+        self.world.set_skinned(&self.device, draws)
+    }
+
+    /// Pose skinned instance `instance` from the next frame on: one bone-to-model matrix per bone of its mesh
+    /// (see [`ss2_render_api::skinning::SkeletonData::model_transforms`]). Call it every frame an animation plays.
+    /// Nothing changes if it returns an error (an unknown instance, a wrong length, a non-finite matrix).
+    pub fn set_bone_palette(
+        &mut self,
+        instance: usize,
+        palette: &[Mat4],
+    ) -> Result<(), RenderError> {
+        self.world.set_bone_palette(&self.queue, instance, palette)
+    }
+
+    /// Move skinned instance `instance` to the model-to-world `transform` from the next frame on.
+    pub fn set_skinned_transform(
+        &mut self,
+        instance: usize,
+        transform: Mat4,
+    ) -> Result<(), RenderError> {
+        self.world
+            .set_skinned_transform(&self.queue, instance, transform)
+    }
+
+    /// The number of skinned instances ([`Renderer::set_skinned`]).
+    pub fn skinned_count(&self) -> usize {
+        self.world.skinned_count()
+    }
+
     /// Replace the sky drawn behind the world (`None`: no sky, the clear colour shows); it is dropped with the world.
     /// Nothing changes if it returns an error (a stale or unknown texture, a non-finite tint).
     pub fn set_sky(&mut self, sky: Option<SkyBatch>) -> Result<(), RenderError> {
@@ -1045,7 +1091,7 @@ impl Renderer {
         Ok(())
     }
 
-    /// Drop every mesh, texture and batch of the world, and the sky.
+    /// Drop every mesh, texture and batch of the world, the skinned meshes and instances, and the sky.
     pub fn clear_world(&mut self) {
         self.world.clear();
     }
