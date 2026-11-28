@@ -34,7 +34,7 @@ pub trait SpatialQuery {
 - **Cost model:** the moving colliders are rebuilt into the BVH each tick with `QueryWorld::set_dynamic`; the static mesh is built once. Queries take `&self` and do not allocate for a ray cast.
 - **Threading:** queries are `&self` and the world is read-only during a tick, so many queries may run at once (not exercised yet).
 
-**What the reference implementation supports today** (the rest returns `Unsupported`, tracked as T07-004b; the full matrix is in `docs/PHYSICS_QUERIES.md`):
+**What the reference implementation supported at first** (the rest returned `Unsupported`; since Amendment 1 everything is supported, and the full matrix is in `docs/PHYSICS_QUERIES.md`):
 
 | Query | Static world | Moving colliders |
 |---|---|---|
@@ -46,6 +46,24 @@ pub trait SpatialQuery {
 | `overlap` box or capsule | **no** | sphere, capsule, box |
 
 The missing capsule cast is the largest gap: the character controller needs it. It is the first thing in T07-004b.
+
+## Amendment 1 (T07-004b): capsule and box casts, `raycast_all`, the triangle index
+
+Additive, with one exception for code that builds a `Hit` by hand:
+
+- **`Hit::triangle: Option<u32>`**: the index of the static triangle hit (in the mesh given to `QueryWorld::set_static`), `None` for a
+  moving collider. This answers the first open question. A struct literal of `Hit` must now name the field (`triangle: None`); the only
+  ones in the workspace were two tests in `ss2-game`, updated in the same change.
+- **`SpatialQuery::raycast_all(&self, ray, max_distance, filter, out: &mut Vec<Hit>)`**: appends every hit along the ray, nearest first;
+  at the same distance the static world comes first, by triangle index, then the colliders by id. A new required trait method; the only
+  implementation is `QueryWorld`. This answers the third open question (the piercing weapons of T07-010 can use it).
+- **The support matrix is complete** for v0 shapes: capsule casts against the static world and the moving colliders, box casts against
+  the static world and against sphere and capsule colliders, box and capsule overlaps with the static world. No combination returns
+  `Unsupported` any more; the variant stays, for future shapes.
+- **Determinism:** between static triangles at the same distance the lower index wins, for every cast (the sphere cast used to follow
+  the tree's visiting order there; the answer was deterministic before too, but now does not depend on the tree's shape).
+
+Rotated boxes and capsules (the second open question) are left to T07-046, when ragdolls and vehicles need them.
 
 ## Alternatives considered
 
@@ -61,7 +79,7 @@ New code only: `ss2_physics::query` (and `spatial`, `geometry`, which it builds 
 
 ## Open questions
 
-- Should a hit carry the **triangle index** (for decals and per-triangle effects)? Decided by the renderer and effects owners.
+- ~~Should a hit carry the **triangle index**?~~ Yes: Amendment 1.
 - Rotated boxes and capsules: needed for ragdolls and vehicles (T07-008, T07-022); decided when those start.
-- `raycast_all` (piercing) for weapons that pass through enemies: decided with T07-010.
+- ~~`raycast_all` (piercing)~~: Amendment 1.
 - Whether queries need a **time** argument for lag compensation (T08-010 rewinds colliders to a past tick: probably a second `QueryWorld` built from the history, not a parameter).

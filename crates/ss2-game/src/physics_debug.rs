@@ -328,6 +328,7 @@ mod tests {
             material: PhysMaterialId(1),
             collider: None,
             started_overlapping: false,
+            triangle: None,
         };
         let mut d = on();
         draw_ray_cast(&mut d, &ray, 20.0, Some(&hit));
@@ -355,6 +356,7 @@ mod tests {
             material: PhysMaterialId(0),
             collider: Some(ColliderId(3)),
             started_overlapping: false,
+            triangle: None,
         };
         let mut d = on();
         draw_shape_cast(

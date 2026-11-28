@@ -547,7 +547,8 @@ impl Plane {
     }
 }
 
-fn closest_on_segment(a: Vec3, b: Vec3, p: Vec3) -> Vec3 {
+/// The point of the segment `a..b` nearest to `p`.
+pub(crate) fn closest_on_segment(a: Vec3, b: Vec3, p: Vec3) -> Vec3 {
     let ab = b - a;
     let len2 = ab.length_squared();
     if len2 <= EPS {
@@ -558,11 +559,24 @@ fn closest_on_segment(a: Vec3, b: Vec3, p: Vec3) -> Vec3 {
 
 /// The squared distance between segments `p1..q1` and `p2..q2`.
 fn segment_segment_distance_squared(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3) -> f32 {
+    let (a, b) = closest_points_segment_segment(p1, q1, p2, q2);
+    (a - b).length_squared()
+}
+
+/// The nearest pair of points between segments `p1..q1` and `p2..q2`: the one on the first, then
+/// the one on the second (the classic clamped solve, Ericson's *Real-Time Collision Detection*
+/// 5.1.9).
+pub(crate) fn closest_points_segment_segment(
+    p1: Vec3,
+    q1: Vec3,
+    p2: Vec3,
+    q2: Vec3,
+) -> (Vec3, Vec3) {
     let (d1, d2, r) = (q1 - p1, q2 - p2, p1 - p2);
     let (a, e, f) = (d1.dot(d1), d2.dot(d2), d2.dot(r));
     let (s, t);
     if a <= EPS && e <= EPS {
-        return r.length_squared();
+        return (p1, p2);
     }
     if a <= EPS {
         s = 0.0;
@@ -592,7 +606,7 @@ fn segment_segment_distance_squared(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3) -> f
             t = t_try;
         }
     }
-    ((p1 + d1 * s) - (p2 + d2 * t)).length_squared()
+    (p1 + d1 * s, p2 + d2 * t)
 }
 
 /// A capsule: every point within `radius` of the segment `a..b`.

@@ -69,9 +69,10 @@ normal turned to the ray, the child visiting order. **Survivors, stated plainly:
 
 ## Not covered (follow-up T07-003b)
 
-- **Exact sweeps against triangles** (a sphere or capsule swept into a mesh: the closest approach to a triangle's face, edges and
-  vertices); the BVH already supplies the candidates, and `query_ray` with `inflate` is the traversal.
+- ~~**Exact sweeps against triangles**~~: done. The sphere (T07-004), the capsule and the axis-aligned box (T07-004b:
+  `Triangle::sweep_capsule`, `Triangle::sweep_aabb`, `TriMesh::sweep_capsule`, `TriMesh::sweep_aabb`, ties to the lower triangle index),
+  the capsule and box overlaps (`TriMesh::query_capsule`, `TriMesh::query_box`) and `TriMesh::raycast_all`; see `docs/PHYSICS_QUERIES.md`.
 - **A better build** (surface area heuristic) and an **incremental refit** for large dynamic sets, and **benchmarks** (T07-017); the median
   split is simple and balanced, not optimal.
 - Loading the **world's triangles** from a `.wld` (T07-002) and the **frozen query contract** with materials and entities (T07-004).
-- Box-against-triangle overlap (only the sphere is exact).
+- ~~Box-against-triangle overlap~~: done (`Triangle::overlaps_aabb`, T07-004b).

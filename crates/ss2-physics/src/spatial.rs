@@ -13,7 +13,7 @@
 
 use std::fmt;
 
-use crate::geometry::{Aabb, Capsule, Ray, SweepHit};
+use crate::geometry::{Aabb, Capsule, Ray, SweepHit, closest_points_segment_segment};
 use ss2_core::math::Vec3;
 
 /// A set of up to 32 layers, as bits. Things are on layers and a query has a mask: a thing is
@@ -553,6 +553,245 @@ impl Triangle {
         })
     }
 
+    /// The nearest pair of points between the segment `p..q` and the triangle: the one on the
+    /// segment, then the one on the triangle. A segment through the triangle gives the crossing
+    /// point twice. Away from the triangle the nearest pair has an end of the segment or an edge
+    /// of the triangle in it, so those are all that is compared.
+    pub fn closest_points_segment(&self, p: Vec3, q: Vec3) -> (Vec3, Vec3) {
+        let len = (q - p).length();
+        if let Some(ray) = Ray::new(p, q - p)
+            && let Some(h) = self.raycast(&ray, len)
+        {
+            return (h.point, h.point);
+        }
+        let mut best = (p, self.closest_point(p));
+        let mut best_d = (best.0 - best.1).length_squared();
+        let mut pairs = [(q, self.closest_point(q)); 4];
+        for (slot, (a, b)) in
+            pairs[1..]
+                .iter_mut()
+                .zip([(self.a, self.b), (self.b, self.c), (self.c, self.a)])
+        {
+            *slot = closest_points_segment_segment(p, q, a, b);
+        }
+        for pair in pairs {
+            let d = (pair.0 - pair.1).length_squared();
+            if d < best_d {
+                best_d = d;
+                best = pair;
+            }
+        }
+        best
+    }
+
+    /// Whether the capsule around the segment `p..q` with `radius` touches the triangle.
+    pub fn overlaps_capsule(&self, p: Vec3, q: Vec3, radius: f32) -> bool {
+        let (on_segment, on_triangle) = self.closest_points_segment(p, q);
+        (on_segment - on_triangle).length_squared() <= radius * radius
+    }
+
+    /// Move the capsule around the segment `a..b` (with `radius`) by `delta` and find when it
+    /// first touches this triangle; [`SweepHit::position`] is the middle of the segment then.
+    ///
+    /// A capsule is a segment grown by a radius, so the first contact is one of: an end of the
+    /// segment (a sphere sweep against the whole triangle), a corner of the triangle against the
+    /// segment (a ray from the corner, backwards, against the capsule), or an edge of the
+    /// triangle against the inside of the segment (a ray against the two faces of the
+    /// parallelogram the edge and the segment span, moved out by the radius). The earliest of
+    /// those is exact. A capsule that already overlaps the triangle is reported at 0 with the
+    /// direction to push it out.
+    pub fn sweep_capsule(&self, a: Vec3, b: Vec3, radius: f32, delta: Vec3) -> Option<SweepHit> {
+        if !a.is_finite()
+            || !b.is_finite()
+            || !delta.is_finite()
+            || !radius.is_finite()
+            || radius < 0.0
+        {
+            return None;
+        }
+        let normal = (self.b - self.a).cross(self.c - self.a).try_normalize()?;
+        let away = if normal.dot(delta) <= 0.0 {
+            normal
+        } else {
+            -normal
+        };
+        let middle = (a + b) * 0.5;
+        let (on_segment, on_triangle) = self.closest_points_segment(a, b);
+        if (on_segment - on_triangle).length_squared() < radius * radius {
+            return Some(SweepHit {
+                t: 0.0,
+                position: middle,
+                normal: (on_segment - on_triangle).try_normalize().unwrap_or(away),
+                overlapping_at_start: true,
+            });
+        }
+        let len = delta.length();
+        if len <= 1e-12 {
+            return None;
+        }
+        let dir = delta / len;
+        let mut best = f32::MAX;
+        for end in [a, b] {
+            if let Some(h) = self.sweep_sphere(end, radius, delta) {
+                best = best.min(h.t * len);
+            }
+        }
+        let body = Capsule::new(a, b, radius);
+        for corner in [self.a, self.b, self.c] {
+            let back = Ray {
+                origin: corner,
+                dir: -dir,
+            };
+            if let Some(h) = body.raycast(&back, len) {
+                best = best.min(h.t);
+            }
+        }
+        let axis = b - a;
+        for (p, q) in [(self.a, self.b), (self.b, self.c), (self.c, self.a)] {
+            if let Some(t) = edge_against_axis(p, q - p, a, axis, radius, dir, len) {
+                best = best.min(t);
+            }
+        }
+        if best == f32::MAX {
+            return None;
+        }
+        let t = best / len;
+        let shift = delta * t;
+        let (on_segment, on_triangle) = self.closest_points_segment(a + shift, b + shift);
+        Some(SweepHit {
+            t,
+            position: middle + shift,
+            normal: (on_segment - on_triangle).try_normalize().unwrap_or(away),
+            overlapping_at_start: false,
+        })
+    }
+
+    /// The candidate separating directions of the triangle and an axis-aligned box: the box's
+    /// three axes, the triangle's normal and each edge crossed with each box axis (unit; a
+    /// direction that vanishes, from parallel edges, is left as zero and skipped).
+    fn box_axes(&self) -> [Vec3; 13] {
+        let mut axes = [Vec3::ZERO; 13];
+        axes[0] = Vec3::X;
+        axes[1] = Vec3::Y;
+        axes[2] = Vec3::Z;
+        axes[3] = (self.b - self.a).cross(self.c - self.a);
+        let mut k = 4;
+        for edge in [self.b - self.a, self.c - self.b, self.a - self.c] {
+            for unit in [Vec3::X, Vec3::Y, Vec3::Z] {
+                axes[k] = edge.cross(unit);
+                k += 1;
+            }
+        }
+        for axis in &mut axes {
+            *axis = if axis.length_squared() > 1e-20 {
+                axis.normalize()
+            } else {
+                Vec3::ZERO
+            };
+        }
+        axes
+    }
+
+    /// The triangle's extent along `axis`.
+    fn project(&self, axis: Vec3) -> (f32, f32) {
+        let (pa, pb, pc) = (self.a.dot(axis), self.b.dot(axis), self.c.dot(axis));
+        (pa.min(pb).min(pc), pa.max(pb).max(pc))
+    }
+
+    /// Whether the axis-aligned box and the triangle share any point (the separating axis test).
+    pub fn overlaps_aabb(&self, region: &Aabb) -> bool {
+        let (center, half) = (region.center(), region.half_extents());
+        self.box_axes()
+            .into_iter()
+            .filter(|axis| *axis != Vec3::ZERO)
+            .all(|axis| {
+                let (lo, hi) = self.project(axis);
+                let (c, r) = (center.dot(axis), half.dot(axis.abs()));
+                c + r >= lo && c - r <= hi
+            })
+    }
+
+    /// Move an axis-aligned box (its `center` and `half` size) by `delta` and find when it first
+    /// touches this triangle; [`SweepHit::position`] is the box's centre then.
+    ///
+    /// The separating axis test in motion: along each candidate axis the box's interval slides
+    /// over the triangle's, which gives the time it starts and stops overlapping there; the shapes
+    /// meet when they overlap along every axis at once, so contact begins at the latest start and
+    /// the normal is that axis. A box that only grazes a face it slides along is not a hit; one
+    /// that already overlaps the triangle is reported at 0 with the axis of least penetration as
+    /// the way out.
+    pub fn sweep_aabb(&self, center: Vec3, half: Vec3, delta: Vec3) -> Option<SweepHit> {
+        if !center.is_finite()
+            || !delta.is_finite()
+            || !half.is_finite()
+            || !half.cmpge(Vec3::ZERO).all()
+        {
+            return None;
+        }
+        // A triangle with no area has nothing to touch (as for the other sweeps).
+        (self.b - self.a).cross(self.c - self.a).try_normalize()?;
+        let (mut enter, mut exit) = (f32::NEG_INFINITY, f32::INFINITY);
+        let mut enter_normal = Vec3::ZERO;
+        let mut overlapping = true;
+        let (mut least, mut way_out) = (f32::INFINITY, Vec3::Y);
+        for axis in self.box_axes() {
+            if axis == Vec3::ZERO {
+                continue;
+            }
+            let (lo, hi) = self.project(axis);
+            let (c, r) = (center.dot(axis), half.dot(axis.abs()));
+            // How far the box must move up or down the axis to stop overlapping there.
+            let (push_up, push_down) = (hi - (c - r), (c + r) - lo);
+            if push_up <= 0.0 || push_down <= 0.0 {
+                overlapping = false;
+            } else {
+                let (depth, out) = if push_up < push_down {
+                    (push_up, axis)
+                } else {
+                    (push_down, -axis)
+                };
+                if depth < least {
+                    least = depth;
+                    way_out = out;
+                }
+            }
+            let v = delta.dot(axis);
+            if v == 0.0 {
+                if push_up <= 0.0 || push_down <= 0.0 {
+                    return None;
+                }
+                continue;
+            }
+            let (t0, t1, normal) = if v > 0.0 {
+                ((lo - (c + r)) / v, (hi - (c - r)) / v, -axis)
+            } else {
+                ((hi - (c - r)) / v, (lo - (c + r)) / v, axis)
+            };
+            if t0 > enter {
+                enter = t0;
+                enter_normal = normal;
+            }
+            exit = exit.min(t1);
+        }
+        if overlapping {
+            return Some(SweepHit {
+                t: 0.0,
+                position: center,
+                normal: way_out,
+                overlapping_at_start: true,
+            });
+        }
+        if !(0.0..=1.0).contains(&enter) || enter >= exit {
+            return None;
+        }
+        Some(SweepHit {
+            t: enter,
+            position: center + delta * enter,
+            normal: enter_normal,
+            overlapping_at_start: false,
+        })
+    }
+
     /// The point of the triangle nearest to `p`.
     pub fn closest_point(&self, p: Vec3) -> Vec3 {
         let (a, b, c) = (self.a, self.b, self.c);
@@ -586,6 +825,51 @@ impl Triangle {
         let denom = 1.0 / (va + vb + vc);
         a + ab * (vb * denom) + ac * (vc * denom)
     }
+}
+
+/// When a moving segment (starting at `a`, spanning `axis`, moving along the unit `dir`) first
+/// comes within `radius` of the inside of the edge `p..p + edge`, within `len`: a ray from the
+/// origin along `dir` against the two faces of the parallelogram `(p - a) + u * edge - v * axis`
+/// (`u`, `v` in 0..=1) moved out by `radius` along its normal. The rounded rims of that shape are
+/// the ends of the segment and of the edge, which the other tests of a capsule sweep cover; so are
+/// a segment and an edge that are parallel (`None`).
+fn edge_against_axis(
+    p: Vec3,
+    edge: Vec3,
+    a: Vec3,
+    axis: Vec3,
+    radius: f32,
+    dir: Vec3,
+    len: f32,
+) -> Option<f32> {
+    let n = edge.cross(axis).try_normalize()?;
+    let approach = dir.dot(n);
+    if approach.abs() <= 1e-9 {
+        return None;
+    }
+    let (ee, ea, aa) = (edge.dot(edge), edge.dot(axis), axis.dot(axis));
+    let det = ee * aa - ea * ea;
+    if det <= 1e-20 {
+        return None;
+    }
+    let base = p - a;
+    let mut best: Option<f32> = None;
+    for sign in [1.0_f32, -1.0] {
+        let corner = base + n * (radius * sign);
+        let t = corner.dot(n) / approach;
+        if !(0.0..=len).contains(&t) {
+            continue;
+        }
+        // Where the ray meets the face's plane, in the parallelogram's own coordinates.
+        let w = dir * t - corner;
+        let (we, wa) = (w.dot(edge), w.dot(axis));
+        let u = (we * aa - wa * ea) / det;
+        let v = (we * ea - wa * ee) / det;
+        if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
+            best = Some(best.map_or(t, |b: f32| b.min(t)));
+        }
+    }
+    best
 }
 
 /// Why a mesh could not be built.
@@ -745,9 +1029,75 @@ impl TriMesh {
         })
     }
 
+    /// Every triangle the ray crosses within `max_t`, among triangles on a layer of `mask`,
+    /// **appended** to `out` nearest first; hits at the same distance (a ray through the seam of
+    /// two triangles meets both) are ordered by triangle index.
+    pub fn raycast_all(&self, ray: &Ray, max_t: f32, mask: Layers, out: &mut Vec<MeshHit>) {
+        let start = out.len();
+        self.bvh.query_ray(ray, max_t, mask, 0.0, &mut |i, _| {
+            if let Some(hit) = self.triangles[*i as usize].raycast(ray, max_t) {
+                out.push(MeshHit {
+                    t: hit.t,
+                    point: hit.point,
+                    normal: hit.normal,
+                    triangle: *i,
+                });
+            }
+            // Never claim a hit, so the tree keeps offering every triangle the ray reaches.
+            None
+        });
+        out[start..].sort_by(|a, b| a.t.total_cmp(&b.t).then(a.triangle.cmp(&b.triangle)));
+    }
+
+    /// The first triangle a moving shape touches: `center` is where the shape starts, `reach` the
+    /// half size of the box around it, and `test` the exact sweep against one triangle (a fraction
+    /// of `delta`). The nearest wins, and a tie goes to the lower triangle index, so the answer
+    /// does not depend on the shape of the tree.
+    fn first_touch(
+        &self,
+        center: Vec3,
+        reach: Vec3,
+        delta: Vec3,
+        mask: Layers,
+        test: impl Fn(&Triangle) -> Option<SweepHit>,
+    ) -> Option<(SweepHit, u32)> {
+        let len = delta.length();
+        let mut found: Option<(SweepHit, u32, f32)> = None;
+        let mut offer = |hit: SweepHit, i: u32, distance: f32| {
+            if found
+                .as_ref()
+                .is_none_or(|(_, j, d)| distance < *d || (distance == *d && i < *j))
+            {
+                found = Some((hit, i, distance));
+            }
+        };
+        if len <= 1e-12 {
+            let region = Aabb::from_center_half(center, reach);
+            self.bvh.query_aabb(&region, mask, &mut |i| {
+                if let Some(h) = test(&self.triangles[*i as usize]) {
+                    offer(h, *i, 0.0);
+                }
+            });
+        } else {
+            let ray = Ray::new(center, delta)?;
+            self.bvh
+                .query_ray(&ray, len, mask, reach.max_element(), &mut |i, best| {
+                    let hit = test(&self.triangles[*i as usize])?;
+                    let distance = hit.t * len;
+                    if distance > best {
+                        return None;
+                    }
+                    offer(hit, *i, distance);
+                    Some(distance)
+                });
+        }
+        found.map(|(hit, i, _)| (hit, i))
+    }
+
     /// Move a sphere from `center` by `delta` and find the first triangle it touches, among
-    /// triangles on a layer of `mask`: the sweep, and the triangle's index. A sphere that already
-    /// overlaps a triangle is reported at `t = 0`. A zero `delta` checks for overlap only.
+    /// triangles on a layer of `mask`: the sweep, and the triangle's index (the lower index of
+    /// two at the same distance). A sphere that already overlaps a triangle is reported at
+    /// `t = 0`. A zero `delta` checks for overlap only.
     pub fn sweep_sphere(
         &self,
         center: Vec3,
@@ -758,34 +1108,85 @@ impl TriMesh {
         if !center.is_finite() || !delta.is_finite() || !radius.is_finite() || radius < 0.0 {
             return None;
         }
-        let len = delta.length();
-        let mut found: Option<(SweepHit, u32)> = None;
-        if len <= 1e-12 {
-            let region = Aabb::from_center_half(center, Vec3::splat(radius));
-            self.bvh.query_aabb(&region, mask, &mut |i| {
-                if found.is_none()
-                    && let Some(h) =
-                        self.triangles[*i as usize].sweep_sphere(center, radius, Vec3::ZERO)
-                {
-                    found = Some((h, *i));
-                }
-            });
-            return found;
+        self.first_touch(center, Vec3::splat(radius), delta, mask, |t| {
+            t.sweep_sphere(center, radius, delta)
+        })
+    }
+
+    /// Move the capsule around the segment `a..b` (with `radius`) by `delta` and find the first
+    /// triangle it touches, among triangles on a layer of `mask`, as
+    /// [`TriMesh::sweep_sphere`] does for a sphere ([`Triangle::sweep_capsule`];
+    /// [`SweepHit::position`] is the middle of the segment).
+    pub fn sweep_capsule(
+        &self,
+        a: Vec3,
+        b: Vec3,
+        radius: f32,
+        delta: Vec3,
+        mask: Layers,
+    ) -> Option<(SweepHit, u32)> {
+        if !a.is_finite()
+            || !b.is_finite()
+            || !delta.is_finite()
+            || !radius.is_finite()
+            || radius < 0.0
+        {
+            return None;
         }
-        let ray = Ray::new(center, delta)?;
-        self.bvh
-            .query_ray(&ray, len, mask, radius, &mut |i, best| {
-                let hit = self.triangles[*i as usize].sweep_sphere(center, radius, delta)?;
-                let distance = hit.t * len;
-                if distance > best {
-                    return None;
-                }
-                if found.is_none() || distance < best {
-                    found = Some((hit, *i));
-                }
-                Some(distance)
-            })?;
-        found
+        let reach = (b - a).abs() * 0.5 + Vec3::splat(radius);
+        self.first_touch((a + b) * 0.5, reach, delta, mask, |t| {
+            t.sweep_capsule(a, b, radius, delta)
+        })
+    }
+
+    /// Move an axis-aligned box (its `center` and `half` size) by `delta` and find the first
+    /// triangle it touches, among triangles on a layer of `mask`, as [`TriMesh::sweep_sphere`]
+    /// does for a sphere ([`Triangle::sweep_aabb`]).
+    pub fn sweep_aabb(
+        &self,
+        center: Vec3,
+        half: Vec3,
+        delta: Vec3,
+        mask: Layers,
+    ) -> Option<(SweepHit, u32)> {
+        if !center.is_finite()
+            || !delta.is_finite()
+            || !half.is_finite()
+            || !half.cmpge(Vec3::ZERO).all()
+        {
+            return None;
+        }
+        self.first_touch(center, half, delta, mask, |t| {
+            t.sweep_aabb(center, half, delta)
+        })
+    }
+
+    /// Call `visit` with every triangle (by index) the capsule around the segment `a..b` with
+    /// `radius` touches, among triangles on a layer of `mask`, in tree order.
+    pub fn query_capsule(
+        &self,
+        a: Vec3,
+        b: Vec3,
+        radius: f32,
+        mask: Layers,
+        visit: &mut impl FnMut(u32),
+    ) {
+        let region = Aabb::new(a.min(b), a.max(b)).expanded(radius);
+        self.bvh.query_aabb(&region, mask, &mut |i| {
+            if self.triangles[*i as usize].overlaps_capsule(a, b, radius) {
+                visit(*i);
+            }
+        });
+    }
+
+    /// Call `visit` with every triangle (by index) that shares a point with the axis-aligned box
+    /// `region`, among triangles on a layer of `mask`, in tree order.
+    pub fn query_box(&self, region: &Aabb, mask: Layers, visit: &mut impl FnMut(u32)) {
+        self.bvh.query_aabb(region, mask, &mut |i| {
+            if self.triangles[*i as usize].overlaps_aabb(region) {
+                visit(*i);
+            }
+        });
     }
 
     /// Call `visit` with every triangle (by index) within `radius` of `center`, among triangles on
@@ -806,6 +1207,10 @@ impl TriMesh {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "sweep_tests.rs"]
+mod sweep_tests;
 
 #[cfg(test)]
 mod tests {
