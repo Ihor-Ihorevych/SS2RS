@@ -24,7 +24,7 @@ Phase 2; until then keep quality tiers as plain settings and avoid designs that 
 
 ## Models & materials (Wave 1) — M1/M2
 - [ ] **T04-005** · Static mesh path: vertex layouts from `.bmf`, index buffers, LOD select, per-draw uniforms · `M` · `P0` · Deps: T02-014
-- [ ] **T04-006** · GPU skinning, bone palette upload, animation pose → buffer, attachments (weapon on hand) · `L` · `P0` · Deps: T02-015/016
+- [~] **T04-006** [INPRG @Ihor-Ihorevych/agent · branch `T04-006-gpu-skinning-bone-palette` · 2026-11-28] · GPU skinning, bone palette upload, animation pose → buffer, attachments (weapon on hand) · `L` · `P0` · Deps: T02-015/016
 - [ ] **T04-007** · Material system: `MaterialDesc` (from `.mtr`) → pipeline + bind groups; permutation cache; **on-disk pipeline cache** to avoid shader-compile hitches (esp. Android) · `L` · `P0` · Deps: T02-018, T05-*
 - [x] **T04-008** · Texture sampling: filtering, anisotropy, mip bias, sRGB/linear rules, normal-map decode, cubemaps: `ss2_render_api::texture_sampling` (`docs/TEXTURE_SAMPLING.md`): colour-space rules by usage, the sampler choice from quality settings and device limits, the render-scale mip bias, the texture-detail mip skip, the sRGB curve, normal-map decode and cube-face addressing; **no wgpu samplers or textures, no compression, no shader code** (T04-008b) · `M` · `P0`
 - [ ] **T04-008b** · Use the sampling rules on the GPU: create wgpu samplers from `SamplerDesc`, pick sRGB or linear formats by `TextureUsage`, skip mips on load, write the shader-side normal decode and cube lookup and check them against these functions, and cover compressed formats (BC5/BC7, ASTC) · `M` · `P0` · Deps: T04-008, T04-001, T04-003b
