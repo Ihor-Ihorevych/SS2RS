@@ -9,7 +9,7 @@ struct Camera {
     eye: vec4<f32>,
     // rgb: linear fog colour; a: strength (0: no fog).
     fog_colour: vec4<f32>,
-    // x: near, y: far (RFC 0013 amendment 4: linear in view distance).
+    // x: near, y: far (RFC 0013 amendment 4: linear in view depth); z: 1 = the sky takes the flat fog colour.
     fog_range: vec4<f32>,
 };
 
@@ -118,11 +118,12 @@ fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
     // Sampled for every fragment (uniform control flow); used only when the material is lightmapped.
     let baked = textureSample(lightmap_texture, lightmap_sampler, f.lightmap_uv).rgb;
     let light = select(vec3<f32>(shade), baked, material.params.z > 0.5);
-    // Linear fog in view depth (along the camera's forward axis, which `light_dir` holds); the sky (unlit) is never
-    // fogged.
+    // Linear fog in view depth (along the camera's forward axis, which `light_dir` holds).
     let d = dot(f.world - camera.eye.xyz, camera.light_dir.xyz);
     let span = max(camera.fog_range.y - camera.fog_range.x, 1e-4);
     let fog = camera.fog_colour.a * clamp((d - camera.fog_range.x) / span, 0.0, 1.0);
-    let amount = select(fog, 0.0, material.params.y > 0.5);
+    // The sky (unlit) is not fogged by depth: with the option it takes the whole fog colour while a haze is active
+    // (the original's simple shader writes a constant full fog, T01-429), otherwise none.
+    let amount = select(fog, camera.fog_colour.a * camera.fog_range.z, material.params.y > 0.5);
     return vec4<f32>(mix(texel.rgb * light, camera.fog_colour.rgb, amount), 1.0);
 }

@@ -40,8 +40,11 @@ The mouse is captured while you play; after switching to another window, click t
 
 ## What you will notice
 
-- Lighting is a flat light from the camera; there are no lightmaps, sky, fog or water surfaces yet.
+- Levels have their baked lightmaps (about 99 % of lit objects; the rest keep a flat light from the camera), their
+  sky, distance haze and bloom. There are no water surfaces, animated models or dynamic lights yet.
+- In a haze the sky stays visible. The original draws the whole sky in the flat fog colour there; to get that, start
+  with `--set sky_fog=on` (or set `sky_fog = true` in `settings.toml`).
 - Collision uses each model's own collision mesh; the few models without one (about 10 of 2,000) collide with
   their coarsest drawn shape.
-- Single-player levels start at a chapter marker, because the real start rule is not specified yet (T01-210).
-- 109 world-embedded models and some textures in old development formats are left out (listed in the log).
+- Single-player levels start where the original starts them (the world's first chapter).
+- A few world-embedded models with nothing to draw are left out (listed in the log).

@@ -653,6 +653,8 @@ impl PlatformApp for App {
                 self.state.settings.vsync,
             )
             .map_err(|e| format!("cannot start the renderer: {e}"))?;
+            let mut renderer = renderer;
+            renderer.set_sky_fog(self.state.settings.sky_fog);
             self.renderer = Some(renderer);
         }
         self.window = Some(window.clone());

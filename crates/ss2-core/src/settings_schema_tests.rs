@@ -63,6 +63,7 @@ fn a_roundtrip_keeps_every_value_with_the_version_present() {
         master_volume: 0.25,
         music_volume: 0.5,
         sfx_volume: 0.75,
+        sky_fog: true,
     };
     saved.save_to(&path).unwrap();
     assert_eq!(Settings::load_from(&path), saved);

@@ -878,3 +878,45 @@ fn a_bright_square_glows_past_its_edge_and_a_zero_fade_adds_nothing() {
     let off = r.render_world_to_image(&camera(), None, black).unwrap();
     assert_eq!(off.pixels, plain.pixels);
 }
+
+#[test]
+fn with_the_sky_fog_option_the_sky_takes_the_flat_fog_colour_only_while_there_is_fog() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    test_sky(&mut r);
+    let blue = ss2_render_api::scene_data::Fog {
+        colour: [0.0, 0.0, 1.0],
+        near: 10.0,
+        far: 20.0,
+        strength: 1.0,
+    };
+    let clear = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    // The option alone changes nothing without fog.
+    r.set_sky_fog(true);
+    assert_eq!(
+        r.render_world_to_image(&camera(), None, SKY)
+            .unwrap()
+            .pixels,
+        clear.pixels
+    );
+    // With fog the whole sky is the fog colour, whatever its faces show.
+    r.set_fog(Some(blue)).unwrap();
+    let fogged = r.render_world_to_image(&camera(), None, SKY).unwrap();
+    for (x, y) in [(5, 5), (32, 32), (60, 50)] {
+        assert!(
+            close(px(&fogged, x, y), [0, 0, 255, 255], 2),
+            "{:?}",
+            px(&fogged, x, y)
+        );
+    }
+    // Off again: the sky is clear even in fog.
+    r.set_sky_fog(false);
+    assert_eq!(
+        r.render_world_to_image(&camera(), None, SKY)
+            .unwrap()
+            .pixels,
+        clear.pixels
+    );
+}
