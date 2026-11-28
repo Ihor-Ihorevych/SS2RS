@@ -41,6 +41,9 @@ def check_world(name, d, st, dist):
         parts = list(m.get("CMechanism.1")); parts_total += len(parts)
         st["mechanisms with a renderable (.6)"] += m.get("CMechanism.6").oid in objs
         st["mechanism renderable: CAspect.5 owner is an entity that owns this mechanism (CStaticModelEntity.10 or similar)"] += 0
+        rend_oid = m.get("CMechanism.6").oid
+        owner_ent = objs[rend_oid].get("CAspect.5").oid if rend_oid in objs else NULL
+        dist["T01-066: mechanism (via renderable CMechanism.6 -> CAspect.5) owner entity class"][allo[owner_ent].type if owner_ent in allo and isinstance(allo[owner_ent], Obj) else "(no owner)"] += 1
         for k, p in enumerate(parts):
             h = p.get("CMechanismPart.5"); b = p.get("CMechanismPart.3"); j = p.get("CMechanismPart.2")
             hn = h.oid != NULL; bn = b.oid != NULL
@@ -70,6 +73,9 @@ def check_world(name, d, st, dist):
         if mp != NULL:
             mpart = hull_of_part.get(hi) == mp or (bp != NULL and body_of_part.get(bp) == mp)
             st["... that mechanism lists the hull (directly, or through its body)"] += mpart
+            if not mpart:
+                owner_ent = objs[bp].get("CAspect.5").oid if bp != NULL and bp in objs else NULL
+                dist["T01-066: 111 unlisted hulls: (hull class, owning entity class)"][(h.type, allo[owner_ent].type if owner_ent in allo and isinstance(allo[owner_ent], Obj) else "(no body/entity)")] += 1
             pos = hull_part_pos.get((mp, hi)) if (mp, hi) in hull_part_pos else (body_part_pos.get((mp, bp)) if bp != NULL else None)
             if pos is not None: st["hull .10 == position of its part in the mechanism's part list"] += h.get("CHull.10") == pos; st["... hulls compared"] += 1
         dist["collision layer (CHull.2)"][(idnt[h.get("CHull.2")])] += 1
@@ -130,6 +136,15 @@ def check_world(name, d, st, dist):
             st["... chain == joints whose CJoint.3 or CJoint.5 is the body"] += sorted(got) == sorted(both)
             st["... chain is a subset of the joints naming the body (.3 or .5)"] += set(got) <= set(both)
             st["... chain length 1"] += len(got) == 1
+            # T01-066: CJoint::GetNextInBody alternates .4 (if this body is the joint's .3) / .6 (if .5) -- test against this body's joint set
+            got2 = []; cur = first; seen2 = set()
+            while cur != NULL and cur in objs and cur not in seen2:
+                got2.append(cur); seen2.add(cur); j = objs[cur]
+                if j.get("CJoint.3").oid == bi: cur = j.get("CJoint.4").oid
+                elif j.get("CJoint.5").oid == bi: cur = j.get("CJoint.6").oid
+                else: cur = NULL
+            st["T01-066: CBody.1 then alternating .4 (if body==.3) / .6 (if body==.5) chain == joints naming the body (.3 or .5)"] += sorted(got2) == sorted(both)
+            st["T01-066: ...is a superset-or-equal of the old .4-only chain"] += set(got) <= set(got2)
     # --- motion handlers
     mh = {i: o for i, o in objs.items() if isinstance(o, Obj) and o.type == "CMechanismMotionHandler"}
     for i, h in mh.items():

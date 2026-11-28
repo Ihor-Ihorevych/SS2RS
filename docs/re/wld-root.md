@@ -69,7 +69,7 @@ An entity is an object of a class deriving from `CEntity`; the **class is the ob
 | `CPhysicsDomain` | `.1` | the **bodies**: `CDynamicBody` 2,076, `CHybridBody` 1,259, `CKinematicBody` 1,194 |
 | | `.2` | a subset of `.1` (identical in 30 worlds, a proper subset in 29): probably the bodies that are simulated |
 | `CScriptingDomain` | `.4` | → the `CStateManager` |
-| | `.2` | list of steppers: pairs (→ entity of the world, int); 1 to 11 per world |
+| | `.2` | list of steppers: pairs (→ entity of the world, priority int); 1 to 11 per world; the priority is **0 in all 151 stored pairs over the 59 worlds** (`main-loop.md` section 5.1, T01-087) |
 | | `.3` | always 1 (not the stepper count) |
 | `CMacroDomain` | `md_ateEvents`, `md_ulUniqueEventID` | empty list and 0 in the sample (part g) |
 | sync lists | | `CSoundSyncList` (`.3` has 0 to 53 entries, `.4` always 0 entries, `.7` 0 to 9, plus `Time` values), `CMovieSyncList.1`, `CVibroSyncList` (`.1`, `.3`, `.4`): contents not analysed |
@@ -101,7 +101,7 @@ How the cells of the quadtree map to the plane and how it is walked is in `wld-v
 
 ## State manager and `Time`
 
-`CStateManager` holds a few `Time` values, a `CSMEntry` structure (`.9`), a `CEntryList` (`.10`: `CEntryList.1` the list of `CSMEntry`, plus `.2`, `.3`, `.4`) and further lists. An entry has a `CMetaHandle` (an object id, null or an entity of the world in all 59 worlds), a `Time` and a set of small ints (−1 mostly). In every world the entry list has fewer than 50 entries. The semantics (scheduled "steps" of entities) are unknown.
+`CStateManager` holds a few `Time` values, a `CSMEntry` structure (`.9`), a `CEntryList` (`.10`: `CEntryList.1` the list of `CSMEntry`, plus `.2`, `.3`, `.4`) and further lists. An entry has a `CMetaHandle` (an object id, null or an entity of the world in all 59 worlds), a `Time` and a set of small ints (−1 mostly). In every world the entry list has fewer than 50 entries (in fact exactly **one** in every one of the 59). **The semantics are the per-world think queue** (`main-loop.md` section 7, T01-087): the handle, the `Time` is the entry's due time, one of the small ints (`CSMEntry.12`) is the scheduled state/function id, and the rest are unused pool bookkeeping, always `-1` for a live entry.
 
 `Time` is a structure with one member `Time.1`, a signed 64-bit integer. The data supports **seconds × 2³²** (fixed point with 32 fractional bits): of 164,223 values 159,012 are whole multiples of 2³²; the value `−429,496,729,600` = **−100.0 s** (71,369 times) and `0` (84,966 times) are the common sentinels, `−1` s and `−1000` s occur too; a cluster of values near `1.7016×10⁹ s` decodes to a Unix timestamp in late 2023 (perhaps a modification time). Raw `−1` (211 times) is a separate marker. Confidence medium.
 
@@ -121,6 +121,6 @@ How the cells of the quadtree map to the plane and how it is walked is in `wld-v
 ## Open questions
 
 - Bit meanings of `CAspect.6` and `CBaseEntity.1` (`0x2`); `CEntity.5`/`.6` (always 0); `CWorld.19`, `CWorld.11` and the exact role of `CWorld.9`.
-- Exact meaning of `CRenderingDomain.8`, `CPhysicsDomain.2` and `CCollisionDomain.3`; contents of the sync lists, the state manager and the steppers.
+- Exact meaning of `CRenderingDomain.8`, `CPhysicsDomain.2` and `CCollisionDomain.3`; contents of the sync lists. (The state manager and the steppers are now specified: `main-loop.md` sections 5.1 and 7, T01-087.)
 - The quadtree geometry of the grids; whether a loader can rebuild the grids from the placements (they look like pure acceleration structures, but this was not proven).
 - Everything below the entity level is in the other parts: models and placement (a), lights and baked lightmaps (b), visibility boxes (c, `wld-visibility.md`), entity classes and their properties (d, `wld-entities.md`), navigation (e), scripting (g), sound and effects (h), physics bodies (i).

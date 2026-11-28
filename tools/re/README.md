@@ -317,6 +317,7 @@ Main loop and time evidence (docs/re/main-loop.md):
 
 ```
 python -I tools/re/mainloop_verify.py "C:\path\to\Serious Sam 2"    # the configuration scripts of the install and every line that sets a timing variable (a few seconds); the loop itself is specified from the binaries and has no script
+python -I tools/re/think_queue_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-087: per-step entity (CEntityStepper) priorities and registration order, the stored CSMEntry layout, and the think-queue's due-time order and tie search, over every world (about 2 minutes); N = only the N smallest
 ```
 
 Save-game evidence (docs/re/save-game.md):
@@ -371,6 +372,12 @@ Weapon pickups (docs/re/weapon-pickups.md):
 
 ```
 python -I tools/re/weapon_pickups_verify.py "C:\path\to\Serious Sam 2"    # the weapon index to parameter file table checked against the install (single player, deathmatch and rendering files with their classes), the leftover weapon files, the combo-weapons setting and that no world has the combo pickup (about 2 minutes; the file names come from the binary and are quoted in the spec, the script reads data only)
+```
+
+Weapon run-time behaviour (docs/re/weapon-runtime-behaviour.md):
+
+```
+python -I tools/re/weapon_runtime_verify.py "C:\path\to\Serious Sam 2" [--table OUT.md]    # one consolidated row per player weapon (ammunition cost/cap, magazine, fire period, damage, damage type, spread), read fresh from every weapon and projectile file, plus a cross-check that SBaseProjectileParams has exactly one damage-type member across all 94 projectile files (about 1 minute; the rules and the b.N/s.N/p.N member names come from the prerequisite specs, the script reads data only)
 ```
 
 Mounted tools and throw descriptions (docs/re/mounted-tools.md):
