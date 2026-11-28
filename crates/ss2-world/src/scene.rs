@@ -17,7 +17,7 @@
 use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_render_api::scene_data::{
-    AlphaMode, Fog, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
+    AlphaMode, Bloom, Fog, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
 pub use ss2_render_api::scene_data::{CubeFace, FaceBasis};
 use ss2_render_api::{Aabb, Transform};
@@ -128,6 +128,79 @@ pub struct LevelScene {
     pub sky: Option<SkyData>,
     /// The haze volumes, in the file's list order (RFC 0013 amendment 4); see [`LevelScene::fog_at`].
     pub hazes: Vec<HazeVolume>,
+    /// The bloom volumes, in the file's list order (RFC 0013 amendment 6); see [`LevelScene::blooms_at`].
+    pub blooms: Vec<BloomVolume>,
+}
+
+/// One bloom volume (`docs/re/environment.md`, "Bloom"): a box like a haze's, fading in over `fade_margin` as the eye
+/// goes in, and the numbers of the original's bloom chain.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BloomVolume {
+    /// The box's low corner in the volume's own frame.
+    pub min: Vec3,
+    /// The box's high corner in the volume's own frame.
+    pub max: Vec3,
+    /// How the volume's frame is turned about the world origin.
+    pub rotation: Quat,
+    /// Linear RGBA added at the end of the chain (renderable `.3`).
+    pub colour: [f32; 4],
+    /// The edge fade distance (`.2`), at least [`HazeVolume::MIN_FADE_MARGIN`].
+    pub fade_margin: f32,
+    /// The strength multiplier (renderable `.4`, record `.6`).
+    pub strength: f32,
+    /// The blur spread (renderable `.6`, record `.8`).
+    pub blur: f32,
+    /// How the two blur taps share the spread (renderable `.12`, record `.13`).
+    pub balance: f32,
+    /// The high-pass amount (renderable `.13`, record `.16`).
+    pub high_pass: f32,
+    /// Where on the fixed colour ramp the tint samples (renderable `.18`, the record's second `.21`).
+    pub ramp: f32,
+}
+
+impl BloomVolume {
+    /// How strongly the bloom applies with the eye at `eye`, by the same edge fade as [`HazeVolume::fade`].
+    pub fn fade(&self, eye: Vec3) -> f32 {
+        box_fade(self.min, self.max, self.rotation, self.fade_margin, eye)
+    }
+}
+
+/// The edge fade shared by haze and bloom: 1 inside the box shrunk by `margin` on every face (never past its
+/// centre), falling linearly to 0 at the box's own faces, 0 outside; measured in the box's turned frame.
+fn box_fade(min: Vec3, max: Vec3, rotation: Quat, margin: f32, eye: Vec3) -> f32 {
+    let local = rotation.inverse() * eye;
+    let margin = margin.max(HazeVolume::MIN_FADE_MARGIN);
+    let centre = (min + max) * 0.5;
+    let lo = (min + Vec3::splat(margin)).min(centre);
+    let hi = (max - Vec3::splat(margin)).max(centre);
+    let outside = (lo - local).max(local - hi).max(Vec3::ZERO);
+    1.0 - (outside.length() / margin).clamp(0.0, 1.0)
+}
+
+/// Bad numbers in a bloom, if any.
+fn bloom_problem(b: &BloomVolume) -> Option<String> {
+    let numbers = [b.strength, b.blur, b.balance, b.high_pass, b.ramp];
+    let finite = b.min.is_finite()
+        && b.max.is_finite()
+        && b.colour.iter().all(|c| c.is_finite())
+        && b.fade_margin.is_finite()
+        && numbers.iter().all(|n| n.is_finite());
+    if !finite {
+        return Some("is not finite".into());
+    }
+    if b.min.cmpgt(b.max).any() {
+        return Some(format!("box {} .. {} is inside out", b.min, b.max));
+    }
+    if !b.rotation.is_finite() || (b.rotation.length_squared() - 1.0).abs() > 1e-3 {
+        return Some(format!("rotation {:?}", b.rotation));
+    }
+    if b.fade_margin < HazeVolume::MIN_FADE_MARGIN {
+        return Some(format!("fade margin {}", b.fade_margin));
+    }
+    if numbers.iter().any(|n| *n < 0.0) {
+        return Some(format!("negative chain numbers {numbers:?}"));
+    }
+    None
 }
 
 /// One haze volume (`docs/re/environment.md`, "Haze"): a box with a colour and a linear fog range, fading in over
@@ -158,14 +231,7 @@ impl HazeVolume {
     /// How strongly the volume applies with the eye at `eye`: 1 inside the box shrunk by `fade_margin` on every face,
     /// falling linearly to 0 at the box's own faces and 0 outside (the original's edge fade).
     pub fn fade(&self, eye: Vec3) -> f32 {
-        let local = self.rotation.inverse() * eye;
-        let margin = self.fade_margin.max(Self::MIN_FADE_MARGIN);
-        let centre = (self.min + self.max) * 0.5;
-        // Shrink by the margin, but never past the centre.
-        let lo = (self.min + Vec3::splat(margin)).min(centre);
-        let hi = (self.max - Vec3::splat(margin)).max(centre);
-        let outside = (lo - local).max(local - hi).max(Vec3::ZERO);
-        1.0 - (outside.length() / margin).clamp(0.0, 1.0)
+        box_fade(self.min, self.max, self.rotation, self.fade_margin, eye)
     }
 }
 
@@ -330,7 +396,32 @@ impl LevelScene {
                 return bad(format!("haze {i} {problem}"));
             }
         }
+        for (i, b) in self.blooms.iter().enumerate() {
+            if let Some(problem) = bloom_problem(b) {
+                return bad(format!("bloom {i} {problem}"));
+            }
+        }
         Ok(())
+    }
+
+    /// The blooms active with the eye at `eye` (RFC 0013 amendment 6): every volume whose edge fade is above 0, in
+    /// list order (the original runs each one's chain in turn; its exact order is open, T01-422).
+    pub fn blooms_at(&self, eye: Vec3) -> Vec<Bloom> {
+        self.blooms
+            .iter()
+            .filter_map(|b| {
+                let fade = b.fade(eye);
+                (fade > 0.0).then_some(Bloom {
+                    colour: b.colour,
+                    fade: fade.clamp(0.0, 1.0),
+                    strength: b.strength,
+                    blur: b.blur,
+                    balance: b.balance,
+                    high_pass: b.high_pass,
+                    ramp: b.ramp,
+                })
+            })
+            .collect()
     }
 
     /// The fog with the eye at `eye` (RFC 0013 amendment 4, `docs/re/environment.md` "Combining several hazes",
@@ -491,12 +582,28 @@ impl LevelScene {
                 viewer_height: 0.0,
             }),
             hazes: vec![TEST_HAZE],
+            blooms: vec![TEST_BLOOM],
         }
     }
 }
 
 /// [`LevelScene::test_room`]'s haze: the far (-Z) half of the room, fading in over the metre before its south face at
 /// z = 0, a blue-grey fog from 2 m to 15 m.
+/// [`LevelScene::test_room`]'s bloom: the near (+Z) half of the room, where the spawn stands, fading in over the
+/// metre past its north face at z = 0; numbers like `1_3_Village`'s (`docs/re/environment.md`).
+pub const TEST_BLOOM: BloomVolume = BloomVolume {
+    min: Vec3::new(-10.0, -1.0, 0.0),
+    max: Vec3::new(10.0, 4.0, 10.0),
+    rotation: Quat::IDENTITY,
+    colour: [0.06, 0.045, 0.02, 1.0],
+    fade_margin: 1.0,
+    strength: 1.2422,
+    blur: 1.0,
+    balance: 1.0,
+    high_pass: 0.15,
+    ramp: 1.5,
+};
+
 pub const TEST_HAZE: HazeVolume = HazeVolume {
     min: Vec3::new(-10.0, -1.0, -10.0),
     max: Vec3::new(10.0, 4.0, 0.0),
@@ -948,5 +1055,67 @@ mod haze_tests {
         assert!(check(&|h| h.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 2.0)));
         assert!(check(&|h| h.fade_margin = 0.0));
         assert!(check(&|h| h.far = 1.0));
+    }
+}
+
+#[cfg(test)]
+mod bloom_tests {
+    use super::*;
+
+    #[test]
+    fn a_bloom_is_active_inside_its_box_with_the_haze_edge_fade() {
+        let room = LevelScene::test_room();
+        room.validate().unwrap();
+        let at_spawn = room.blooms_at(room.start().position + Vec3::Y);
+        assert_eq!(at_spawn.len(), 1, "the spawn stands in the bloom");
+        assert_eq!(at_spawn[0].fade, 1.0);
+        assert_eq!(at_spawn[0].strength, TEST_BLOOM.strength);
+        at_spawn[0].validate().unwrap();
+        assert!((TEST_BLOOM.fade(Vec3::new(0.0, 1.0, 0.5)) - 0.5).abs() < 1e-5);
+        assert!(
+            room.blooms_at(Vec3::new(0.0, 1.0, -5.0)).is_empty(),
+            "the far half has none"
+        );
+        // Same fade rule as haze for the same box.
+        let haze = HazeVolume {
+            min: TEST_BLOOM.min,
+            max: TEST_BLOOM.max,
+            rotation: TEST_BLOOM.rotation,
+            fade_margin: TEST_BLOOM.fade_margin,
+            ..TEST_HAZE
+        };
+        for z in [-1.0, 0.0, 0.3, 0.7, 1.0, 5.0, 9.5, 11.0] {
+            let eye = Vec3::new(0.0, 1.0, z);
+            assert_eq!(TEST_BLOOM.fade(eye), haze.fade(eye), "z = {z}");
+        }
+    }
+
+    #[test]
+    fn several_blooms_stay_separate_in_list_order() {
+        let mut room = LevelScene::test_room();
+        room.blooms.push(BloomVolume {
+            ramp: 2.0,
+            ..TEST_BLOOM
+        });
+        let active = room.blooms_at(room.start().position + Vec3::Y);
+        assert_eq!(
+            active.iter().map(|b| b.ramp).collect::<Vec<_>>(),
+            [1.5, 2.0]
+        );
+    }
+
+    #[test]
+    fn bad_blooms_are_refused() {
+        let check = |f: &dyn Fn(&mut BloomVolume)| {
+            let mut room = LevelScene::test_room();
+            f(&mut room.blooms[0]);
+            room.validate().is_err()
+        };
+        assert!(!check(&|_| {}));
+        assert!(check(&|b| b.min.z = 50.0));
+        assert!(check(&|b| b.strength = f32::NAN));
+        assert!(check(&|b| b.blur = -1.0));
+        assert!(check(&|b| b.fade_margin = 0.0));
+        assert!(check(&|b| b.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 2.0)));
     }
 }
