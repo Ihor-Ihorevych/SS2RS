@@ -137,11 +137,11 @@ fn every_level_collides_with_its_collision_meshes_and_a_walker_lands_at_its_star
         fallback_names.len()
     );
     assert!(failures.is_empty(), "{failures:#?}");
-    // Measured: the three levels whose start stands on an embedded world model (a `Terrain`
-    // or `StaticModel096` entity that `load_level` skips); the fallback render LOD fails there
+    // Measured: the two levels whose start stands on an embedded world model (a `Terrain` or
+    // `StaticModel096` entity that `load_level` skips); the fallback render LOD fails there
     // the same way. Every other level's walker lands.
     on_embedded.sort();
-    assert_eq!(on_embedded, ["7_7_mental", "dm_cliff", "dm_stadium"]);
+    assert_eq!(on_embedded, ["dm_cliff", "dm_stadium"]);
     assert_eq!(landed + on_embedded.len(), levels.len());
     assert!(
         total_real > total_fallback,

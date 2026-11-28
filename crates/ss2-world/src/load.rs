@@ -22,8 +22,9 @@
 //!   collide with their own **collision mesh** ([`ss2_format_bmf::CollisionMesh`], `bmf.md`;
 //!   `wld-geometry.md`: a `CModelHull` uses the model's collision mesh), in model space like the
 //!   render meshes; a model without one (or with an empty one) collides with its last PC level of
-//!   detail (the coarsest) instead ([`CollisionData::from_collision_mesh`] tells which). Only a model's first mesh instance is used (`mdl.md`: how the engine uses the
-//!   second instance of 7 models is not specified). Surfaces sharing a material are merged into
+//!   detail (the coarsest) instead ([`CollisionData::from_collision_mesh`] tells which). Only a
+//!   model's first mesh instance is used (`mdl.md`: how the engine uses the second instance of 7
+//!   models is not specified). Surfaces sharing a material are merged into
 //!   one [`ModelPart`].
 //! - **UVs**: the stream whose UV map id is the one the material's base colour slot names
 //!   (`mtr.md`, reader rule 4), else the first stream. Coordinates are kept as authored: `bmf.md`
