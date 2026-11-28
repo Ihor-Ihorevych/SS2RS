@@ -19,6 +19,7 @@ use ss2_render_api::{Aabb, Camera, Frustum, Visibility};
 use wgpu::util::DeviceExt;
 
 use crate::context::RenderError;
+use crate::viewmodel::ViewModel;
 
 /// The depth buffer's format.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -176,6 +177,19 @@ pub(crate) struct WorldGpu {
     palette_layout: wgpu::BindGroupLayout,
     skinned_meshes: Vec<GpuSkinnedMesh>,
     skinned: Vec<GpuSkinnedDraw>,
+    /// The viewmodel pass's field of view (at 4:3) and near plane (T04-030, `ss2_render::viewmodel`); `None`
+    /// draws nothing. The camera itself is built fresh every frame by [`WorldGpu::encode_viewmodel`], since
+    /// the widening depends on that frame's aspect ratio ([`ViewModel::camera`]).
+    viewmodel_fov_near: Option<(f32, f32)>,
+    /// The viewmodel's draws, built the same way as `skinned` ([`WorldGpu::build_skinned_draw`]).
+    viewmodel_draws: Vec<GpuSkinnedDraw>,
+    /// The viewmodel pass's own camera uniform buffer and bind group (group 0 of `skinned_pipeline`), separate
+    /// from `camera`/`camera_group` so writing it cannot race the world pass recorded into the same encoder.
+    viewmodel_camera_buffer: wgpu::Buffer,
+    viewmodel_camera_group: wgpu::BindGroup,
+    /// The viewmodel pass's own depth attachment, cleared fresh every frame; never the world's `depth` (module
+    /// docs of `ss2_render::viewmodel`: the two passes share no depth buffer, so neither can occlude the other).
+    viewmodel_depth: Option<(wgpu::TextureView, (u32, u32))>,
     /// The sky cube: six quads, one per face in [`CubeFace::ALL`] order (6 indices each).
     sky_mesh: GpuMesh,
     /// The sky cube's matrix, written every frame (it follows the camera).
@@ -238,6 +252,20 @@ impl WorldGpu {
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: camera.as_entire_binding(),
+            }],
+        });
+        let viewmodel_camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("viewmodel camera"),
+            size: 128,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let viewmodel_camera_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viewmodel camera"),
+            layout: &camera_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: viewmodel_camera_buffer.as_entire_binding(),
             }],
         });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -480,6 +508,11 @@ impl WorldGpu {
             palette_layout,
             skinned_meshes: Vec::new(),
             skinned: Vec::new(),
+            viewmodel_fov_near: None,
+            viewmodel_draws: Vec::new(),
+            viewmodel_camera_buffer,
+            viewmodel_camera_group,
+            viewmodel_depth: None,
             sky_mesh,
             sky_instance,
             sky: None,
@@ -523,6 +556,8 @@ impl WorldGpu {
         self.sky = None;
         self.skinned_meshes.clear();
         self.skinned.clear();
+        self.viewmodel_fov_near = None;
+        self.viewmodel_draws.clear();
         self.generation += 1;
     }
 
@@ -851,6 +886,75 @@ impl WorldGpu {
             .collect())
     }
 
+    /// Build one skinned draw's GPU objects from `d`: the shared machinery behind [`WorldGpu::set_skinned`] and
+    /// [`WorldGpu::set_viewmodel`] (T04-030 reuses the world's skinned-draw path for the viewmodel pass rather
+    /// than a new mesh path).
+    fn build_skinned_draw(
+        &self,
+        device: &wgpu::Device,
+        d: &SkinnedDraw,
+    ) -> Result<GpuSkinnedDraw, RenderError> {
+        let mesh = self.skinned_mesh_index(d.mesh)?;
+        let texture = d.texture.map(|t| self.texture(t)).transpose()?;
+        let lightmap = d.lightmap.map(|t| self.texture(t)).transpose()?;
+        let cutoff = d.alpha_cutoff.unwrap_or(0.0);
+        if !d.tint.iter().all(|c| c.is_finite())
+            || !cutoff.is_finite()
+            || !d.transform.is_finite()
+            || !(d.bounds.min.is_finite() && d.bounds.max.is_finite())
+        {
+            return Err(RenderError::World(
+                "a non-finite tint, cutoff, transform or bounds".into(),
+            ));
+        }
+        let skin = Self::skin_bytes(&self.skinned_meshes[mesh as usize], &d.palette)?;
+        let mut palette_data = vec![0f32; MAX_BONES * 16];
+        palette_data[..skin.len()].copy_from_slice(&skin);
+        let palette = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("skinned palette"),
+            contents: bytemuck::cast_slice(&palette_data),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let palette_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("skinned palette"),
+            layout: &self.palette_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: palette.as_entire_binding(),
+            }],
+        });
+        let instance = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("skinned instance"),
+            contents: bytemuck::cast_slice(&d.transform.to_cols_array()),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+        let (view, sampler) = match texture {
+            Some(t) => (
+                &t.view,
+                &self.samplers[usize::from(t.repeat_u) + 2 * usize::from(t.repeat_v)],
+            ),
+            None => (&self.white, &self.samplers[3]),
+        };
+        let material = self.material(
+            device,
+            view,
+            sampler,
+            d.tint,
+            cutoff,
+            false,
+            lightmap.map(|l| &l.view),
+        );
+        Ok(GpuSkinnedDraw {
+            mesh,
+            material,
+            instance,
+            palette,
+            palette_group,
+            transform: d.transform,
+            bounds: d.bounds,
+        })
+    }
+
     /// Replace the skinned draws; draw `i` of `draws` becomes skinned instance `i`. Nothing changes if it returns an
     /// error.
     pub(crate) fn set_skinned(
@@ -860,68 +964,46 @@ impl WorldGpu {
     ) -> Result<(), RenderError> {
         let mut planned = Vec::with_capacity(draws.len());
         for (i, d) in draws.iter().enumerate() {
-            let mesh = self.skinned_mesh_index(d.mesh)?;
-            let texture = d.texture.map(|t| self.texture(t)).transpose()?;
-            let lightmap = d.lightmap.map(|t| self.texture(t)).transpose()?;
-            let cutoff = d.alpha_cutoff.unwrap_or(0.0);
-            if !d.tint.iter().all(|c| c.is_finite())
-                || !cutoff.is_finite()
-                || !d.transform.is_finite()
-                || !(d.bounds.min.is_finite() && d.bounds.max.is_finite())
-            {
-                return Err(RenderError::World(format!(
-                    "skinned draw {i} has a non-finite tint, cutoff, transform or bounds"
-                )));
-            }
-            let skin = Self::skin_bytes(&self.skinned_meshes[mesh as usize], &d.palette)
-                .map_err(|e| RenderError::World(format!("skinned draw {i}: {e}")))?;
-            let mut palette_data = vec![0f32; MAX_BONES * 16];
-            palette_data[..skin.len()].copy_from_slice(&skin);
-            let palette = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("skinned palette"),
-                contents: bytemuck::cast_slice(&palette_data),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-            let palette_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("skinned palette"),
-                layout: &self.palette_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: palette.as_entire_binding(),
-                }],
-            });
-            let instance = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("skinned instance"),
-                contents: bytemuck::cast_slice(&d.transform.to_cols_array()),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
-            let (view, sampler) = match texture {
-                Some(t) => (
-                    &t.view,
-                    &self.samplers[usize::from(t.repeat_u) + 2 * usize::from(t.repeat_v)],
-                ),
-                None => (&self.white, &self.samplers[3]),
-            };
-            let material = self.material(
-                device,
-                view,
-                sampler,
-                d.tint,
-                cutoff,
-                false,
-                lightmap.map(|l| &l.view),
+            planned.push(
+                self.build_skinned_draw(device, d)
+                    .map_err(|e| RenderError::World(format!("skinned draw {i}: {e}")))?,
             );
-            planned.push(GpuSkinnedDraw {
-                mesh,
-                material,
-                instance,
-                palette,
-                palette_group,
-                transform: d.transform,
-                bounds: d.bounds,
-            });
         }
         self.skinned = planned;
+        Ok(())
+    }
+
+    /// Replace what the viewmodel pass draws (T04-030, `ss2_render::viewmodel`): `None` draws nothing from the
+    /// next frame on. Nothing changes if it returns an error (an out-of-range field of view or near plane, or
+    /// a draw with a stale or unknown mesh, a wrong-length palette or a non-finite value — the same checks
+    /// [`WorldGpu::set_skinned`] makes).
+    pub(crate) fn set_viewmodel(
+        &mut self,
+        device: &wgpu::Device,
+        viewmodel: Option<ViewModel>,
+    ) -> Result<(), RenderError> {
+        let Some(viewmodel) = viewmodel else {
+            self.viewmodel_fov_near = None;
+            self.viewmodel_draws.clear();
+            return Ok(());
+        };
+        // A representative aspect ratio is enough to catch a field of view or near plane that is out of range
+        // at every aspect ratio (the widening is the identity at 4:3, `ViewModel` module docs).
+        if viewmodel.camera(4.0 / 3.0).is_none() {
+            return Err(RenderError::World(format!(
+                "viewmodel: field of view {} (at 4:3) or near plane {} is out of range",
+                viewmodel.fov_x_at_4_3, viewmodel.near
+            )));
+        }
+        let mut planned = Vec::with_capacity(viewmodel.draws.len());
+        for (i, d) in viewmodel.draws.iter().enumerate() {
+            planned.push(
+                self.build_skinned_draw(device, d)
+                    .map_err(|e| RenderError::World(format!("viewmodel draw {i}: {e}")))?,
+            );
+        }
+        self.viewmodel_fov_near = Some((viewmodel.fov_x_at_4_3, viewmodel.near));
+        self.viewmodel_draws = planned;
         Ok(())
     }
 
@@ -1186,6 +1268,105 @@ impl WorldGpu {
             if !skinned_draw_visible(&frustum, d.bounds, d.transform) {
                 continue;
             }
+            let mesh = &self.skinned_meshes[d.mesh as usize];
+            pass.set_bind_group(1, &d.material, &[]);
+            pass.set_bind_group(2, &d.palette_group, &[]);
+            pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+            pass.set_vertex_buffer(1, d.instance.slice(..));
+            pass.set_vertex_buffer(2, mesh.lightmap_uvs.slice(..));
+            pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+        }
+    }
+
+    /// Draw the viewmodel pass (T04-030, `ss2_render::viewmodel`) into `view`, which already holds whatever the
+    /// world pass (and bloom) drew: its own camera, its own depth attachment (cleared fresh here, never the
+    /// world's `depth`), landing on top of everything so far. Does nothing with no viewmodel set, or an empty
+    /// one.
+    pub(crate) fn encode_viewmodel(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        size: (u32, u32),
+    ) {
+        let Some((fov_x_at_4_3, near)) = self.viewmodel_fov_near else {
+            return;
+        };
+        if self.viewmodel_draws.is_empty() {
+            return;
+        }
+        let aspect = size.0 as f32 / size.1.max(1) as f32;
+        // Built fresh every frame: the widening (`ViewModel` module docs) depends on this frame's aspect
+        // ratio, so the camera is not a fixed vertical field of view reused across resizes.
+        let Some(camera) = ViewModel::camera_for(fov_x_at_4_3, near, aspect) else {
+            return;
+        };
+        if self
+            .viewmodel_depth
+            .as_ref()
+            .is_none_or(|(_, s)| *s != size)
+        {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("viewmodel depth"),
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.viewmodel_depth = Some((
+                texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                size,
+            ));
+        }
+        let mut uniform = [0f32; 32];
+        uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
+        uniform[16..19].copy_from_slice(&camera.forward().to_array());
+        uniform[20..23].copy_from_slice(&camera.position.to_array());
+        // Fields 24..32 (fog) are left zero: the weapon is never fogged.
+        queue.write_buffer(
+            &self.viewmodel_camera_buffer,
+            0,
+            bytemuck::cast_slice(&uniform),
+        );
+        let Some((depth, _)) = &self.viewmodel_depth else {
+            return;
+        };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("viewmodel"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    // Reverse-Z, like the world pass: far is 0.
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: wgpu::StoreOp::Discard,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.skinned_pipeline);
+        pass.set_bind_group(0, &self.viewmodel_camera_group, &[]);
+        for d in &self.viewmodel_draws {
             let mesh = &self.skinned_meshes[d.mesh as usize];
             pass.set_bind_group(1, &d.material, &[]);
             pass.set_bind_group(2, &d.palette_group, &[]);
