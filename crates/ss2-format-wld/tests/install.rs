@@ -585,3 +585,124 @@ fn every_embedded_model_of_the_install_reads() {
     assert!(failures.is_empty(), "{failures:#?}");
     assert_eq!((placements, models, worlds, empty), (109, 82, 24, 9));
 }
+
+/// The bloom volumes of every distinct world (`environment.md`, "Bloom", T01-417/T01-423/
+/// T01-424): 34 in 33 worlds (two in `dm_hole`, one in each of the others), the renderable's box
+/// the record's size centred on the placement, the record's first `21` always 3, and the worked
+/// examples of `dm_hole` and `1_3_Village`.
+#[test]
+fn every_bloom_of_the_install() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let mut seen = HashSet::new();
+    let (mut blooms, mut worlds, mut doubles, mut turned) = (0, 0, 0, 0);
+    let mut odd = Vec::new();
+    let mut ramps = BTreeSet::new();
+    let mut balances = BTreeSet::new();
+    let mut examples = 0;
+    for path in files_with_extension(&vfs, "wld") {
+        let bytes = vfs.read(&path).unwrap();
+        if !seen.insert(bytes.clone()) {
+            continue;
+        }
+        let world = World::from_bytes(&bytes).unwrap();
+        blooms += world.blooms.len();
+        worlds += usize::from(!world.blooms.is_empty());
+        doubles += usize::from(world.blooms.len() == 2);
+        for b in &world.blooms {
+            let (lo, hi) = b.local_box;
+            if !(lo.abs_diff_eq(-b.size / 2.0, 1e-2) && hi.abs_diff_eq(b.size / 2.0, 1e-2)) {
+                odd.push(format!(
+                    "{}: box {lo} .. {hi}, size {}",
+                    path.as_str(),
+                    b.size
+                ));
+            }
+            if b.threshold != 3.0 {
+                odd.push(format!("{}: threshold {}", path.as_str(), b.threshold));
+            }
+            let identity = b.rotation.abs_diff_eq(Quat::IDENTITY, 1e-4)
+                || b.rotation.abs_diff_eq(-Quat::IDENTITY, 1e-4);
+            turned += usize::from(!identity);
+            ramps.insert((b.ramp * 1000.0).round() as i32);
+            balances.insert((b.balance * 1000.0).round() as i32);
+        }
+        let lower = path.as_str().to_ascii_lowercase();
+        let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        if lower.ends_with("/dm_hole.wld") {
+            examples += 1;
+            assert_eq!(world.blooms.len(), 2, "dm_hole: {:?}", world.blooms);
+            eprintln!(
+                "dm_hole blooms in list order: {:?}",
+                world.blooms.iter().map(|b| &b.name).collect::<Vec<_>>()
+            );
+            let named = |n: &str| {
+                world
+                    .blooms
+                    .iter()
+                    .find(|b| b.name == n)
+                    .unwrap_or_else(|| panic!("dm_hole: no bloom {n}: {:?}", world.blooms))
+            };
+            let a = named("Bloom_PoolRoom");
+            assert_eq!(a.color, 0xff15_0701, "{a:?}");
+            assert!(
+                a.size.abs_diff_eq(Vec3::new(96.2, 88.1, 123.3), 1e-2),
+                "{a:?}"
+            );
+            assert!(
+                a.translation
+                    .abs_diff_eq(Vec3::new(-65.3, 35.8, -33.1), 0.06),
+                "{a:?}"
+            );
+            assert!(
+                near(a.fade, 10.0) && near(a.strength, 1.0) && near(a.ramp, 2.0),
+                "{a:?}"
+            );
+            assert!(near(a.blur, 1.205) && near(a.balance, 1.0), "{a:?}");
+            assert!(near(a.high_pass, 0.5) && near(a.threshold, 3.0), "{a:?}");
+            let b = named("Bloom001");
+            assert_eq!(b.color, 0xff27_2727, "{b:?}");
+            assert!(b.size.abs_diff_eq(Vec3::splat(250.0), 1e-2), "{b:?}");
+            assert!(
+                b.translation.abs_diff_eq(Vec3::new(-4.1, 13.8, 1.6), 0.06),
+                "{b:?}"
+            );
+            assert!(
+                near(b.fade, 10.0) && near(b.strength, 1.0) && near(b.ramp, 1.5),
+                "{b:?}"
+            );
+            assert!(near(b.blur, 1.0) && near(b.balance, 1.0), "{b:?}");
+            assert!(near(b.high_pass, 0.5) && near(b.threshold, 3.0), "{b:?}");
+        }
+        if lower.ends_with("/1_3_village.wld") {
+            examples += 1;
+            let [b] = world.blooms.as_slice() else {
+                panic!("1_3_village: {:?}", world.blooms);
+            };
+            assert_eq!(b.color, 0xff46_3c26, "{b:?}");
+            assert!(
+                b.size.abs_diff_eq(Vec3::new(400.0, 148.0, 400.0), 1e-2),
+                "{b:?}"
+            );
+            assert!(
+                b.translation
+                    .abs_diff_eq(Vec3::new(200.9, 47.3, -192.6), 0.06),
+                "{b:?}"
+            );
+            assert!(near(b.fade, 25.0) && near(b.strength, 1.2422), "{b:?}");
+            assert!(
+                near(b.ramp, 1.5) && near(b.blur, 1.0) && near(b.balance, 1.0),
+                "{b:?}"
+            );
+            assert!(near(b.high_pass, 0.15) && near(b.threshold, 3.0), "{b:?}");
+        }
+    }
+    eprintln!("{blooms} blooms in {worlds} worlds, {doubles} with two, {turned} turned");
+    assert!(odd.is_empty(), "{odd:#?}");
+    assert_eq!(examples, 2, "dm_hole and 1_3_village are in the install");
+    // Turned like 13 of the hazes: 4 blooms; the box is measured in their own turned frame.
+    assert_eq!((blooms, worlds, doubles, turned), (34, 33, 1, 4));
+    // The ramp selector's 4 values and the blur balance's 3 (`environment.md`, T01-424).
+    assert_eq!(ramps, BTreeSet::from([500, 846, 1500, 2000]));
+    assert_eq!(balances, BTreeSet::from([657, 1000, 1500]));
+}

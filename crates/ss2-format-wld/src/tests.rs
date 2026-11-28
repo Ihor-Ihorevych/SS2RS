@@ -27,6 +27,21 @@ struct Variant {
     chain: ChainKind,
     /// Whether and how the world has a haze entity.
     haze: HazeKind,
+    /// Whether and how the world has a bloom entity.
+    bloom: BloomKind,
+}
+
+/// The bloom entity of the synthetic world (entity 26, renderable 27, record 65).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BloomKind {
+    /// No `CBloomEntity`.
+    Absent,
+    /// A bloom with its property record, whose class declares `21` twice as in the retail data.
+    WithRecord,
+    /// The same bloom without a property record.
+    WithoutRecord,
+    /// A record whose class declares `21` only once.
+    OneTwentyOne,
 }
 
 /// The haze entity of the synthetic world (entity 24, renderable 25, record 64).
@@ -96,6 +111,7 @@ const NORMAL: Variant = Variant {
     lightmap: LightmapKind::One,
     chain: ChainKind::Absent,
     haze: HazeKind::Absent,
+    bloom: BloomKind::Absent,
 };
 
 /// The lightmap pixels: 4 x 4 BGR (format code 0), so a test can check each texel.
@@ -542,6 +558,77 @@ fn world_file(v: Variant) -> Vec<u8> {
             ("11", 49),
         ],
     ));
+    // The bloom classes (`environment-schema.md`), members in stored order.
+    b.type_block(TypeBlock::class(
+        79,
+        "CBloomRenderable",
+        2,
+        5,
+        Some(14),
+        &[
+            ("1", 73),
+            ("2", 1),
+            ("3", 40),
+            ("19", 1),
+            ("13", 1),
+            ("4", 1),
+            ("18", 1),
+            ("6", 1),
+            ("12", 1),
+            ("7", 42),
+        ],
+    ));
+    b.type_block(TypeBlock::pointer(81, "CBloomRenderable*", 79));
+    b.type_block(TypeBlock::class(
+        80,
+        "CBloomEntity",
+        2,
+        5,
+        Some(7),
+        &[("1", 81)],
+    ));
+    let bloom_record_members: &[(&str, u32)] = if v.bloom == BloomKind::OneTwentyOne {
+        &[
+            ("1", 40),
+            ("2", 1),
+            ("3", 1),
+            ("4", 1),
+            ("5", 1),
+            ("21", 1),
+            ("16", 1),
+            ("6", 1),
+            ("8", 1),
+            ("13", 1),
+        ]
+    } else {
+        &[
+            ("1", 40),
+            ("2", 1),
+            ("3", 1),
+            ("4", 1),
+            ("5", 1),
+            ("21", 1),
+            ("16", 1),
+            ("6", 1),
+            ("21", 1),
+            ("8", 1),
+            ("13", 1),
+            ("9", 42),
+            ("10", 1),
+            ("11", 1),
+            ("18", 62),
+            ("19", 62),
+            ("20", 1),
+        ]
+    };
+    b.type_block(TypeBlock::class(
+        82,
+        "CBloomProperties",
+        3,
+        5,
+        Some(10),
+        bloom_record_members,
+    ));
     let texture_ident = b.identifier("3 texture");
     let uv_ident = b.identifier("3 uvmap");
     let shadow_ident = b.identifier("Shadow");
@@ -575,6 +662,12 @@ fn world_file(v: Variant) -> Vec<u8> {
     }
     if v.haze == HazeKind::WithRecord {
         records.push(64);
+    }
+    if v.bloom != BloomKind::Absent {
+        entities.push(26);
+    }
+    if matches!(v.bloom, BloomKind::WithRecord | BloomKind::OneTwentyOne) {
+        records.push(65);
     }
     if matches!(v.sky, SkyKind::WithRecord | SkyKind::NoFaces) {
         records.push(63);
@@ -899,6 +992,34 @@ fn world_file(v: Variant) -> Vec<u8> {
         );
     }
 
+    // Entity 26: the bloom, its renderable 27 at `1_3_Village`'s bloom position; the
+    // renderable's values differ from the record's, to show which is read.
+    if v.bloom != BloomKind::Absent {
+        b.object(26, 80, entity(9).object_ref(Some(27)).finish());
+        let placement = (IDENTITY, [200.9, 47.3, -192.6]);
+        b.object(
+            27,
+            79,
+            aspect(None, placement, placement, Some(26))
+                .f32(-50.0)
+                .f32(-60.0)
+                .f32(-70.0)
+                .f32(50.0)
+                .f32(60.0)
+                .f32(70.0)
+                .f32(5.0)
+                .u32(0x1122_3344)
+                .f32(2.0)
+                .f32(0.25)
+                .f32(0.5)
+                .f32(0.846)
+                .f32(6.0)
+                .f32(0.657)
+                .object_ref(None)
+                .finish(),
+        );
+    }
+
     // The property records, in the extra section.
     let record = |id: u32, type_id: u32, entity: u32, name: &str| {
         let r = ObjectBytes::new()
@@ -957,6 +1078,40 @@ fn world_file(v: Variant) -> Vec<u8> {
         .f32(1860.0)
         .f32(0.0)
         .u32(0);
+        extra.extend(r.finish());
+    }
+    if records.contains(&65) {
+        // `1_3_Village`'s bloom (`environment.md`, second worked example): the first `21` is
+        // the threshold 3, the second the ramp selector 1.5.
+        b.edty_pair(65, 82);
+        let r = quat_vect(
+            ObjectBytes::new().u32(65).u32(82).object_ref(Some(26)),
+            IDENTITY,
+            [0.0, 0.0, 0.0],
+        )
+        .cstring("Bloom001")
+        .object_ref(None)
+        .u32(0xff46_3c26)
+        .f32(400.0)
+        .f32(148.0)
+        .f32(400.0)
+        .f32(25.0)
+        .f32(3.0)
+        .f32(0.15)
+        .f32(1.2422);
+        let r = if v.bloom == BloomKind::OneTwentyOne {
+            r.f32(1.0).f32(1.0)
+        } else {
+            r.f32(1.5)
+                .f32(1.0)
+                .f32(1.0)
+                .object_ref(None)
+                .f32(1.0)
+                .f32(1.0)
+                .i32(0)
+                .i32(0)
+                .f32(1.0)
+        };
         extra.extend(r.finish());
     }
     b.after_edob(records.len() as u32, &extra);
@@ -1299,6 +1454,73 @@ fn a_haze_without_a_record_takes_the_renderables_values() {
 }
 
 #[test]
+fn a_world_without_a_bloom_entity_has_no_bloom() {
+    assert!(
+        World::from_bytes(&world_file(NORMAL))
+            .unwrap()
+            .blooms
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_bloom_is_read_from_its_record_by_position_and_placed_by_its_renderable() {
+    let world = World::from_bytes(&world_file(Variant {
+        bloom: BloomKind::WithRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    let [b] = world.blooms.as_slice() else {
+        panic!("{:?}", world.blooms);
+    };
+    assert_eq!((b.serial, b.name.as_str()), (9, "Bloom001"));
+    // `1_3_Village`'s numbers, from the record.
+    assert_eq!(b.color, 0xff46_3c26);
+    assert_vec(b.size, [400.0, 148.0, 400.0]);
+    assert_eq!(b.fade, 25.0);
+    // The record's two members named `21`: the first the threshold, the second the ramp.
+    assert_eq!((b.threshold, b.ramp), (3.0, 1.5));
+    assert_eq!(
+        (b.strength, b.blur, b.balance, b.high_pass),
+        (1.2422, 1.0, 1.0, 0.15)
+    );
+    assert_vec(b.local_box.0, [-50.0, -60.0, -70.0]);
+    assert_vec(b.local_box.1, [50.0, 60.0, 70.0]);
+    assert_quat(b.rotation, IDENTITY);
+    assert_vec(b.translation, [200.9, 47.3, -192.6]);
+}
+
+#[test]
+fn a_bloom_without_a_record_takes_the_renderables_values() {
+    let world = World::from_bytes(&world_file(Variant {
+        bloom: BloomKind::WithoutRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    let b = &world.blooms[0];
+    assert_eq!(b.name, "");
+    assert_eq!(b.color, 0x1122_3344);
+    assert_vec(b.size, [100.0, 120.0, 140.0]);
+    assert_eq!((b.fade, b.threshold, b.ramp), (5.0, 2.0, 0.846));
+    assert_eq!(
+        (b.strength, b.blur, b.balance, b.high_pass),
+        (0.5, 6.0, 0.657, 0.25)
+    );
+}
+
+#[test]
+fn a_bloom_record_without_two_members_named_21_is_an_error() {
+    let err = World::from_bytes(&world_file(Variant {
+        bloom: BloomKind::OneTwentyOne,
+        ..NORMAL
+    }))
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("CBloomProperties.21"), "{err}");
+    assert!(err.contains("not 2"), "{err}");
+}
+
+#[test]
 fn an_embedded_model_is_read_once_from_the_world() {
     let world = World::from_bytes(&world_file(NORMAL)).unwrap();
     // Entity 4 names object 15, an empty configuration: it is listed, and why it cannot be read
@@ -1347,6 +1569,7 @@ fn nothing_panics_on_damaged_files() {
     let good = world_file(Variant {
         sky: SkyKind::WithRecord,
         lightmap: LightmapKind::Two,
+        bloom: BloomKind::WithRecord,
         ..NORMAL
     });
     for len in (0..good.len()).step_by(7) {

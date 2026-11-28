@@ -28,7 +28,11 @@
 //!   `.mdl`, read once with `ss2-format-mdl`'s [`Model::from_object`] ([`EmbeddedModel`]),
 //! - the **haze volumes** (`CHazeEntity`, T07-042; spec `docs/re/environment.md`, section
 //!   "Haze"): colour, box size and the `.5`/`.6`/`.7`/`.10` numbers from the property record,
-//!   the world placement of the haze renderable and the optional parent entity ([`Haze`]).
+//!   the world placement of the haze renderable and the optional parent entity ([`Haze`]),
+//! - the **bloom volumes** (`CBloomEntity`, T07-049; spec `docs/re/environment.md`, section
+//!   "Bloom"): colour, box size, edge fade and the bloom chain's numbers from the property
+//!   record, read by position where the record declares a member named `21` twice, and the world
+//!   placement of the bloom renderable ([`Bloom`]).
 //!
 //! Everything else (lights, the grids, the physics bodies, scripts, the other entity classes) is
 //! left out; [`World::entity_count`] says how many entities the file has in all.
@@ -51,7 +55,9 @@ use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_mdl::Model;
 use ss2_format_tex::Texture;
-use ss2_meta::{Container, Decoded, FromValue, MetaDeserialize, Object, ObjectRef, TypeSystem};
+use ss2_meta::{
+    Container, Decoded, FromValue, MetaDeserialize, Object, ObjectRef, TypeSystem, Value,
+};
 
 const WHAT: &str = ".wld world";
 
@@ -235,6 +241,52 @@ pub struct Haze {
     pub parent: Option<u32>,
 }
 
+/// One bloom volume (`CBloomEntity`, `docs/re/environment.md`, section "Bloom", T01-417,
+/// T01-423, T01-424): a box like a haze's, with a colour and the numbers of the bloom chain.
+///
+/// The numbers are read from the property record (`CBloomProperties`), as the spec's reader
+/// invariant 1 asks; a bloom without a record takes them from its renderable
+/// (`CBloomRenderable`) instead. The record declares a member named `21` **twice**: the first is
+/// the HDR threshold (renderable `.19`), the second the colour-ramp selector (renderable `.18`);
+/// they are told apart by their position in the record's member list, never by name. Every value
+/// is as stored: the engine's own clamps (applied when it copies the record into the renderable)
+/// are the loader's job.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bloom {
+    /// The entity's serial (`CEntity.1`).
+    pub serial: u32,
+    /// The editor name from the property record, empty without a record.
+    pub name: String,
+    /// The colour as the stored 32-bit value, `0xAARRGGBB` (`.1`, else the renderable's `.3`).
+    pub color: u32,
+    /// The box's size along x, y and z (`.2`, `.3`, `.4`, else the size of the renderable's
+    /// box).
+    pub size: Vec3,
+    /// The edge fade distance (`.5`, else the renderable's `.2`; 0 to 100 in the retail data).
+    pub fade: f32,
+    /// The HDR-only high-pass threshold (the record's **first** `.21`, else the renderable's
+    /// `.19`; always 3 in the retail data, never read under standard rendering).
+    pub threshold: f32,
+    /// The high-pass amount (`.16`, else the renderable's `.13`; 0 to 1).
+    pub high_pass: f32,
+    /// The strength multiplier (`.6`, else the renderable's `.4`; 0.3 to 1.535).
+    pub strength: f32,
+    /// The colour-ramp selector (the record's **second** `.21`, else the renderable's `.18`;
+    /// 0.5, 0.846, 1.5 or 2).
+    pub ramp: f32,
+    /// The blur spread (`.8`, else the renderable's `.6`; 0.5 to 6).
+    pub blur: f32,
+    /// The balance of the two blur taps (`.13`, else the renderable's `.12`; 0.657, 1 or 1.5).
+    pub balance: f32,
+    /// The renderable's own box (`CBloomRenderable.1`, `Box3f`) in its local frame: minimum
+    /// and maximum corner.
+    pub local_box: (Vec3, Vec3),
+    /// World rotation of the bloom renderable (`CAspect.7`).
+    pub rotation: Quat,
+    /// World translation of the bloom renderable (`CAspect.7`).
+    pub translation: Vec3,
+}
+
 /// One face of the sky cube: the `CCubeRenderable` face members `.10` to `.15`, in that order
 /// (`docs/re/environment.md`, "Which face member is which direction").
 ///
@@ -371,6 +423,8 @@ pub struct World {
     pub embedded_models: Vec<EmbeddedModel>,
     /// Every `CHazeEntity`, in entity-list order.
     pub hazes: Vec<Haze>,
+    /// Every `CBloomEntity`, in entity-list order.
+    pub blooms: Vec<Bloom>,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -585,6 +639,58 @@ struct HazeRecord {
     far: f32,
     #[meta(owner = "CHazeProperties", name = "10")]
     value_10: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct BloomEntity {
+    #[meta(owner = "CBloomEntity", name = "1")]
+    renderable: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct BloomRenderable {
+    #[meta(owner = "CBloomRenderable", name = "1")]
+    bounds: Box3f,
+    #[meta(owner = "CBloomRenderable", name = "2")]
+    fade: f32,
+    #[meta(owner = "CBloomRenderable", name = "3")]
+    color: u32,
+    #[meta(owner = "CBloomRenderable", name = "4")]
+    strength: f32,
+    #[meta(owner = "CBloomRenderable", name = "6")]
+    blur: f32,
+    #[meta(owner = "CBloomRenderable", name = "12")]
+    balance: f32,
+    #[meta(owner = "CBloomRenderable", name = "13")]
+    high_pass: f32,
+    #[meta(owner = "CBloomRenderable", name = "18")]
+    ramp: f32,
+    #[meta(owner = "CBloomRenderable", name = "19")]
+    threshold: f32,
+}
+
+/// The record's members with unique names; the two named `21` are read by position
+/// ([`bloom_record_21`]).
+#[derive(MetaDeserialize)]
+struct BloomRecord {
+    #[meta(owner = "CBloomProperties", name = "1")]
+    color: u32,
+    #[meta(owner = "CBloomProperties", name = "2")]
+    x: f32,
+    #[meta(owner = "CBloomProperties", name = "3")]
+    y: f32,
+    #[meta(owner = "CBloomProperties", name = "4")]
+    z: f32,
+    #[meta(owner = "CBloomProperties", name = "5")]
+    fade: f32,
+    #[meta(owner = "CBloomProperties", name = "6")]
+    strength: f32,
+    #[meta(owner = "CBloomProperties", name = "8")]
+    blur: f32,
+    #[meta(owner = "CBloomProperties", name = "13")]
+    balance: f32,
+    #[meta(owner = "CBloomProperties", name = "16")]
+    high_pass: f32,
 }
 
 #[derive(MetaDeserialize)]
@@ -862,6 +968,7 @@ impl World {
             lightmap_counts: LightmapCounts::default(),
             embedded_models: Vec::new(),
             hazes: Vec::new(),
+            blooms: Vec::new(),
         };
         for o in &decoded.objects {
             if g.class_of(o) != "CModelInstance" {
@@ -897,6 +1004,7 @@ impl World {
                     | "CChapterInfoEntity"
                     | "CCubeBackgroundEntity"
                     | "CHazeEntity"
+                    | "CBloomEntity"
             ) {
                 continue;
             }
@@ -916,6 +1024,10 @@ impl World {
                 "CHazeEntity" => {
                     let record = records.get(&o.id).copied();
                     world.hazes.push(haze(&g, o, record, serial, name)?);
+                }
+                "CBloomEntity" => {
+                    let record = records.get(&o.id).copied();
+                    world.blooms.push(bloom(&g, o, record, serial, name)?);
                 }
                 _ => {
                     let (rotation, translation) = aspects.placement(o.id).ok_or_else(|| {
@@ -1137,6 +1249,85 @@ fn haze(
         translation,
         parent,
     })
+}
+
+fn bloom(
+    g: &Graph<'_>,
+    o: &Object,
+    record: Option<&Object>,
+    serial: u32,
+    name: String,
+) -> Result<Bloom> {
+    let entity: BloomEntity = g.typed(o, "a bloom entity")?;
+    let what = format!("the renderable of bloom {}", o.id);
+    let renderable = g.object(entity.renderable.0, &what)?;
+    let aspect: Aspect = g.typed(renderable, &what)?;
+    let r: BloomRenderable = g.typed(renderable, &what)?;
+    let b = &r.bounds;
+    let local_box = (Vec3::new(b.x0, b.y0, b.z0), Vec3::new(b.x1, b.y1, b.z1));
+    let (rotation, translation) = aspect.world.split();
+    let mut bloom = Bloom {
+        serial,
+        name,
+        color: r.color,
+        size: local_box.1 - local_box.0,
+        fade: r.fade,
+        threshold: r.threshold,
+        high_pass: r.high_pass,
+        strength: r.strength,
+        ramp: r.ramp,
+        blur: r.blur,
+        balance: r.balance,
+        local_box,
+        rotation,
+        translation,
+    };
+    if let Some(rec) = record {
+        let what = format!("the property record of bloom {}", o.id);
+        let r: BloomRecord = g.typed(rec, &what)?;
+        let [threshold, ramp] = bloom_record_21(g, rec, &what)?;
+        bloom.color = r.color;
+        bloom.size = Vec3::new(r.x, r.y, r.z);
+        bloom.fade = r.fade;
+        bloom.threshold = threshold;
+        bloom.high_pass = r.high_pass;
+        bloom.strength = r.strength;
+        bloom.ramp = ramp;
+        bloom.blur = r.blur;
+        bloom.balance = r.balance;
+    }
+    Ok(bloom)
+}
+
+/// The two members named `21` of a `CBloomProperties` record, in the record's member order:
+/// the HDR threshold, then the colour-ramp selector (`environment.md`, T01-424). Read by
+/// position, since a lookup by name only ever finds the first.
+fn bloom_record_21(g: &Graph<'_>, rec: &Object, what: &str) -> Result<[f32; 2]> {
+    let invalid = |detail: String| bad(format!("{what} (object {}): {detail}", rec.id));
+    let s = rec
+        .value
+        .as_struct()
+        .ok_or_else(|| invalid("not a class instance".into()))?;
+    let members = g
+        .types()
+        .members(s.type_id)
+        .ok_or_else(|| invalid("its class has no member list".into()))?;
+    let values: Vec<&Value> = members
+        .iter()
+        .zip(&s.values)
+        .filter(|(m, _)| m.owner_name == "CBloomProperties" && m.name == "21")
+        .map(|(_, v)| v)
+        .collect();
+    let [first, second] = values.as_slice() else {
+        return Err(invalid(format!(
+            "{} members `CBloomProperties.21`, not 2",
+            values.len()
+        )));
+    };
+    let float = |v: &Value| {
+        f32::from_value(v, g.types()).map_err(|e| invalid(format!("`CBloomProperties.21`: {e}")))
+    };
+    Ok([float(first)?, float(second)?])
 }
 
 /// Per entity, the aspects it owns (object order), and per aspect its parent and world placement.
