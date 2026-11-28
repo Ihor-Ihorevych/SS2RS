@@ -405,7 +405,8 @@ impl LevelScene {
     }
 
     /// The blooms active with the eye at `eye` (RFC 0013 amendment 6): every volume whose edge fade is above 0, in
-    /// list order (the original runs each one's chain in turn; its exact order is open, T01-422).
+    /// list order (the original runs each one's chain in turn: every bloom has the same sort key, so they run in the
+    /// level's own object order, T01-422).
     pub fn blooms_at(&self, eye: Vec3) -> Vec<Bloom> {
         self.blooms
             .iter()
