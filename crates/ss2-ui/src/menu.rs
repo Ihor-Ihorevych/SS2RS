@@ -45,6 +45,8 @@ pub enum MenuCommand {
     QuitToMenu,
     /// Exit the application.
     Quit,
+    /// Show the first-run wizard again to choose another game folder (T10-035).
+    ChooseGameFolder,
     /// A setting changed; carries the full new settings.
     SettingsChanged(Settings),
 }
@@ -68,6 +70,7 @@ pub(crate) enum Action {
     Resume,
     QuitToMenu,
     Quit,
+    ChooseGameFolder,
     Open(ScreenId),
     Back,
 }
@@ -113,6 +116,10 @@ pub(crate) fn items(screen: ScreenId) -> &'static [Item] {
             Item::Button {
                 label: "Options",
                 action: Open(ScreenId::Options),
+            },
+            Item::Button {
+                label: "Choose Game Folder...",
+                action: ChooseGameFolder,
             },
             Item::Button {
                 label: "About",
@@ -342,6 +349,7 @@ impl Menu {
             Action::StartGame => vec![MenuCommand::StartGame],
             Action::Resume => vec![MenuCommand::Resume],
             Action::Quit => vec![MenuCommand::Quit],
+            Action::ChooseGameFolder => vec![MenuCommand::ChooseGameFolder],
             Action::QuitToMenu => {
                 self.open_main();
                 vec![MenuCommand::QuitToMenu]
@@ -402,7 +410,7 @@ mod tests {
     fn down_up_wrap_around() {
         let mut m = Menu::new(Settings::default());
         nav(&mut m, NavInput::Up);
-        assert_eq!(m.focused(), Some(3), "Up from the first item wraps to Quit");
+        assert_eq!(m.focused(), Some(4), "Up from the first item wraps to Quit");
         nav(&mut m, NavInput::Down);
         assert_eq!(m.focused(), Some(0));
     }
@@ -424,6 +432,24 @@ mod tests {
             nav(&mut m, NavInput::Activate),
             vec![MenuCommand::StartGame]
         );
+    }
+
+    #[test]
+    fn choose_game_folder_is_on_the_main_menu_and_emits_its_command() {
+        let mut m = Menu::new(Settings::default());
+        nav_n(&mut m, NavInput::Down, 2); // New Game -> Options -> Choose Game Folder...
+        assert!(matches!(
+            items(ScreenId::Main)[2],
+            Item::Button {
+                label: "Choose Game Folder...",
+                ..
+            }
+        ));
+        assert_eq!(
+            nav(&mut m, NavInput::Activate),
+            vec![MenuCommand::ChooseGameFolder]
+        );
+        assert_eq!(m.screen(), ScreenId::Main, "the app shows the wizard");
     }
 
     #[test]

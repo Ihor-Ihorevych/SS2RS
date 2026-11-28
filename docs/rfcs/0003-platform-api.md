@@ -81,3 +81,23 @@ Not in the contract: window creation, cursor capture, display modes (T03-017), t
 - **Text input / IME composition events** (preedit): needed for CJK chat later; added as `InputEvent` variants when T03-002 implements text input.
 - **Action value for sticks**: half-axis bindings keep values `0..=1`; if a consumer needs a signed value, a `value_signed` helper can be added without breaking.
 - **Rumble / haptics output** (platform → device) is not in v0; decided with T03-003.
+
+## Amendments
+
+### Amendment 1: reading the clipboard (T10-035)
+
+The first-run wizard's path field needs paste, and nothing in the contract reached the clipboard. A compatible addition:
+
+```rust
+pub trait Clipboard { fn text(&mut self) -> Option<String>; }   // the text on it, as it is; None when there is none
+pub struct MockClipboard { pub text: Option<String> }           // for tests; MockClipboard::with_text(..)
+```
+
+- **Read only, text only.** Copying out of the app, images and change notifications are not needed by anything yet.
+- **The app owns the policy.** The platform hands the text over as it is (new lines included); what a field keeps is the field's
+  business (`ss2_ui::data_wizard::TextField` drops control characters). The platform reports no modifier state, so the key
+  combination (Ctrl+V, Shift+Insert) is recognised by the app from the Ctrl and Shift key events it already gets.
+- **Implementation** (`ss2_platform::clipboard::SystemClipboard`): on Windows `CF_UNICODETEXT` through `windows-sys`, the crate's
+  only `unsafe`, in one small module with a `// SAFETY:` comment at every block (`docs/CODING_STANDARDS.md`). `arboard` was tried
+  first and refused by `cargo deny` (its `clipboard-win` is BSL-1.0, which `deny.toml` does not allow). Elsewhere it returns `None`
+  for now, so pasting does nothing on Linux and macOS (T10-037).

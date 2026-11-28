@@ -1306,3 +1306,22 @@ fn a_huge_amount_of_everything_does_not_panic_or_grow_the_screen() {
         let _ = w.draw();
     }
 }
+
+#[test]
+fn the_quit_rows_can_be_renamed_and_still_quit() {
+    let mut w = found(1);
+    assert_eq!(w.quit_label(), "Quit");
+    w.set_quit_label("Back to Menu");
+    let shown = texts(&w.draw());
+    assert!(shown.iter().any(|t| t == "Back to Menu"), "{shown:?}");
+    assert!(!shown.iter().any(|t| t == "Quit"), "{shown:?}");
+    // The last row of the list still gives Quit (the app decides what it means).
+    assert_eq!(nav(&mut w, NavInput::Up), None);
+    assert_eq!(nav(&mut w, NavInput::Activate), Some(WizardCommand::Quit));
+    // And on a result, the last button.
+    let mut r = result(true);
+    r.set_quit_label("Back to Menu");
+    let shown = texts(&r.draw());
+    assert!(shown.iter().any(|t| t == "Back to Menu"), "{shown:?}");
+    assert!(shown.iter().any(|t| t == "Use this folder"), "{shown:?}");
+}

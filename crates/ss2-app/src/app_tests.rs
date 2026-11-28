@@ -200,6 +200,7 @@ fn quit_from_the_main_menu_exits() {
             key(KeyCode::ArrowDown, true),
             key(KeyCode::ArrowDown, true),
             key(KeyCode::ArrowDown, true),
+            key(KeyCode::ArrowDown, true),
             key(KeyCode::Enter, true),
             ScriptStep::Frame,
         ],
@@ -378,4 +379,188 @@ fn quitting_the_wizard_closes_the_window() {
         .flatten(),
     );
     assert!(report.exited);
+}
+
+/// A wizard scene with canned answers: one install found at `dir`, usable, remembered; opening it records the folder.
+fn canned_scene(
+    wizard: ss2_ui::data_wizard::DataWizard,
+    dir: &Path,
+    opened: &Arc<std::sync::Mutex<Vec<PathBuf>>>,
+) -> WizardScene {
+    use crate::data_location::Answer;
+    use crate::wizard_scene::{Answerer, Opener};
+    use ss2_ui::data_wizard::{WizardCandidate, WizardCommand, WizardReport};
+
+    let found = dir.to_path_buf();
+    let answerer: Answerer = Arc::new(move |command| match command {
+        WizardCommand::Search => Answer::Candidates(vec![WizardCandidate {
+            dir: found.clone(),
+            detail: "Steam library - patch 2.100".into(),
+        }]),
+        WizardCommand::Validate(dir) => Answer::Report(WizardReport {
+            dir,
+            usable: true,
+            warnings: 0,
+            headline: "Serious Sam 2 found".into(),
+            lines: Vec::new(),
+        }),
+        WizardCommand::Accept(dir) => Answer::Chosen {
+            dir,
+            save_error: None,
+        },
+        WizardCommand::Quit => Answer::Quit,
+    });
+    let o = opened.clone();
+    let opener: Opener = Arc::new(move |dir: &Path| {
+        o.lock().unwrap().push(dir.to_path_buf());
+        Levels::new(None)
+    });
+    WizardScene::new(wizard, answerer, opener)
+}
+
+/// Frames until the wizard's worker is idle.
+fn settle_wizard(a: &mut App) {
+    let until = Instant::now() + Duration::from_secs(10);
+    while a.wizard.as_ref().is_some_and(WizardScene::busy) {
+        assert!(Instant::now() < until, "the wizard's worker never answered");
+        run_script(a, [ScriptStep::Frame]);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    run_script(a, [ScriptStep::Frame]);
+}
+
+/// An app whose "Choose Game Folder..." opens a canned wizard that finds `dir`.
+fn app_choosing(dir: &Path, opened: &Arc<std::sync::Mutex<Vec<PathBuf>>>) -> App {
+    let mut a = app();
+    let (dir, opened) = (dir.to_path_buf(), opened.clone());
+    a.choose_folder = Some(Box::new(move || {
+        canned_scene(crate::wizard_scene::from_menu(), &dir, &opened)
+    }));
+    a
+}
+
+/// Main menu: New Game, Options, Choose Game Folder...
+fn choose_game_folder_steps() -> impl Iterator<Item = ScriptStep> {
+    [
+        tap(KeyCode::ArrowDown),
+        tap(KeyCode::ArrowDown),
+        tap(KeyCode::Enter),
+    ]
+    .into_iter()
+    .flatten()
+}
+
+#[test]
+fn choose_game_folder_reopens_the_wizard_and_the_new_folder_refreshes_the_levels() {
+    let opened = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let new_dir = PathBuf::from("D:/Other/Serious Sam 2");
+    let mut a = app_choosing(&new_dir, &opened);
+    let before = Arc::as_ptr(&a.levels);
+    run_script(&mut a, choose_game_folder_steps());
+    assert!(a.wizard.is_some(), "the menu entry shows the wizard");
+    assert!(a.wizard_from_menu);
+    assert_eq!(a.state.scene, Scene::Menu);
+    let wizard = |a: &App| a.wizard.as_ref().unwrap().wizard().clone();
+    assert_eq!(wizard(&a).quit_label(), "Back to Menu");
+    settle_wizard(&mut a);
+    run_script(&mut a, tap(KeyCode::Enter)); // the found folder: check it
+    settle_wizard(&mut a);
+    run_script(&mut a, tap(KeyCode::Enter)); // Use this folder
+    let until = Instant::now() + Duration::from_secs(10);
+    while a.wizard.is_some() {
+        assert!(Instant::now() < until, "the folder was never opened");
+        run_script(&mut a, [ScriptStep::Frame]);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(*opened.lock().unwrap(), [new_dir]);
+    assert_ne!(Arc::as_ptr(&a.levels), before, "the levels were replaced");
+    assert!(!a.wizard_from_menu);
+    assert_eq!(a.menu.screen(), ScreenId::Main);
+    // New Game offers the new folder's levels.
+    run_script(&mut a, tap(KeyCode::Enter));
+    assert!(matches!(a.phase, Some(Phase::Picking(_))));
+}
+
+#[test]
+fn back_to_menu_from_the_reopened_wizard_keeps_the_levels_and_the_window() {
+    let opened = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut a = app_choosing(Path::new("D:/Other"), &opened);
+    let before = Arc::as_ptr(&a.levels);
+    run_script(&mut a, choose_game_folder_steps());
+    settle_wizard(&mut a);
+    // The first Escape points at "Back to Menu", the second takes it.
+    let report = run_script(
+        &mut a,
+        [
+            tap(KeyCode::Escape),
+            tap(KeyCode::Escape),
+            [ScriptStep::Frame, ScriptStep::Frame],
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    assert!(
+        !report.exited,
+        "quitting the reopened wizard does not leave"
+    );
+    assert!(a.wizard.is_none());
+    assert_eq!(a.state.scene, Scene::Menu);
+    assert_eq!(a.menu.screen(), ScreenId::Main);
+    assert_eq!(Arc::as_ptr(&a.levels), before);
+    assert!(opened.lock().unwrap().is_empty());
+    // The menu works again: the entry opens the wizard a second time.
+    run_script(&mut a, choose_game_folder_steps());
+    assert!(a.wizard.is_some());
+}
+
+#[test]
+fn without_a_configuration_folder_the_entry_does_nothing() {
+    let mut a = app();
+    run_script(&mut a, choose_game_folder_steps());
+    assert!(a.wizard.is_none());
+    assert_eq!(a.state.scene, Scene::Menu);
+    assert_eq!(a.menu.screen(), ScreenId::Main);
+}
+
+#[test]
+fn ctrl_v_pastes_the_clipboard_into_the_path_field_at_the_cursor_without_new_lines() {
+    use ss2_platform_api::MockClipboard;
+    use ss2_ui::data_wizard::{DataWizard, WizardView};
+
+    let opened = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut a = app();
+    a.wizard = Some(canned_scene(
+        DataWizard::new(None),
+        Path::new("D:/x"),
+        &opened,
+    ));
+    a.wizard_keys = WizardKeys::new(Box::new(MockClipboard::with_text(
+        "Games\\Serious Sam 2\r\n",
+    )));
+    settle_wizard(&mut a);
+    // One folder found, then "Enter a folder path".
+    run_script(&mut a, tap(KeyCode::ArrowDown));
+    run_script(&mut a, tap(KeyCode::Enter));
+    let field = |a: &App| {
+        let w = a.wizard.as_ref().unwrap().wizard();
+        assert_eq!(w.view(), WizardView::Manual);
+        (w.field().text().to_owned(), w.field().cursor())
+    };
+    // Type "C:\!", step back before the "!", paste.
+    let mut steps: Vec<ScriptStep> = ["C", ":", "\\", "!"]
+        .iter()
+        .map(|t| InputEvent::Text((*t).into()).into())
+        .collect();
+    steps.extend(tap(KeyCode::ArrowLeft));
+    steps.push(key(KeyCode::ControlLeft, true));
+    steps.push(key(KeyCode::V, true));
+    steps.push(InputEvent::Text("\u{16}".into()).into());
+    steps.push(key(KeyCode::V, false));
+    steps.push(key(KeyCode::ControlLeft, false));
+    run_script(&mut a, steps);
+    assert_eq!(
+        field(&a),
+        ("C:\\Games\\Serious Sam 2!".to_owned(), 22),
+        "inserted at the cursor, the new line left out, the cursor after it"
+    );
 }

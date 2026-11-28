@@ -66,6 +66,7 @@ fn main() -> ExitCode {
             levels: play::Levels::new(None),
             start_level: None,
             wizard: None,
+            data_store: None,
         }),
         cli::Mode::Screenshot { screen, out, size } => screenshot::take(screen, &out, size),
         cli::Mode::LevelScreenshot {
@@ -89,6 +90,7 @@ fn main() -> ExitCode {
 /// wizard shows first (T10-019b, `docs/FIRST_RUN.md`). `forget_data` (`--forget-data`) forgets the remembered folder first.
 /// Without the configuration folder (no home folder and not portable) nothing can be remembered, and the folder is found the
 /// old way (`--data`, `SS2_DATA_DIR`, the first install the search finds; without one only the test room is offered).
+/// The main menu's "Choose Game Folder..." shows the wizard again when there is a configuration folder (T10-035).
 /// The launch options that need features which do not exist yet are reported instead of being silently ignored.
 fn launch(
     options: &ss2_core::cli::LaunchOptions,
@@ -151,5 +153,6 @@ fn launch(
         levels: play::Levels::new(game),
         start_level: options.level.clone(),
         wizard,
+        data_store: store,
     })
 }

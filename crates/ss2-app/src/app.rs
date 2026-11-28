@@ -6,7 +6,8 @@
 //! menu, "Quit to Menu" drops the level.
 //!
 //! Without a usable install the window first shows the data-location wizard (T10-019b, [`WizardScene`]); the menu
-//! follows once a folder is chosen.
+//! follows once a folder is chosen. The main menu's "Choose Game Folder..." shows the wizard again (T10-035): a folder chosen there
+//! replaces the levels the picker offers, and "Back to Menu" keeps the old ones.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,6 +17,7 @@ use ss2_core::input::NavInput;
 use ss2_core::settings::Settings;
 use ss2_game::play::{Mode, PlaySession};
 use ss2_physics::query::QueryWorld;
+use ss2_platform::clipboard::SystemClipboard;
 use ss2_platform::nav::StickNavigator;
 use ss2_platform::window::{PlatformApp, PlatformWindow, WindowConfig};
 use ss2_platform_api::{
@@ -33,7 +35,7 @@ use crate::level_session::{SKY, upload};
 use crate::play::{Levels, Loading, draw_hud};
 use crate::play_input::PlayControls;
 use crate::state::{AppState, Effects, Scene};
-use crate::wizard_scene::{Outcome, WizardScene};
+use crate::wizard_scene::{Outcome, SceneMaker, WizardScene};
 use crate::{profiling, screenshot};
 
 /// What the game scene is doing.
@@ -81,6 +83,10 @@ struct App {
     /// The first-run wizard, shown before everything else while it is here.
     wizard: Option<WizardScene>,
     wizard_keys: WizardKeys,
+    /// Makes the wizard for "Choose Game Folder..."; `None` without a configuration folder to remember the choice in.
+    choose_folder: Option<SceneMaker>,
+    /// The wizard showing was opened from the menu: quitting it goes back there instead of leaving.
+    wizard_from_menu: bool,
 }
 
 /// The settings for this run: the saved file (or the platform defaults when there is none), then
@@ -115,6 +121,8 @@ pub(crate) struct RunOptions<'a> {
     pub start_level: Option<String>,
     /// The first-run wizard to show first (no usable install was found).
     pub wizard: Option<WizardScene>,
+    /// Where the wizard remembers the chosen folder (`data_location::store_path`); without it the menu cannot open the wizard.
+    pub data_store: Option<PathBuf>,
 }
 
 /// Run the interactive app.
@@ -139,6 +147,9 @@ pub(crate) fn run(options: RunOptions<'_>) -> Result<(), String> {
     );
     app.start_level = options.start_level;
     app.wizard = options.wizard;
+    app.choose_folder = options.data_store.map(|store| -> SceneMaker {
+        Box::new(move || WizardScene::for_system(crate::wizard_scene::from_menu(), store.clone()))
+    });
     ss2_platform::window::run(&config, &mut app).map_err(|e| e.to_string())?;
     match app.failure {
         Some(message) => Err(message),
@@ -175,7 +186,9 @@ impl App {
             controls: PlayControls::default(),
             start_level: None,
             wizard: None,
-            wizard_keys: WizardKeys::default(),
+            wizard_keys: WizardKeys::new(Box::new(SystemClipboard)),
+            choose_folder: None,
+            wizard_from_menu: false,
         }
     }
 
@@ -285,12 +298,27 @@ impl App {
                             }
                         }
                         MenuCommand::QuitToMenu => self.leave_game(),
+                        MenuCommand::ChooseGameFolder => self.choose_game_folder(),
                         _ => {}
                     }
                     self.run_effects(effects);
                 }
             }
         }
+    }
+
+    /// "Choose Game Folder...": show the wizard over the menu.
+    fn choose_game_folder(&mut self) {
+        let Some(make) = &self.choose_folder else {
+            tracing::warn!(
+                "cannot choose another game folder: there is no configuration folder to remember it in"
+            );
+            return;
+        };
+        let wizard = make();
+        self.leave_game();
+        self.wizard = Some(wizard);
+        self.wizard_from_menu = true;
     }
 
     fn run_effects(&mut self, fx: Effects) {
@@ -379,12 +407,19 @@ impl App {
             Outcome::Continue => {}
             Outcome::Ready(levels) => {
                 self.levels = Arc::new(levels);
-                self.wizard = None;
-                self.state.scene = Scene::Menu;
-                self.menu.open_main();
+                self.close_wizard();
             }
+            // Opened from the menu, quitting goes back to it with the levels of before.
+            Outcome::Quit if self.wizard_from_menu => self.close_wizard(),
             Outcome::Quit => self.exit = true,
         }
+    }
+
+    fn close_wizard(&mut self) {
+        self.wizard = None;
+        self.wizard_from_menu = false;
+        self.state.scene = Scene::Menu;
+        self.menu.open_main();
     }
 
     /// Advance the game scene by `dt` seconds.

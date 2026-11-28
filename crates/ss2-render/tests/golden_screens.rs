@@ -179,6 +179,7 @@ fn menu_at(screen: ScreenId) -> Menu {
         ScreenId::About => {
             press(&mut menu, NavInput::Down);
             press(&mut menu, NavInput::Down);
+            press(&mut menu, NavInput::Down);
             press(&mut menu, NavInput::Activate);
         }
         ScreenId::Pause => menu.open_pause(),
