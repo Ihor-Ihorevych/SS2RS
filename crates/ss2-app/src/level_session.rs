@@ -261,8 +261,9 @@ pub(crate) fn take_level_screenshot(
     let mut renderer = Renderer::new_offscreen(size).map_err(|e| e.to_string())?;
     let report = upload(&mut renderer, &scene)?;
     let camera = start_camera(&scene);
+    let fog = scene.fog_at(camera.position);
     renderer
-        .set_fog(scene.fog_at(camera.position))
+        .set_fog(fog)
         .map_err(|e| e.to_string())?;
     let image = renderer
         .render_world_to_image(&camera, None, SKY)
@@ -276,6 +277,8 @@ pub(crate) fn take_level_screenshot(
         textures = report.textures,
         textures_replaced = report.textures_replaced,
         skipped = scene.skipped.len(),
+        hazes = scene.hazes.len(),
+        fog = ?fog,
         out = %out.display(),
         "level screenshot saved"
     );
