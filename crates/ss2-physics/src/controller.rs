@@ -90,12 +90,14 @@ impl WalkConfig {
         max_slope_cos: 0.707,
         // Stored nominal ground speed, one for all directions (high).
         speed: 7.5,
-        // Stored ground acceleration (high).
-        accel: 75.0,
-        // Stored ground deceleration (high).
-        friction: 45.0,
+        // Measured on the running original (T01-432, medium): a linear ramp of about 47 units/s^2, full speed in
+        // about 0.16 s. The stored `pep_fAcceleration` (75) drives a joint force, not dv/dt directly.
+        accel: 47.0,
+        // Measured (T01-432, medium): about 55 to 60 units/s^2, a stop in about 0.14 s (stored
+        // `pep_fDecceleration` 45 is again a joint force).
+        friction: 57.0,
         // The original keeps the ground acceleration in the air (high); its short air-control window is not modelled.
-        air_accel: 75.0,
+        air_accel: 47.0,
         // Stored jump speed (high).
         jump_speed: 10.0,
     };
