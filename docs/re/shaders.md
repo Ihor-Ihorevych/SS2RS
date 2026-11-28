@@ -96,7 +96,7 @@ Examples of the family notes: the bump families need **tangents** (`v2` with bin
 2. What the `CT` prefix does, and the exact semantics of `col`, `txp` and `expp`.
 3. The register map of the pixel programs for the families whose pixel note is short (shade, blend: partly documented).
 4. Which pixel generation the shipped PC game selected on which hardware (the loader), and how the 1.x programs differ visually from the 2.0 ones (quality tiers).
-5. The shadow, fog and sky handling that is not material-based (T01-044, T01-045).
+5. The shadow and sky handling that is not material-based (T01-044, T01-045). **Fog is answered for the non-material half** (T01-412, `environment.md` "Combining several hazes into one screen fog"): the several-haze combination into one per-frame colour/near/far triple happens in `Engine.dll` (`CViewRenCmd::ActivateExecution`), not in a shader class, and the vertex program's own fog term (the `Output` fragment, `ShadeShader` family) uses **clip-space depth**, not Euclidean view distance — a separate, unrelated "distance fade" term in the same fragment is the one that uses true 3-D distance, for translucency near the camera, not for fog. Whether the sky cube is itself fogged by render-state leakage (its own draw call never arms or disarms fog, instead bypassing the material pipeline entirely via `gfuUseSimpleShader`) stays open (T01-415).
 6. The compiled `Shaders.dll` also holds the **class implementations**; whether any shader work happens there beyond choosing programs (software skinning, the bloom chain) is open.
 
 ## Test vectors
