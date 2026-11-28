@@ -124,6 +124,23 @@
 //! with a skipped line. A haze attached to a moving parent is placed where the world file has it;
 //! following the parent is the game's job.
 //!
+//! ## Bloom
+//!
+//! Each bloom entity of the world (`environment.md`, "Bloom", T01-417/T01-423/T01-424, read by
+//! [`ss2_format_wld::Bloom`]) becomes one [`BloomVolume`] of [`LevelScene::blooms`], in the
+//! world's entity-list order (T07-049; RFC 0013 amendment 6). The box and its turn are made as for
+//! a haze: the record's size (`.2`, `.3`, `.4`) centred on the bloom renderable's world placement,
+//! in the renderable's normalised world rotation (a rotation that cannot be normalised is replaced
+//! by none with a skipped line). The colour is the stored `0xAARRGGBB` made linear like a haze's
+//! (red, green and blue as sRGB, the alpha byte `/ 255`). The numbers are the record's, through
+//! the clamps the engine applies when it copies the record into the renderable (T01-417):
+//! `fade_margin` is `.5` raised to 0 and then to [`HazeVolume::MIN_FADE_MARGIN`] (the render-time
+//! floor), `strength` `.6` in `[0, 2]`, `ramp` the record's **second** `.21` in `[0, 2]`, `blur`
+//! `.8` in `[0, 8]`, `balance` `.13` in `[0.1, 10]` and `high_pass` `.16` in `[0, 1]`. No retail
+//! bloom is changed by them. The HDR-only threshold (the record's first `.21`) and the mask
+//! texture are not carried. A bloom whose size is not positive or whose numbers are not finite is
+//! left out with a skipped line.
+//!
 //! ## Coordinates
 //!
 //! The game's data is already in the engine's convention (right-handed, Y up, -Z forward), so
@@ -171,7 +188,7 @@ use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig, TextureRef};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
-use ss2_format_wld::{Haze, Marker, ModelRef, Sky, SkyFace, World};
+use ss2_format_wld::{Bloom, Haze, Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
 use ss2_render_api::scene_data::{
     AlphaMode, CubeFace, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
@@ -179,8 +196,8 @@ use ss2_render_api::scene_data::{
 use ss2_vfs::{Vfs, VfsPath};
 
 use crate::scene::{
-    CollisionData, HazeVolume, Instance, LevelScene, LoadProgress, LoadStage, ModelData, ModelPart,
-    SkyData, SpawnPoint,
+    BloomVolume, CollisionData, HazeVolume, Instance, LevelScene, LoadProgress, LoadStage,
+    ModelData, ModelPart, SkyData, SpawnPoint,
 };
 
 /// How to load a level.
@@ -539,6 +556,11 @@ fn scene_of_world(
         .iter()
         .filter_map(|h| haze_volume(h, &mut loader.skipped))
         .collect();
+    let blooms = world
+        .blooms
+        .iter()
+        .filter_map(|b| bloom_volume(b, &mut loader.skipped))
+        .collect();
 
     let spawns = start_markers(world)
         .into_iter()
@@ -552,8 +574,7 @@ fn scene_of_world(
         .to_string();
     let scene = LevelScene {
         hazes,
-        // The blooms are read by T07-049.
-        blooms: Vec::new(),
+        blooms,
         name,
         gravity: if world.gravity.is_finite() {
             world.gravity
@@ -621,6 +642,56 @@ fn haze_volume(h: &Haze, skipped: &mut Vec<String>) -> Option<HazeVolume> {
         ));
         None
     }
+}
+
+/// The scene's bloom volume of one bloom entity (module docs, "Bloom"); `None` with a line in
+/// `skipped` when its numbers cannot be used.
+fn bloom_volume(b: &Bloom, skipped: &mut Vec<String>) -> Option<BloomVolume> {
+    let length = b.rotation.length();
+    let rotation = if length.is_finite() && length > 1e-6 {
+        b.rotation / length
+    } else {
+        skipped.push(format!(
+            "bloom {} ({}): rotation {:?} cannot be normalised, not turned",
+            b.serial, b.name, b.rotation
+        ));
+        Quat::IDENTITY
+    };
+    if !(b.size.is_finite() && b.size.min_element() > 0.0) || !b.translation.is_finite() {
+        skipped.push(format!(
+            "bloom {} ({}): unusable box, size {} at {}",
+            b.serial, b.name, b.size, b.translation
+        ));
+        return None;
+    }
+    let numbers = [b.fade, b.strength, b.ramp, b.blur, b.balance, b.high_pass];
+    if !numbers.iter().all(|v| v.is_finite()) {
+        skipped.push(format!(
+            "bloom {} ({}): fade, strength, ramp, blur, balance, high-pass {numbers:?} are not \
+             all finite",
+            b.serial, b.name
+        ));
+        return None;
+    }
+    let centre = rotation.inverse() * b.translation;
+    let channel = |shift: u32| ((b.color >> shift) & 0xFF) as f32 / 255.0;
+    Some(BloomVolume {
+        min: centre - b.size / 2.0,
+        max: centre + b.size / 2.0,
+        rotation,
+        colour: [
+            sky::srgb_to_linear(channel(16)),
+            sky::srgb_to_linear(channel(8)),
+            sky::srgb_to_linear(channel(0)),
+            channel(24),
+        ],
+        fade_margin: b.fade.max(0.0).max(HazeVolume::MIN_FADE_MARGIN),
+        strength: b.strength.clamp(0.0, 2.0),
+        blur: b.blur.clamp(0.0, 8.0),
+        balance: b.balance.clamp(0.1, 10.0),
+        high_pass: b.high_pass.clamp(0.0, 1.0),
+        ramp: b.ramp.clamp(0.0, 2.0),
+    })
 }
 
 /// The placement of the sky cube (`environment.md`, T01-409): the entity's rotation normalised
