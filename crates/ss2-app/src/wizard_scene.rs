@@ -4,6 +4,9 @@
 //! [`DataWizard`], runs every command it gives on a worker thread (searching and checking read the disk for a
 //! moment, and the window keeps drawing the "searching" or "checking" screen meanwhile), hands the answers back,
 //! and once a folder is accepted (and remembered by the host) opens it for the level picker, again on a worker.
+//!
+//! The main menu's "Choose Game Folder..." shows it again ([`from_menu`], T10-035): there its quit rows read "Back to Menu", and
+//! quitting only closes it.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,6 +23,18 @@ use crate::play::Levels;
 pub(crate) type Answerer = Arc<dyn Fn(WizardCommand) -> Answer + Send + Sync>;
 /// Opens the chosen folder for the level picker; runs on a worker thread.
 pub(crate) type Opener = Arc<dyn Fn(&Path) -> Levels + Send + Sync>;
+/// Makes the scene the main menu shows to choose another folder.
+pub(crate) type SceneMaker = Box<dyn Fn() -> WizardScene>;
+
+/// The wizard of the main menu's "Choose Game Folder...": it says why it shows, and its quit rows go back to the menu.
+pub(crate) fn from_menu() -> DataWizard {
+    let mut wizard = DataWizard::new(Some(
+        "Choose another Serious Sam 2 folder. The one in use stays until a new one is chosen."
+            .into(),
+    ));
+    wizard.set_quit_label("Back to Menu");
+    wizard
+}
 
 /// What the app does after a frame of the wizard.
 pub(crate) enum Outcome {

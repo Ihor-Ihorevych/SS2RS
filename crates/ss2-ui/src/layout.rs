@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn button_rects_are_centered_640_wide() {
         let r = item_rects(items(ScreenId::Main));
-        assert_eq!(r.len(), 4);
+        assert_eq!(r.len(), 5);
         assert_eq!((r[0].x, r[0].w, r[0].h), (640.0, 640.0, 72.0));
         assert_eq!(r[0].y, 320.0);
     }

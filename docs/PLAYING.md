@@ -10,7 +10,7 @@ original game). See the [design](superpowers/specs/2026-11-27-playable-mvp-desig
 ss2-app                              # menu: New Game opens the level list
 ss2-app --level 1_1_jungle           # straight into a level
 ss2-app --data "D:/Games/Serious Sam 2" --level dm_dockingbay
-ss2-app --forget-data                # choose the game folder again in the first-run wizard
+ss2-app --forget-data                # forget the chosen game folder: the first-run wizard shows again
 ss2-app --level dm_dockingbay --screenshot out.png --size 1920x1080   # offscreen picture, no window
 ```
 
@@ -18,8 +18,9 @@ The game data folder is `--data`, else `SS2_DATA_DIR`, else the folder you chose
 time; each is checked again at every start. When none of them is usable (the first start, or the folder moved), the
 window first shows the wizard: it lists the installs it finds (Steam, the registry, common folders), or you type the
 folder that holds `All_PC_01.gro`, it checks the folder and remembers it (`data_location.toml` next to
-`settings.toml`). `ss2-app --forget-data` forgets that choice so that the wizard shows again; see
-[First run](FIRST_RUN.md). `--data` skips the wizard. The level list also offers the built-in **Test room**. A level is named by its
+`settings.toml`). On the path screen Ctrl+V pastes a copied path (Windows). **Choose Game Folder...** on the main menu
+shows the wizard again to pick another folder without restarting ("Back to Menu" keeps the current one), and
+`ss2-app --forget-data` forgets the choice so that the wizard shows at the next start; see [First run](FIRST_RUN.md). `--data` skips the wizard. The level list also offers the built-in **Test room**. A level is named by its
 folder (`1_1_jungle`, `dm_dockingbay`) or its world file name, in any case.
 
 ## Controls

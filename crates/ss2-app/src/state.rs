@@ -48,7 +48,8 @@ impl AppState {
         let mut fx = Effects::default();
         match cmd {
             MenuCommand::StartGame | MenuCommand::Resume => self.scene = Scene::Playing,
-            MenuCommand::QuitToMenu => self.scene = Scene::Menu,
+            // The menu stays the scene: the wizard shows over it until it closes (`app`).
+            MenuCommand::QuitToMenu | MenuCommand::ChooseGameFolder => self.scene = Scene::Menu,
             MenuCommand::Quit => fx.exit = true,
             MenuCommand::SettingsChanged(new) => {
                 if new.vsync != self.settings.vsync {

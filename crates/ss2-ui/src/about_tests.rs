@@ -17,7 +17,8 @@ fn lines() -> Vec<&'static str> {
 }
 
 fn open_about(m: &mut Menu) {
-    // Main menu: New Game, Options, About, Quit.
+    // Main menu: New Game, Options, Choose Game Folder..., About, Quit.
+    m.handle(UiInput::Nav(NavInput::Down));
     m.handle(UiInput::Nav(NavInput::Down));
     m.handle(UiInput::Nav(NavInput::Down));
     assert!(m.handle(UiInput::Nav(NavInput::Activate)).is_empty());
@@ -37,7 +38,16 @@ fn the_main_menu_has_an_about_button_between_options_and_quit() {
             _ => None,
         })
         .collect();
-    assert_eq!(labels, ["New Game", "Options", "About", "Quit"]);
+    assert_eq!(
+        labels,
+        [
+            "New Game",
+            "Options",
+            "Choose Game Folder...",
+            "About",
+            "Quit"
+        ]
+    );
 }
 
 #[test]

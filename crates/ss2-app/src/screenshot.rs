@@ -25,6 +25,7 @@ pub fn take(screen: ScreenId, out: &Path, size: (u32, u32)) -> Result<(), String
         ScreenId::About => {
             menu.handle(UiInput::Nav(NavInput::Down));
             menu.handle(UiInput::Nav(NavInput::Down));
+            menu.handle(UiInput::Nav(NavInput::Down));
             menu.handle(UiInput::Nav(NavInput::Activate));
         }
     }

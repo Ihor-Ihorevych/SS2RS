@@ -338,6 +338,7 @@ pub struct DataWizard {
     return_to: WizardView,
     focus: usize,
     pressed: Option<usize>,
+    quit_label: &'static str,
 }
 
 impl DataWizard {
@@ -355,7 +356,19 @@ impl DataWizard {
             return_to: WizardView::Candidates,
             focus: 0,
             pressed: None,
+            quit_label: "Quit",
         }
+    }
+
+    /// Name the rows that give [`WizardCommand::Quit`] (`Quit` by default). The app opens the wizard from its menu with
+    /// `Back to Menu`, since there [`WizardCommand::Quit`] only closes the wizard (T10-035).
+    pub fn set_quit_label(&mut self, label: &'static str) {
+        self.quit_label = label;
+    }
+
+    /// The name of the rows that give [`WizardCommand::Quit`].
+    pub fn quit_label(&self) -> &'static str {
+        self.quit_label
     }
 
     /// Begin (or begin again): shows the searching screen and asks the app to search.
@@ -928,7 +941,11 @@ impl DataWizard {
                     shorten_middle(&c.detail, 100),
                 );
             } else {
-                Self::centered(list, rect.y + 16.0, 34.0, theme::TEXT, ACTION_ROWS[row - n]);
+                let label = match row - n {
+                    k if k + 1 == ACTION_ROWS.len() => self.quit_label,
+                    k => ACTION_ROWS[k],
+                };
+                Self::centered(list, rect.y + 16.0, 34.0, theme::TEXT, label);
             }
         }
     }
@@ -1045,7 +1062,12 @@ impl DataWizard {
         }
         let labels = self.result_buttons();
         for (row, rect) in self.row_rects() {
-            self.button(list, row, rect, labels[row]);
+            let label = if row + 1 == labels.len() {
+                self.quit_label
+            } else {
+                labels[row]
+            };
+            self.button(list, row, rect, label);
         }
     }
 

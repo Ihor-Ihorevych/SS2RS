@@ -16,6 +16,7 @@
 //!   the query trait gameplay reads, with [`MockInput`] for tests.
 //! - **Locations** ([`PlatformPaths`]): config, saves, cache, logs and the game-data folder.
 //! - **The loop** ([`AppHandler`], [`run_script`]): what the platform calls each event and frame.
+//! - **The clipboard** ([`Clipboard`], [`MockClipboard`]): text to paste into a field.
 //!
 //! ```
 //! use ss2_platform_api::{
@@ -54,6 +55,7 @@
 
 mod actions;
 mod app;
+mod clipboard;
 mod display;
 mod event;
 mod input_state;
@@ -63,6 +65,7 @@ mod paths;
 
 pub use actions::{ActionId, ActionMap, ActionQuery, Binding, InputContext, MockInput};
 pub use app::{AppControl, AppHandler, FrameInfo, ScriptReport, ScriptStep, run_script};
+pub use clipboard::{Clipboard, MockClipboard};
 pub use display::{
     DisplayPlan, DisplayRequest, MonitorInfo, ResolvedMode, UiScale, VideoMode, WindowMode,
     best_video_mode, effective_ui_scale, plan_display, resolution_list, select_monitor,

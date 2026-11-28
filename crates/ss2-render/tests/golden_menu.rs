@@ -120,6 +120,7 @@ fn about_menu() -> Menu {
     let mut m = Menu::new(Settings::default());
     m.handle(UiInput::Nav(NavInput::Down));
     m.handle(UiInput::Nav(NavInput::Down));
+    m.handle(UiInput::Nav(NavInput::Down));
     m.handle(UiInput::Nav(NavInput::Activate));
     m
 }

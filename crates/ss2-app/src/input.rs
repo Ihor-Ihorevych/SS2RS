@@ -2,7 +2,7 @@
 //! instead of `winit`/`gilrs` types.
 
 use ss2_core::input::NavInput;
-use ss2_platform_api::{GamepadButton, InputEvent, KeyCode};
+use ss2_platform_api::{Clipboard, GamepadButton, InputEvent, KeyCode, MockClipboard};
 use ss2_ui::UiInput;
 use ss2_ui::data_wizard::WizardInput;
 
@@ -38,20 +38,51 @@ pub(crate) fn nav_for_button(button: GamepadButton) -> Option<NavInput> {
 /// Tab; letters and Space arrive as [`InputEvent::Text`], and Backspace, Delete, Home and End edit the field. Otherwise the menu's
 /// keys apply ([`nav_for_key`]), and a key that navigated does not also type: the window sends the text of a key right after the key
 /// (`ss2_platform::window`), so Space on "Enter a folder path" would otherwise start the path with a space.
-#[derive(Debug, Default)]
+///
+/// Ctrl+V (and Shift+Insert) while typing paste the clipboard's text (T10-035): it arrives as [`WizardInput::Text`], which the field
+/// inserts at the cursor without its new lines and other control characters. The platform reports no modifier state, so the Ctrl and
+/// Shift keys are followed here (the platform releases every held key when the window loses the focus, so none sticks).
 pub(crate) struct WizardKeys {
     /// The key just handled was used to navigate and also produces text: drop that text.
     swallow_text: bool,
+    /// The Ctrl keys held (left, right).
+    ctrl: [bool; 2],
+    /// The Shift keys held (left, right).
+    shift: [bool; 2],
+    clipboard: Box<dyn Clipboard>,
+}
+
+impl Default for WizardKeys {
+    /// Keys with an empty clipboard (tests).
+    fn default() -> Self {
+        Self::new(Box::new(MockClipboard::default()))
+    }
 }
 
 impl WizardKeys {
+    /// Keys that paste from `clipboard`.
+    pub(crate) fn new(clipboard: Box<dyn Clipboard>) -> Self {
+        Self {
+            swallow_text: false,
+            ctrl: [false; 2],
+            shift: [false; 2],
+            clipboard,
+        }
+    }
+
     /// The wizard input for `event`, if any. Pointer, gamepad and stick input go through the menu's `UiInput` path instead.
     pub(crate) fn map(&mut self, event: &InputEvent, typing: bool) -> Option<WizardInput> {
         match event {
+            InputEvent::Key { key, pressed, .. } if self.modifier(*key, *pressed) => None,
             InputEvent::Key {
                 key, pressed: true, ..
             } => {
                 self.swallow_text = false;
+                if typing && self.pastes(*key) {
+                    // Whatever text the key makes with the modifier held is not typed as well.
+                    self.swallow_text = true;
+                    return self.clipboard.text().map(WizardInput::Text);
+                }
                 if typing {
                     Self::typing_key(*key)
                 } else {
@@ -69,6 +100,26 @@ impl WizardKeys {
             }
             _ => None,
         }
+    }
+
+    /// Follow the Ctrl and Shift keys; whether `key` is one of them.
+    fn modifier(&mut self, key: KeyCode, pressed: bool) -> bool {
+        let slot = match key {
+            KeyCode::ControlLeft => &mut self.ctrl[0],
+            KeyCode::ControlRight => &mut self.ctrl[1],
+            KeyCode::ShiftLeft => &mut self.shift[0],
+            KeyCode::ShiftRight => &mut self.shift[1],
+            _ => return false,
+        };
+        *slot = pressed;
+        true
+    }
+
+    /// Whether pressing `key` now pastes: Ctrl+V, or Shift+Insert.
+    fn pastes(&self, key: KeyCode) -> bool {
+        let ctrl = self.ctrl.contains(&true);
+        let shift = self.shift.contains(&true);
+        (ctrl && key == KeyCode::V) || (shift && !ctrl && key == KeyCode::Insert)
     }
 
     fn typing_key(key: KeyCode) -> Option<WizardInput> {
@@ -202,6 +253,51 @@ mod tests {
             k.map(&text("q"), false),
             Some(WizardInput::Text("q".into()))
         );
+    }
+
+    fn release(key: KeyCode) -> InputEvent {
+        InputEvent::Key {
+            key,
+            pressed: false,
+            repeat: false,
+        }
+    }
+
+    #[test]
+    fn ctrl_v_while_typing_pastes_the_clipboard_and_its_key_text_is_dropped() {
+        let copied = "C:\\Games\\Serious Sam 2\r\n";
+        let mut k = WizardKeys::new(Box::new(MockClipboard::with_text(copied)));
+        assert_eq!(k.map(&press(KeyCode::ControlLeft), true), None);
+        assert_eq!(
+            k.map(&press(KeyCode::V), true),
+            Some(WizardInput::Text(copied.into())),
+            "as copied: the field strips the new line"
+        );
+        // Ctrl+V's own character, if the layout makes one, is not typed.
+        assert_eq!(k.map(&text("\u{16}"), true), None);
+        assert_eq!(k.map(&release(KeyCode::V), true), None);
+        assert_eq!(k.map(&release(KeyCode::ControlLeft), true), None);
+        // Ctrl let go: V types again.
+        assert_eq!(k.map(&press(KeyCode::V), true), None);
+        assert_eq!(k.map(&text("v"), true), Some(WizardInput::Text("v".into())));
+        // Shift+Insert pastes too, with the right-hand Shift as well.
+        assert_eq!(k.map(&press(KeyCode::ShiftRight), true), None);
+        assert!(matches!(
+            k.map(&press(KeyCode::Insert), true),
+            Some(WizardInput::Text(_))
+        ));
+        assert_eq!(k.map(&release(KeyCode::ShiftRight), true), None);
+        assert_eq!(k.map(&press(KeyCode::Insert), true), None);
+    }
+
+    #[test]
+    fn ctrl_v_outside_the_field_or_with_an_empty_clipboard_does_nothing() {
+        let mut k = WizardKeys::new(Box::new(MockClipboard::with_text("D:/SS2")));
+        k.map(&press(KeyCode::ControlRight), false);
+        assert_eq!(k.map(&press(KeyCode::V), false), None, "not typing");
+        let mut empty = WizardKeys::default();
+        empty.map(&press(KeyCode::ControlLeft), true);
+        assert_eq!(empty.map(&press(KeyCode::V), true), None);
     }
 
     #[test]
