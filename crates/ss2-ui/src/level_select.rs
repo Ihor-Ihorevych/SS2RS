@@ -90,7 +90,14 @@ pub struct LevelPicker {
     scroll: usize,
     /// Row under a pointer press, if any.
     pressed: Option<usize>,
+    /// While the scroll bar's thumb is dragged: how far below the thumb's top it was grabbed.
+    dragging: Option<f32>,
+    /// Wheel movement not yet turned into whole rows (trackpads send fractions of a notch).
+    wheel_rest: f32,
 }
+
+/// Rows the list moves per wheel notch.
+pub const ROWS_PER_NOTCH: f32 = 3.0;
 
 impl LevelPicker {
     /// A picker over `entries`, in the given order, with the first level focused.
@@ -111,6 +118,8 @@ impl LevelPicker {
             focus,
             scroll: 0,
             pressed: None,
+            dragging: None,
+            wheel_rest: 0.0,
         };
         picker.keep_focus_visible();
         picker
@@ -153,17 +162,34 @@ impl LevelPicker {
             UiInput::Nav(NavInput::Right) => self.page(1),
             UiInput::Nav(NavInput::Left) => self.page(-1),
             UiInput::PointerMoved(p) => {
-                if let Some(row) = self.level_row_at(p) {
+                if let Some(grab) = self.dragging {
+                    self.drag_thumb_to(p.y - grab);
+                } else if let Some(row) = self.level_row_at(p) {
                     self.focus = Some(row);
                 }
             }
             UiInput::PointerPressed(p) => {
+                if let Some(thumb) = self.thumb().filter(|_| self.track_hit(p)) {
+                    // On the thumb: grab it where it was pressed. On the track: centre the
+                    // thumb on the pointer and grab it there.
+                    let grab = if (thumb.y..thumb.y + thumb.h).contains(&p.y) {
+                        p.y - thumb.y
+                    } else {
+                        thumb.h / 2.0
+                    };
+                    self.dragging = Some(grab);
+                    self.drag_thumb_to(p.y - grab);
+                    return None;
+                }
                 self.pressed = self.level_row_at(p);
                 if self.pressed.is_some() {
                     self.focus = self.pressed;
                 }
             }
             UiInput::PointerReleased(p) => {
+                if self.dragging.take().is_some() {
+                    return None;
+                }
                 let pressed = self.pressed.take();
                 if pressed.is_some() && pressed == self.level_row_at(p) {
                     return self.start_focused();
@@ -173,9 +199,71 @@ impl LevelPicker {
         None
     }
 
+    /// Scroll by a mouse wheel or trackpad: `lines` notches, positive away from the user (up the
+    /// list). The focus stays where it is; the pointer or a key brings it back into view.
+    pub fn wheel(&mut self, lines: f32) {
+        if !lines.is_finite() {
+            return;
+        }
+        self.wheel_rest -= lines * ROWS_PER_NOTCH;
+        let rows = self.wheel_rest.trunc();
+        self.wheel_rest -= rows;
+        self.scroll_to(self.scroll as isize + rows as isize);
+    }
+
+    /// The largest first visible row.
+    fn max_scroll(&self) -> usize {
+        self.rows.len().saturating_sub(VISIBLE_ROWS)
+    }
+
+    fn scroll_to(&mut self, row: isize) {
+        self.scroll = row.clamp(0, self.max_scroll() as isize) as usize;
+    }
+
+    /// The scroll bar's track, when the list does not fit.
+    fn track(&self) -> Option<Rect> {
+        (self.rows.len() > VISIBLE_ROWS).then(|| Rect {
+            x: (CANVAS_W - LIST_W) / 2.0 + LIST_W + 16.0,
+            y: LIST_TOP,
+            w: 8.0,
+            h: list_height(),
+        })
+    }
+
+    /// The scroll bar's thumb, when the list does not fit.
+    fn thumb(&self) -> Option<Rect> {
+        let track = self.track()?;
+        let n = self.rows.len() as f32;
+        Some(Rect {
+            y: track.y + track.h * self.scroll as f32 / n,
+            h: track.h * VISIBLE_ROWS as f32 / n,
+            ..track
+        })
+    }
+
+    /// Whether `p` presses the scroll bar: the thin track widened to an easy target.
+    fn track_hit(&self, p: Vec2) -> bool {
+        self.track().is_some_and(|t| {
+            Rect {
+                x: t.x - 16.0,
+                w: t.w + 32.0,
+                ..t
+            }
+            .contains(p)
+        })
+    }
+
+    /// Scroll so the thumb's top is at canvas height `top`.
+    fn drag_thumb_to(&mut self, top: f32) {
+        let Some(track) = self.track() else { return };
+        let row = ((top - track.y) / track.h * self.rows.len() as f32).round();
+        if row.is_finite() {
+            self.scroll_to(row as isize);
+        }
+    }
+
     /// Append this frame's quads and texts to `out`.
     pub fn draw(&self, out: &mut DrawList) {
-        let x = (CANVAS_W - LIST_W) / 2.0;
         out.texts.push(TextRun {
             pos: Vec2 {
                 x: CANVAS_W / 2.0,
@@ -239,24 +327,13 @@ impl LevelPicker {
             }
         }
         // A scroll bar when the list does not fit.
-        if self.rows.len() > VISIBLE_ROWS {
-            let track = Rect {
-                x: x + LIST_W + 16.0,
-                y: LIST_TOP,
-                w: 8.0,
-                h: list_height(),
-            };
-            let n = self.rows.len() as f32;
+        if let (Some(track), Some(thumb)) = (self.track(), self.thumb()) {
             out.quads.push(Quad {
                 rect: track,
                 color: theme::TRACK,
             });
             out.quads.push(Quad {
-                rect: Rect {
-                    y: track.y + track.h * self.scroll as f32 / n,
-                    h: track.h * VISIBLE_ROWS as f32 / n,
-                    ..track
-                },
+                rect: thumb,
                 color: theme::TRACK_FILL,
             });
         }
@@ -265,7 +342,7 @@ impl LevelPicker {
                 x: CANVAS_W / 2.0,
                 y: LIST_TOP + list_height() + 24.0,
             },
-            text: Cow::Borrowed("Enter: play    Left/Right: page    Esc: back"),
+            text: Cow::Borrowed("Enter: play    Left/Right or wheel: scroll    Esc: back"),
             size: 28.0,
             color: HINT,
             align: TextAlign::Center,
@@ -369,6 +446,13 @@ mod tests {
         out
     }
 
+    fn centre(r: Rect) -> Vec2 {
+        Vec2 {
+            x: r.x + r.w / 2.0,
+            y: r.y + r.h / 2.0,
+        }
+    }
+
     fn texts(d: &DrawList) -> Vec<String> {
         d.texts.iter().map(|t| t.text.to_string()).collect()
     }
@@ -395,6 +479,64 @@ mod tests {
         assert_eq!(p.focused(), Some("level_00"), "wraps to the first");
         nav(&mut p, NavInput::Up);
         assert_eq!(p.focused(), Some("level_06"), "wraps to the last");
+    }
+
+    #[test]
+    fn the_wheel_scrolls_within_the_list_and_keeps_fractions() {
+        let mut p = LevelPicker::new(entries(40)); // 40 levels + 8 headers = 48 rows
+        p.wheel(-1.0); // towards the user: down the list
+        assert_eq!(p.scroll(), 3);
+        p.wheel(-0.5);
+        p.wheel(-0.5);
+        assert_eq!(p.scroll(), 6, "two half notches make one");
+        p.wheel(-100.0);
+        assert_eq!(p.scroll(), 48 - VISIBLE_ROWS, "stops at the end");
+        p.wheel(100.0);
+        assert_eq!(p.scroll(), 0, "stops at the top");
+        p.wheel(f32::NAN);
+        assert_eq!(p.scroll(), 0);
+        assert_eq!(p.focused(), Some("level_00"), "the focus stays");
+        // A list that fits never scrolls.
+        let mut short = LevelPicker::new(entries(3));
+        short.wheel(-5.0);
+        assert_eq!(short.scroll(), 0);
+    }
+
+    #[test]
+    fn the_scroll_bar_drags_and_jumps_and_a_drag_never_starts_a_level() {
+        let mut p = LevelPicker::new(entries(40));
+        let track = p.track().unwrap();
+        let x = track.x + track.w / 2.0;
+        // Grab the thumb at its top and drag half the track down.
+        let grab = Vec2 {
+            x,
+            y: track.y + 1.0,
+        };
+        assert_eq!(p.handle(UiInput::PointerPressed(grab)), None);
+        p.handle(UiInput::PointerMoved(Vec2 {
+            x: x + 300.0, // straying sideways keeps the drag
+            y: grab.y + track.h / 2.0,
+        }));
+        assert_eq!(p.scroll(), 24);
+        // Released over a level row: still no start.
+        assert_eq!(
+            p.handle(UiInput::PointerReleased(centre(row_rect(3)))),
+            None
+        );
+        // Moving afterwards hovers rows again instead of scrolling.
+        p.handle(UiInput::PointerMoved(Vec2 { x, y: track.y }));
+        assert_eq!(p.scroll(), 24);
+        // A press on the track below the thumb centres the thumb there; the bottom end clamps.
+        p.handle(UiInput::PointerPressed(Vec2 {
+            x: x + 12.0, // the target is wider than the drawn track
+            y: track.y + track.h - 1.0,
+        }));
+        p.handle(UiInput::PointerReleased(Vec2 { x, y: track.y }));
+        assert_eq!(p.scroll(), 48 - VISIBLE_ROWS);
+        // The drawn thumb follows the scroll.
+        let thumb = p.thumb().unwrap();
+        assert!(drawn(&p).quads.iter().any(|q| q.rect == thumb));
+        assert!((thumb.y + thumb.h - (track.y + track.h)).abs() < 0.01);
     }
 
     #[test]
