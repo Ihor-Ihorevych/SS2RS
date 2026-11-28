@@ -1,0 +1,79 @@
+# `.wld` navigation leftovers: the five mystery members, the grid list length, formations and tactics without a mover (T01-068)
+
+- **Roadmap task:** T01-068 (follow-up of [`wld-navigation.md`](wld-navigation.md) open questions 2 to 5; the search algorithm itself is [`behavior-navigation-mover.md`](behavior-navigation-mover.md), T01-038/039)
+- **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
+- **Confidence:** **high** for every measured fact below (all 59 worlds, `tools/re/wld_nav_leftovers_verify.py`, building on `tools/re/wld_nav_verify.py`); **medium** for `CNMLink.3`'s formula and for the claim that none of the five members is read by the shipped path-finding code (that code was read in full for T01-155: [`behavior-navigation-mover.md`](behavior-navigation-mover.md) lists exactly which `CNMNode`/`CNMLink` members it uses, and `.2`, `.9`, `.10`, `.11` and `.3` are not among them); **low** for *why* each member exists (editor/bake-time purpose, never confirmed by code). **Nothing was run on the original game.**
+
+Prerequisites: [`wld-navigation.md`](wld-navigation.md) (the mesh, grid, markers, tactics and movers; this page only resolves its open questions), [`wld-navigation-schema.md`](wld-navigation-schema.md) (member tables), [`behavior-navigation-mover.md`](behavior-navigation-mover.md) (the search algorithm and exactly which members it reads), [`brain-movement.md`](brain-movement.md) (tactic selection; resolves the "three tactics without a mover" part), [`spawner-spawn-side.md`](spawner-spawn-side.md) (resolves the "how formations pick members" part), [`secrets-objectives-beacons.md`](secrets-objectives-beacons.md) (resolves the `SNavigationalBeaconEntity` part).
+
+## Summary
+
+The roadmap task asks about six things. Two were already fully answered by other specs; this page adds a cross-reference for them and spends its own evidence on the four that were not:
+
+1. **`CNMNode.2`, `.9`, `.10`, `.11` and `CNMLink.3`.** `.4` is the height plane (already **medium** in `wld-navigation.md` and used by the search, T01-155). The other five are **not read anywhere in the shipped path-finding code** (`FindPath`, `CachePath`, `RecheckWaypoints`, `CanMoveFromPointAToPointB` were read in full for T01-155 and use only `.1`, `.5` to `.8` of `CNMNode` and `.4` to `.10` of `CNMLink`): they are very likely **bake-time or editor-only data with no run-time role**. What the data itself shows (section 2):
+   - **`CNMNode.11` is 0 in all 80,695 nodes** — dead or reserved.
+   - **`CNMNode.9 != -1` exactly when `CNMNode.10 != 0`**, node for node, in all 80,695 nodes — the two are one feature, not two; it is **on in 0 of the nodes in 23 of the 48 non-empty meshes, in almost all nodes in 2 meshes, and in a scattered minority of the rest** — a per-world bake toggle, not a geometric property (not explained by link count or by the node sharing its rectangle with another node).
+   - **`CNMNode.2`, when not the node's own index** (17.7% of nodes), **is never a valid node index of the mesh** (0 of 14,254) but **always happens to be a valid link index of the same mesh** (14,254 of 14,254) — almost certainly coincidence (the values are small integers that fit under the link count by construction, not a reference to a link that touches the node: that link's own owner or target is this node in only 10 of 14,254 cases) and **always larger than the node's own index**, forming a descending count unrelated to the node's position.
+   - **`CNMLink.3`**, across all 335,264 links, **is always the exact negative of its reverse link's `.3`** (an antisymmetric quantity, confirmed to the bit) and tracks the owning node's height-plane slope component along the link's travel axis closely (median absolute difference 0.0024, 90th percentile 0.081): the old guess "the slope between the nodes" (`wld-navigation.md`) is confirmed as a **close data match**, not as a value the search reads.
+2. **The length of `CNavigationGrid.4`** is its own quantity: **never equal to the entry pool's length** (`CGenericGrid2D.5`, 0 of 48 meshes) **nor to the grid-node array's length** (`CGenericGrid2D.1`, 0 of 48), always **larger than the node/used-entry count**, and **larger than "one past the highest used entry index"** in 43 of 48 meshes (equal in 5). The exact rule that sizes it is open.
+3. **The entry-level rule** (`wld-navigation.md`: finest level with cell ≥ the larger side in 35% of nodes, cell ≥ side + 1 in 65%) is unchanged (already **high**, confirmed again here); a candidate unification (finest level whose cell is **strictly greater than** the larger side, not ≥) matches 75% of nodes — closer than chance, not exact; **open**.
+4. **How formations pick members** is already answered in full by [`spawner-spawn-side.md`](spawner-spawn-side.md) section 3: every `CFormation` subclass answers "where is spawnee *index* of *count*" by a placement function; `CMarkersFormation`'s `PickItem` walks the weighted marker list by **slot = index mod (the sum of weights of markers that still exist)**, optionally permuted, taking the first marker whose running weight total passes the slot (a weight of 2 gets two consecutive slots); `wfm_bClosestToPlayer` instead returns whichever candidate position is nearest the closest player. See that page for the formulas of the other four shapes.
+5. **The three tactics without a mover** are answered in full by [`brain-movement.md`](brain-movement.md) section 3.3 step 4: when a pending tactic's `en_hmcCharacterMover` is empty, the brain logs `Tactic entity has invalid (NULL) mover!` and does nothing else — the puppet keeps whatever mover it already had, and the pending tactic is simply consumed. The three tactics (one each in `6_1_Compound`, `5_6_SkyIslands`, `7_3_Arenas_DesertStadium`) also have no marker and no next tactic: each is a dead end that, if ever taken, is a silent no-op.
+6. **What `SNavigationalBeaconEntity` is for** is answered in full by [`secrets-objectives-beacons.md`](secrets-objectives-beacons.md) section 4: it is the placed, concrete class of the beacon (`CNavigationalBeaconEntity`'s data); `AddBeacon` turns a beacon on, `SetCurrentBeacon` turns every beacon off and this one on; an active beacon draws a world marker and a scanner blip (or, if `en_bDirectionOnly`, a rim arrow only) for 7 seconds after the player presses Use.
+
+## Evidence
+
+- **Data.** `python -I tools/re/wld_nav_leftovers_verify.py` (about 15 minutes; builds on `tools/re/wld_nav_verify.py`'s mesh decoding): every measurement in section 1 and 2 above, over all 59 worlds (48 non-empty meshes, 80,695 nodes, 335,264 links). The CNMNode.9/.10 per-world split, the CNMNode.2 link-index check, the CNMLink.3 slope comparison and the CNavigationGrid.4 length comparisons were run once each over the full install; intermediate per-world tables (kept only in the session, not in this repo) back the "23 of 48", "2 of 48" and "5 of 48" counts.
+- **Code (medium).** [`behavior-navigation-mover.md`](behavior-navigation-mover.md) (read for T01-155, not re-read here): its "layout / rules" section lists every `CNMNode` and `CNMLink` member the path service, the node lookup and the straight-line test use; `.2`, `.9`, `.10`, `.11` of `CNMNode` and `.3` of `CNMLink` are absent from that list, which is the basis for "not read by the shipped code" above.
+- **Not checked.** The bake/editor tool that produced these fields (not shipped, not decompiled); the exact derivation of `CNavigationGrid.4`'s length; the exact rule that picks the entry level in the 65% "side + 1" case; whether `CNMNode.2`'s link-sized values are truly coincidental or a genuine (if unused) reference — not resolved by data alone, and no decompiled class carries a `CNMNode`, `CNMLink` or `CNavigationGrid` method (the format is read and written generically by the engine's `CTSEMETA` container code, which does not appear under these class names in the decompile).
+
+## Layout / rules
+
+### 1. What is already settled elsewhere
+
+See the summary's points 4 to 6 above; this page only adds the cross-references. `wld-navigation.md`'s open questions for formations, the tactics without a mover and the beacon's purpose are considered closed.
+
+### 2. The five still-open members
+
+| Member | Data fact (high) | Best data-supported account (medium/low) |
+|---|---|---|
+| `CNMNode.2` | self in 66,441 of 80,695 (82.3%); when not self, always a higher integer, never a valid node index of the mesh, always (by coincidence of magnitude, not of reference) a valid link index | an editor/bake-time counter or leftover id, not consumed by the shipped `FindPath` family; **low** |
+| `CNMNode.9` | -1 in 65,207 of 80,695; when not -1, `CNMNode.10` is never 0 for that same node (and vice versa) — a 1:1 correlation over all 80,695 nodes; **off in all nodes of 23 of the 48 non-empty meshes**, **on in nearly all nodes of 2 meshes** (`1_3_Village` 787/791 = 99.5%, `1_1_Jungle` 2,027/2,068 = 98.0%), and on for a scattered few to several hundred percent-range nodes in the rest; not explained by missing links (nodes with it set have 1 to 8 links, same shape as the mesh as a whole) or by sharing a rectangle with another node (checked, almost never true) | a per-world bake-time feature flag pair with `.10`, inert at run time; **low** |
+| `CNMNode.10` | 0 in 65,207 of 80,695 (exactly where `.9` is -1); 40+ distinct nonzero values up to 254 when set, too many and too irregular to be a small bit-flag set | tied to `.9` (see above), not a terrain/walkability class on its own; **low** |
+| `CNMNode.11` | 0 in all 80,695 nodes | unused or reserved; **medium-high** (never observed otherwise) |
+| `CNMLink.3` | range -4.154 .. 4.154; `.3` of a link is always the exact negative of `.3` of its reverse link; tracks the owning node's plane slope along the link's travel direction (median abs. difference 0.0024, worse at the 10% of links with the biggest height discontinuities, e.g. stairs) | a bake-time "grade" value for the editor, matching the geometry closely but not read by the shipped search (`CanMoveFromPointAToPointB`'s own step-height test recomputes height changes from `CNMNode.4` and `CNMLink.6`/`.10` instead); **medium** on the formula, **low** on why it is stored at all |
+
+(The `1_3_Village` and `1_1_Jungle` percentages were cross-checked between two independently written scripts in this session and agree; no third, independent script was run.)
+
+### 3. `CNavigationGrid.4`'s length
+
+Measured over the 48 non-empty meshes (entry pool = `CGenericGrid2D.5`, grid-node array = `CGenericGrid2D.1`, both from `wld-root.md`'s quadtree layout):
+
+- **Never equal to the entry pool's length** (0 of 48: e.g. `1_3_Village` has a 4,096-entry pool but a 1,445-long `CNavigationGrid.4`; `2_2_DesertedBase` has an 8,192-entry pool but a 12,956-long list — the list can be either shorter or longer than the pool).
+- **Never equal to the grid-node array's length** (0 of 48).
+- **Always longer than the node count** (= the used-entry count, which the existing invariant already ties to the node count one-to-one).
+- **Usually (43 of 48), but not always (5 of 48), longer than "one past the highest used entry index"** — so it is not simply trimmed to the last entry that is actually in use either.
+
+No combination of the other grid members reproduces this length from the data alone; the array is grown by some rule of the bake tool that is not captured anywhere else in the file.
+
+### 4. The entry-level rule's split
+
+`wld-navigation.md` already states, at high confidence, that the chosen level equals the finest level whose cell is at least the node's larger side in 28,067 of 80,695 nodes (35%) and at least the larger side **plus one world unit** in 52,628 (65%); both numbers are reconfirmed here. A single rule that reproduces the split without the "+1" patch — the finest level whose cell is **strictly greater than** the larger side — matches 60,428 of 80,695 nodes (75%): better than either half taken alone, but not exact, so it is not the whole story. The remaining difference is most likely the node's **position** (not just its size) relative to the grid's cell boundaries at that level, but a position-aware "fits inside at most 2×2 cells, as finely as possible" rule was tried and matches only 7,311 of 80,695 (9%) — consistently landing one level **finer** than what is actually stored, i.e. the baking tool does not pick the geometrically tightest level either. **Open.**
+
+## Invariants
+
+1. `CNMNode.11` is 0 and `CNMNode.9 != -1` iff `CNMNode.10 != 0`, for every node of every world (data census; a violation would mean a changed or corrupted bake, not a new rule).
+2. `CNMLink.3` of a link and of its reverse always sum to exactly 0.
+3. `CNavigationGrid.4`'s length is always strictly between the node count (exclusive, since it is always more) and need not be bounded above by the entry pool or grid-node array sizes.
+
+## Test vectors
+
+- **Small world** (`1_3_Village`, 791 nodes, 3,328 links; `wld-navigation.md`'s own test vector): `CNMNode.2 != self` for 156 of 791 nodes, e.g. node 3 (rectangle corner (168, -142), size 2×1) has `.2` = 978, which exceeds the node count (791) and the mesh has 3,328 links, so 978 is a valid link index but not a valid node index. `CNMNode.9 != -1` for 787 of 791 nodes (99.5%, one of this page's two outlier-heavy worlds; `CNMNode.10` is simultaneously nonzero for exactly the same 787), e.g. node 0 has `.9` = 12. `CNMNode.11` is 0 for all 791. The entry pool has 4,096 slots (3,305 free, 791 used = the node count); `CNavigationGrid.4` is 1,445 long (shorter than the pool, longer than the node count, equal to neither "1 + highest used entry" (979) nor the grid-node array (832)). A sample link (link 0, direction 0 / +z) has `.3` = -0.007227 against an owner-plane slope of 0.000294 (diff 0.0075; a close but not exact match, as usual for a single sample).
+- **Large world** (`5_1_Village`, the largest mesh, 4,629 nodes, 19,000 links): `CNMNode.2 != self` for 815 of 4,629 nodes, e.g. node 12 (a 1×1 cell at corner (-454, -468)) has `.2` = 5,637 (out of this mesh's own node range, as always). **`CNMNode.9` is -1 for all 4,629 nodes and `CNMNode.10` is 0 for all 4,629`** — the other outlier: a world where the feature pair is completely unused, underlining that it is a per-world, not a per-node-shape, toggle. The entry pool has 8,192 slots (3,563 free, 4,629 used); `CNavigationGrid.4` is 6,150 long (again between the node count and the pool size, and not equal to the grid-node array's 16,352). A sample link (link 4, direction 1 / +x) has `.3` = -0.054489 against an owner-plane slope of 0.002053 (diff 0.0565, one of the larger-than-median cases).
+- **Tactics without a mover:** `6_1_Compound` object 1110, `5_6_SkyIslands` object 1365 and `7_3_Arenas_DesertStadium` object 768 — all three have `en_henTacticMarker` and `en_henNextTactic` empty as well, so taking one of them (if the engine ever would) logs the error and leaves the puppet's current mover untouched.
+
+## Open questions
+
+1. **Why `CNMNode.9`/`.10` are on for 0%, ~100% or a scattered few percent of nodes depending on the world**, and what the nonzero `.10` values encode when they are on: a feature of the bake tool, possibly tied to a development milestone or level revision; not resolved by data or by the shipped game code (no consuming function was found). Low priority: it has no effect on the engine being rebuilt.
+2. **The exact sizing rule of `CNavigationGrid.4`** and **the exact entry-level rule in the "+1" case** (section 3 and 4): both need either the original bake tool's source or a lot more per-mesh correlation than this page tried; low priority for the same reason.
+3. **Whether `CNMNode.2`'s coincidental fit inside the link-index range is truly coincidental**: a check that compares it against other arrays of the same file (not just this mesh's own links) was not run; low priority.
