@@ -552,6 +552,8 @@ fn scene_of_world(
         .to_string();
     let scene = LevelScene {
         hazes,
+        // The blooms are read by T07-049.
+        blooms: Vec::new(),
         name,
         gravity: if world.gravity.is_finite() {
             world.gravity

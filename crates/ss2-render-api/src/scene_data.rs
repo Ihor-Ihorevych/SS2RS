@@ -332,6 +332,46 @@ impl Fog {
     }
 }
 
+/// One active bloom for a frame (RFC 0013 amendment 6, `docs/re/environment.md` "Bloom"): the renderer runs the
+/// original's bloom chain once for it, after the world and before the 2D overlay.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bloom {
+    /// Linear RGBA added at the end; its RGB is scaled by `fade`, its alpha is not.
+    pub colour: [f32; 4],
+    /// The camera's edge fade into the bloom's box, in 0..=1.
+    pub fade: f32,
+    /// The strength multiplier (renderable `.4`).
+    pub strength: f32,
+    /// The blur spread (renderable `.6`).
+    pub blur: f32,
+    /// How the two blur taps share the spread (renderable `.12`).
+    pub balance: f32,
+    /// The high-pass amount (renderable `.13`).
+    pub high_pass: f32,
+    /// Where on the fixed three-colour ramp the tint pass samples (renderable `.18`).
+    pub ramp: f32,
+}
+
+impl Bloom {
+    /// Every number finite, `fade` in 0..=1, `strength`, `blur`, `balance`, `high_pass` and `ramp` not negative.
+    pub fn validate(&self) -> Result<()> {
+        let numbers = [
+            self.fade,
+            self.strength,
+            self.blur,
+            self.balance,
+            self.high_pass,
+            self.ramp,
+        ];
+        let finite =
+            self.colour.iter().all(|c| c.is_finite()) && numbers.iter().all(|n| n.is_finite());
+        if !finite || !(0.0..=1.0).contains(&self.fade) || numbers.iter().any(|n| *n < 0.0) {
+            return Err(Error::invalid("bloom", format!("{self:?}")));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -522,6 +562,37 @@ mod tests {
             Fog {
                 near: f32::NAN,
                 ..fog
+            }
+            .validate()
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn bloom_numbers_are_checked() {
+        let b = Bloom {
+            colour: [0.1, 0.05, 0.0, 1.0],
+            fade: 1.0,
+            strength: 1.0,
+            blur: 1.0,
+            balance: 1.0,
+            high_pass: 0.5,
+            ramp: 1.5,
+        };
+        b.validate().unwrap();
+        assert!(Bloom { fade: 1.5, ..b }.validate().is_err());
+        assert!(
+            Bloom {
+                strength: -1.0,
+                ..b
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            Bloom {
+                ramp: f32::NAN,
+                ..b
             }
             .validate()
             .is_err()
