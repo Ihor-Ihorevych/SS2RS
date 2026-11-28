@@ -122,12 +122,29 @@ impl SkeletalAnimation {
     /// counts as 0): its rest pose with every track's value at that time. Tracks whose bone is not in `skeleton` are
     /// skipped.
     pub fn local_pose(&self, skeleton: &SkeletonData, time: f32) -> Vec<BoneTransform> {
-        let mut pose = skeleton.rest_pose();
         let t = if time.is_finite() && self.duration > 0.0 {
             time.rem_euclid(self.duration)
         } else {
             0.0
         };
+        self.pose_at(skeleton, t)
+    }
+
+    /// Like [`SkeletalAnimation::local_pose`], but does not wrap: `time` is clamped to `[0, duration]` instead of
+    /// taken modulo it, so a placement playing this animation once ([`PlayMode::Once`]) holds the pose it ends on
+    /// (or its first, before `time` reaches 0) rather than restarting (T04-048).
+    pub fn local_pose_once(&self, skeleton: &SkeletonData, time: f32) -> Vec<BoneTransform> {
+        let t = if time.is_finite() {
+            time.clamp(0.0, self.duration.max(0.0))
+        } else {
+            0.0
+        };
+        self.pose_at(skeleton, t)
+    }
+
+    /// The parent-relative pose at the already-wrapped-or-clamped local time `t`.
+    fn pose_at(&self, skeleton: &SkeletonData, t: f32) -> Vec<BoneTransform> {
+        let mut pose = skeleton.rest_pose();
         for track in &self.tracks {
             let Some(bone) = pose.get_mut(track.bone as usize) else {
                 continue;
@@ -151,6 +168,67 @@ impl SkeletalAnimation {
             }
         }
         pose
+    }
+}
+
+/// Whether an [`AnimationPlayer`] repeats or stops (RFC 0013 amendment 9, T04-048).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlayMode {
+    /// Time wraps every [`SkeletalAnimation::duration`]: the animation repeats forever.
+    Loop,
+    /// Plays once from `start` and then holds the pose it ends on, instead of restarting
+    /// ([`SkeletalAnimation::local_pose_once`]). A `start` the clock has not reached yet holds the first pose
+    /// instead (see [`AnimationPlayer::held`]).
+    Once,
+}
+
+/// Whether `name` reads as a resting loop rather than an action, ignoring case: it contains `idle` or is exactly
+/// `default` (module docs, "Animated models"; T04-048). Doors, lifts and other mechanisms are named for what they
+/// do (`open`, `close`, `up`, `down`, `activate`, ...) and are actions by this rule.
+pub fn is_idle_or_default(name: &str) -> bool {
+    name.to_ascii_lowercase().contains("idle") || name.eq_ignore_ascii_case("default")
+}
+
+/// One placement's own animation state (RFC 0013 amendment 9, T04-048): which of its model's animations it plays,
+/// since when, and whether it repeats. Sim-safe (no `HashMap`, no wall clock): the app (and, later, game logic)
+/// turns its own clock into the `time` seconds given to [`SkinnedModelData::palette_of`]; nothing here reads a
+/// clock itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AnimationPlayer {
+    /// Index into the model's [`SkinnedModelData::animations`].
+    pub animation: u32,
+    /// The clock time (same seconds as `palette_of`'s `time`) at which this pass started; `time - start` is how
+    /// far into the animation the placement is. `f32::INFINITY` never starts (see [`AnimationPlayer::held`]).
+    pub start: f32,
+    /// Loop or hold at the end.
+    pub mode: PlayMode,
+}
+
+impl AnimationPlayer {
+    /// Plays `animation` on a loop from `start`.
+    pub fn looping(animation: u32, start: f32) -> Self {
+        Self {
+            animation,
+            start,
+            mode: PlayMode::Loop,
+        }
+    }
+
+    /// Plays `animation` once from `start`, holding the pose it ends on once it finishes.
+    pub fn once(animation: u32, start: f32) -> Self {
+        Self {
+            animation,
+            start,
+            mode: PlayMode::Once,
+        }
+    }
+
+    /// Shows `animation`'s first frame and does not advance: `start` is set so far in the future (`+infinity`)
+    /// that `time - start` is negative, and so clamped to 0, for every finite `time`. Used for a placement whose
+    /// chosen animation is an action (module docs, "Animated models"): it should not play itself until something
+    /// (the game, later) gives it a real `start` with [`AnimationPlayer::once`].
+    pub fn held(animation: u32) -> Self {
+        Self::once(animation, f32::INFINITY)
     }
 }
 
@@ -216,6 +294,50 @@ impl SkinnedModelData {
             .filter_map(|p| p.mesh.bounds())
             .reduce(|a, b| Aabb::new(a.min.min(b.min), a.max.max(b.max)))
     }
+
+    /// The bone palette `player` gives at `time` seconds (T04-048): `player`'s animation, played from `player.start`
+    /// and looped or held at the end per `player.mode`; the rest pose for an animation index that is out of range.
+    pub fn palette_of(&self, player: &AnimationPlayer, time: f32) -> Vec<Mat4> {
+        let local = match self.animations.get(player.animation as usize) {
+            Some(a) => {
+                let elapsed = time - player.start;
+                match player.mode {
+                    PlayMode::Loop => a.local_pose(&self.skeleton, elapsed),
+                    PlayMode::Once => a.local_pose_once(&self.skeleton, elapsed),
+                }
+            }
+            None => self.skeleton.rest_pose(),
+        };
+        self.skeleton.model_transforms(&local).unwrap_or_default()
+    }
+
+    /// The player a freshly placed instance starts with (module docs, "Animated models"; T04-048): its chosen
+    /// [`SkinnedModelData::default_animation`], looping from the scene's start (`0.0`) if the name reads as a
+    /// resting loop ([`is_idle_or_default`]), else held at its first frame ([`AnimationPlayer::held`]) until
+    /// something gives the placement a real start — an action should not play itself.
+    pub fn default_player(&self) -> AnimationPlayer {
+        let loops = self
+            .animations
+            .get(self.default_animation as usize)
+            .is_some_and(|a| is_idle_or_default(&a.name));
+        if loops {
+            AnimationPlayer::looping(self.default_animation, 0.0)
+        } else {
+            AnimationPlayer::held(self.default_animation)
+        }
+    }
+
+    /// The box used to cull this model's draws (T04-048): [`SkinnedModelData::bounds`] (the bind pose) grown by
+    /// twice its own diagonal plus 10 m on every side, in model space; `None` without vertices. This is the same
+    /// margin `ss2-world/tests/load_install.rs`'s `animated_placements_pose_with_finite_bounded_palettes` already
+    /// checks every posed vertex of the player's own data stays inside (of `dm_dockingbay` and `6_3_snow_base`), so
+    /// using it for culling does not vanish anything those levels animate; a future model whose motion needs more
+    /// room would have to be checked again.
+    pub fn culling_bounds(&self) -> Option<Aabb> {
+        let b = self.bounds()?;
+        let grow = Vec3::splat((b.max - b.min).length() * 2.0 + 10.0);
+        Some(Aabb::new(b.min - grow, b.max + grow))
+    }
 }
 
 /// An animated model placed in the level (RFC 0013 amendment 8).
@@ -227,6 +349,10 @@ pub struct SkinnedInstance {
     pub transform: Transform,
     /// Whether this placement takes part in collision (with its model's bind-pose collision).
     pub collidable: bool,
+    /// This placement's own animation state (RFC 0013 amendment 9, T04-048): the loader starts it at
+    /// [`SkinnedModelData::default_player`]; the app poses the placement from it every frame
+    /// ([`SkinnedModelData::palette_of`]) instead of every placement of a model sharing one clock.
+    pub animation: AnimationPlayer,
 }
 
 /// A place a player can start.
@@ -662,6 +788,16 @@ impl LevelScene {
                     inst.transform
                 ));
             }
+            let animations = self.skinned_models[inst.model as usize].animations.len();
+            if inst.animation.animation as usize >= animations {
+                return bad(format!(
+                    "skinned instance {i} plays animation {} of {animations}",
+                    inst.animation.animation
+                ));
+            }
+            if inst.animation.start.is_nan() {
+                return bad(format!("skinned instance {i} has a NaN animation start"));
+            }
         }
         Ok(())
     }
@@ -876,7 +1012,9 @@ impl LevelScene {
     }
 
     /// [`LevelScene::test_room`] with [`test_skinned_bar`] standing on the floor 4 m in front of the spawn (at
-    /// `(0, 0, 2)`), collidable: an animated placement for tests without game data.
+    /// `(0, 0, 2)`), collidable: an animated placement for tests without game data. Its player loops `Bend` from
+    /// `0.0` (not [`SkinnedModelData::default_player`]'s choice, since `Bend` is an action by that rule: tests
+    /// that want to see it loop, as callers did before T04-048, still can).
     pub fn test_room_animated() -> Self {
         let mut room = Self::test_room();
         room.skinned_models.push(test_skinned_bar());
@@ -884,6 +1022,7 @@ impl LevelScene {
             model: 0,
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
             collidable: true,
+            animation: AnimationPlayer::looping(0, 0.0),
         });
         room
     }
@@ -1650,5 +1789,93 @@ mod skinned_tests {
             .unwrap()
             .indices
             .push(999)));
+        assert!(check(&|s| s.skinned_instances[0].animation.animation = 9));
+        assert!(check(&|s| s.skinned_instances[0].animation.start = f32::NAN));
+        // Infinity (`AnimationPlayer::held`) is not NaN: not rejected by itself.
+        assert!(!check(
+            &|s| s.skinned_instances[0].animation = AnimationPlayer::held(0)
+        ));
+    }
+
+    /// T04-048: two placements of the same model, started at different times, play independently instead of
+    /// sharing one clock (the bug this task fixes).
+    #[test]
+    fn two_placements_of_one_model_play_from_their_own_start() {
+        let bar = test_skinned_bar();
+        let early = AnimationPlayer::looping(0, 0.0);
+        let late = AnimationPlayer::looping(0, 1.0);
+        let same = |a: &[Mat4], b: &[Mat4]| a.iter().zip(b).all(|(x, y)| x.abs_diff_eq(*y, 1e-4));
+        // At the same moment, a placement that started a second later is a second further behind (1.6 and 0.6 s
+        // into `Bend`, not the symmetric 0.5/1.5 s pair that happens to bend the same amount both ways).
+        assert!(same(
+            &bar.palette_of(&early, 1.6),
+            &bar.palette_of(&late, 2.6)
+        ));
+        assert!(!same(
+            &bar.palette_of(&early, 1.6),
+            &bar.palette_of(&late, 1.6)
+        ));
+    }
+
+    /// T04-048: a once-only animation holds the pose it ends on instead of looping past it.
+    #[test]
+    fn a_once_only_animation_holds_its_last_pose() {
+        let bar = test_skinned_bar();
+        let once = AnimationPlayer::once(0, 0.0);
+        // `Bend` lasts 2 s. A looping player at 5 s is 1 s into its third pass (bent); a once player instead holds
+        // where its single pass ended, at 2 s (back to rest).
+        let held = bar.palette_of(&once, 5.0);
+        assert_eq!(held, bar.palette_of(&once, 2.0), "holds where it ended");
+        let looped = bar.palette_of(&AnimationPlayer::looping(0, 0.0), 5.0);
+        assert_ne!(held, looped, "a loop would be bent at 5 s instead");
+        // Before its start, a once player holds its first frame (rest), the same as after T04-048's `held`.
+        let not_yet = AnimationPlayer::once(0, 10.0);
+        assert_eq!(
+            bar.palette_of(&not_yet, 0.0),
+            bar.palette_of(&AnimationPlayer::held(0), 0.0)
+        );
+    }
+
+    /// T04-048: the loader's default player loops an idle/default-named animation from the scene's start, and
+    /// holds an action at its first frame until the game drives it (module docs, "Animated models").
+    #[test]
+    fn default_player_loops_idle_or_default_and_holds_an_action() {
+        let mut idle = test_skinned_bar();
+        idle.animations[0].name = "Idle_Sway".to_string();
+        let player = idle.default_player();
+        assert_eq!(player.mode, PlayMode::Loop);
+        assert_eq!(player.start, 0.0);
+
+        let action = test_skinned_bar(); // "Bend": no idle/default match.
+        let player = action.default_player();
+        assert_eq!(player.mode, PlayMode::Once);
+        assert!(player.start.is_infinite() && player.start > 0.0);
+        // Held at every finite time, including negative ones: it never catches up to `start`.
+        let rest = action
+            .skeleton
+            .model_transforms(&action.skeleton.rest_pose())
+            .unwrap();
+        for t in [0.0, 1.0, 1_000.0, -5.0] {
+            assert_eq!(action.palette_of(&player, t), rest, "t = {t}");
+        }
+    }
+
+    #[test]
+    fn is_idle_or_default_matches_idle_anywhere_and_default_exactly() {
+        assert!(is_idle_or_default("Idle"));
+        assert!(is_idle_or_default("crouchidle"));
+        assert!(is_idle_or_default("DEFAULT"));
+        assert!(!is_idle_or_default("Open"));
+        assert!(!is_idle_or_default("default_open"), "not an exact match");
+    }
+
+    /// T04-048: the box used to cull a model's draws contains its bind pose with room to spare.
+    #[test]
+    fn culling_bounds_grow_the_bind_pose_box() {
+        let bar = test_skinned_bar();
+        let bind = bar.bounds().unwrap();
+        let culling = bar.culling_bounds().unwrap();
+        assert!(culling.min.cmple(bind.min).all() && culling.max.cmpge(bind.max).all());
+        assert!(culling.min != bind.min || culling.max != bind.max);
     }
 }

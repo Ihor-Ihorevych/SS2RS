@@ -181,8 +181,13 @@
 //!   Scalar tracks and events are not carried.
 //! - The animation a placement plays is the first whose name contains `idle` (ignoring case),
 //!   else the first named `default`, else the first. The specs do not say what the original
-//!   plays on a placed model; mechanisms (doors, lifts) whose animations are all actions loop
-//!   their first one until game logic drives them.
+//!   plays on a placed model; this is a choice, and its placements start with their own player
+//!   accordingly (RFC 0013 amendment 9, [`SkinnedModelData::default_player`], T04-048): looping
+//!   from the scene's start if that name reads as a resting loop (contains `idle` or is exactly
+//!   `default`, [`crate::scene::is_idle_or_default`]), else held at its first frame. Mechanisms
+//!   (doors, lifts) whose animations are all actions (`open`, `close`, `up`, `down`, `activate`,
+//!   ...) fall into the second case: they hold their rest-ish first frame, not loop the action,
+//!   until something (game logic, later) gives the placement a real start time.
 //! - The collision is the static build's, in the bind pose; a placement collides as a static
 //!   one would. A lit placement of an animated model is drawn without its lightmap
 //!   ([`LightmapReport::unlit_animated`]): the skinned path has none.
@@ -507,6 +512,10 @@ fn scene_of_world(
                 model,
                 transform,
                 collidable: m.has_hull && skinned_models[model as usize].collision.is_some(),
+                // Its own player, starting at the model's default (T04-048): every placement used to share one
+                // clock on its model's default animation; now each gets the module docs' "Animated models" rule
+                // for itself.
+                animation: skinned_models[model as usize].default_player(),
             });
             continue;
         }

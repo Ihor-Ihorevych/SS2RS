@@ -377,6 +377,44 @@ naming no file format:
   frame sets every draw's palette to its model's `default_palette(t)`, `t` being the seconds of play summed from
   frame deltas (frozen while paused); every placement of a model shows the same moment.
 
+### Amendment 9: per-placement animation state and skinned culling (T04-048)
+
+Amendment 8's placements shared one clock on their model's default animation, so no two placements of a model could
+show different moments (doors and lifts, say, all stuck in lockstep) and nothing could hold an action's rest pose
+without looping it. All additions, still in `ss2_world::scene`, naming no file format, sim-safe (no `HashMap`, no
+wall clock: a player is plain data the caller samples with its own `time`):
+
+- `PlayMode { Loop, Once }` and `AnimationPlayer { animation: u32, start: f32, mode: PlayMode }`: which of a
+  model's animations a placement plays, since when (`time - start`), and whether it loops or holds the pose it
+  ends on. `AnimationPlayer::looping(animation, start)`, `::once(animation, start)` and `::held(animation)` (`start`
+  is `+infinity`, so `time - start` is negative — clamped to 0 — for every finite `time`: it shows the animation's
+  first frame and does not advance until something gives it a real `start`).
+- `SkeletalAnimation::local_pose_once(&SkeletonData, time) -> Vec<BoneTransform>`: like `local_pose`, but clamps
+  `time` to `[0, duration]` instead of wrapping it, so a `Once` player holds its final pose instead of restarting.
+- `SkinnedModelData::palette_of(&AnimationPlayer, time) -> Vec<Mat4>` (what a placement's draws are actually posed
+  with: `player`'s animation, looped or held per `player.mode`), `default_player() -> AnimationPlayer` (the
+  loader's starting choice: loops `default_animation` from `0.0` if its name reads as a resting loop — contains
+  `idle` or is exactly `default`, `is_idle_or_default(name)` — else held at its first frame, since an action
+  should not play itself) and `culling_bounds() -> Option<Aabb>` (`bounds()` grown by twice its own diagonal plus
+  10 m on every side: the same margin `ss2-world/tests/load_install.rs`'s data-gated tests already check every
+  posed vertex of the player's own data stays inside, reused here so culling with it never vanishes what those
+  levels animate). `palette` and `default_palette` are unchanged (direct animation-index access still works).
+- `SkinnedInstance` gains `animation: AnimationPlayer`: its own player, not a model-wide one. The loader starts it
+  at `default_player()` (module docs, "Animated models"); `validate()` checks its animation index is in the
+  model's range and its `start` is not NaN (`+infinity`, for a held player, is not NaN and passes). `test_room_animated()`'s placement is given `AnimationPlayer::looping(0, 0.0)` explicitly (its one animation, `Bend`, is an
+  action by the loader's rule, so tests that want to see it loop, as callers did before this amendment, still can).
+- `ss2_render::SkinnedDraw` gains `bounds: Aabb` (the mesh's own-space culling box, `transformed` by the draw's
+  model-to-world matrix to test against the camera's frustum); a non-finite `bounds` is refused like a non-finite
+  transform. The renderer builds one `ss2_render_api::Frustum` per frame (it already computes the aspect ratio for
+  the camera's projection) and skips a skinned draw whose box tests `Visibility::Outside` — never for
+  `Intersecting` or `Inside`, the frustum's own conservative contract. Static batches are not culled by this
+  amendment: they have no per-instance bounds yet, so there was nothing to reuse for them; a future task that adds
+  it can share the same `Frustum`.
+- The app computes each model's `culling_bounds()` once at upload (falling back to a point at the origin for a
+  model with no vertices) and gives every one of its draws that box; it poses each draw from its own placement's
+  `palette_of(&inst.animation, t)` instead of one palette per model, so two placements of one model started at
+  different times (or one held, one looping) now show different moments.
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource

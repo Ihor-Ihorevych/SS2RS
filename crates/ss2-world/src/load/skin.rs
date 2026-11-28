@@ -113,7 +113,8 @@ pub(super) fn bind_animations<'a>(
 /// The animation a placement plays, of animations named `names` in order: the first whose name contains `idle`
 /// (ignoring case), else the first named `default` (ignoring case), else the first. The specs do not say what the
 /// original plays on a placed model, so this is a choice: idle loops are what a level shows at rest; mechanisms
-/// (doors, lifts) whose only animations are actions loop their first one until the game drives them.
+/// (doors, lifts) whose only animations are actions fall back to the first one, and the placement's player holds
+/// its first frame rather than looping it (`crate::scene::SkinnedModelData::default_player`, T04-048).
 pub(super) fn default_animation<'a>(names: impl Iterator<Item = &'a str> + Clone) -> usize {
     names
         .clone()

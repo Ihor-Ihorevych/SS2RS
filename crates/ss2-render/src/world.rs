@@ -12,9 +12,9 @@
 use std::ops::Range;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
-use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{CubeFace, Fog, MeshData, MeshVertex, TexelFormat, TextureData};
 use ss2_render_api::skinning::{MAX_BONES, SkinnedMeshData, SkinnedVertex};
+use ss2_render_api::{Aabb, Camera, Frustum, Visibility};
 use wgpu::util::DeviceExt;
 
 use crate::context::RenderError;
@@ -59,6 +59,11 @@ pub struct SkinnedDraw {
     /// One bone-to-model matrix per bone of the mesh (its `inverse_bind` list, in order); see
     /// [`ss2_render_api::skinning`].
     pub palette: Vec<Mat4>,
+    /// A box, in the mesh's own (model) space, this draw never draws outside of whichever animation plays (RFC
+    /// 0013 amendment 9, T04-048): `transform.transformed(bounds)` is what the renderer culls the draw by, not
+    /// resampling the animation itself every frame. The world loader's `SkinnedModelData::culling_bounds` is
+    /// built to hold this.
+    pub bounds: Aabb,
 }
 
 /// One mesh drawn with one look at many places.
@@ -131,6 +136,13 @@ struct GpuSkinnedDraw {
     /// [`MAX_BONES`] skin matrices.
     palette: wgpu::Buffer,
     palette_group: wgpu::BindGroup,
+    /// A CPU copy of `instance`'s matrix, kept in step by [`WorldGpu::set_skinned`] and
+    /// [`WorldGpu::set_skinned_transform`]: `wgpu::Buffer` cannot be read back, and culling (T04-048) needs it
+    /// every frame without a GPU round trip.
+    transform: Mat4,
+    /// The draw's [`SkinnedDraw::bounds`], in the mesh's own space; culled against the camera's frustum in
+    /// `transform`'s world space (T04-048).
+    bounds: Aabb,
 }
 
 /// The size of a skinned instance's palette buffer.
@@ -839,9 +851,10 @@ impl WorldGpu {
             if !d.tint.iter().all(|c| c.is_finite())
                 || !cutoff.is_finite()
                 || !d.transform.is_finite()
+                || !(d.bounds.min.is_finite() && d.bounds.max.is_finite())
             {
                 return Err(RenderError::World(format!(
-                    "skinned draw {i} has a non-finite tint, cutoff or transform"
+                    "skinned draw {i} has a non-finite tint, cutoff, transform or bounds"
                 )));
             }
             let skin = Self::skin_bytes(&self.skinned_meshes[mesh as usize], &d.palette)
@@ -880,6 +893,8 @@ impl WorldGpu {
                 instance,
                 palette,
                 palette_group,
+                transform: d.transform,
+                bounds: d.bounds,
             });
         }
         self.skinned = planned;
@@ -891,6 +906,15 @@ impl WorldGpu {
             RenderError::World(format!(
                 "skinned instance {instance} is unknown ({} are drawn)",
                 self.skinned.len()
+            ))
+        })
+    }
+
+    fn skinned_draw_mut(&mut self, instance: usize) -> Result<&mut GpuSkinnedDraw, RenderError> {
+        let len = self.skinned.len();
+        self.skinned.get_mut(instance).ok_or_else(|| {
+            RenderError::World(format!(
+                "skinned instance {instance} is unknown ({len} are drawn)"
             ))
         })
     }
@@ -920,7 +944,8 @@ impl WorldGpu {
                 "skinned instance {instance}: a non-finite transform"
             )));
         }
-        let draw = self.skinned_draw(instance)?;
+        let draw = self.skinned_draw_mut(instance)?;
+        draw.transform = transform;
         queue.write_buffer(
             &draw.instance,
             0,
@@ -1038,6 +1063,8 @@ impl WorldGpu {
             ));
         }
         let aspect = size.0 as f32 / size.1.max(1) as f32;
+        // Culls the skinned draws below (T04-048); not the static batches, which have no per-instance bounds yet.
+        let frustum = Frustum::from_camera(camera, aspect);
         let mut uniform = [0f32; 32];
         uniform[..16].copy_from_slice(&camera.view_projection(aspect).to_cols_array());
         uniform[16..19].copy_from_slice(&camera.forward().to_array());
@@ -1132,6 +1159,9 @@ impl WorldGpu {
         pass.set_pipeline(&self.skinned_pipeline);
         pass.set_bind_group(0, &self.camera_group, &[]);
         for d in &self.skinned {
+            if !skinned_draw_visible(&frustum, d.bounds, d.transform) {
+                continue;
+            }
             let mesh = &self.skinned_meshes[d.mesh as usize];
             pass.set_bind_group(1, &d.material, &[]);
             pass.set_bind_group(2, &d.palette_group, &[]);
@@ -1141,6 +1171,14 @@ impl WorldGpu {
             pass.draw_indexed(0..mesh.index_count, 0, 0..1);
         }
     }
+}
+
+/// Whether a skinned draw whose own-space box is `bounds` and whose model-to-world matrix is `transform` should be
+/// drawn against `frustum` (T04-048): `false` only when [`Frustum::test_aabb`] of the box in world space says
+/// [`Visibility::Outside`], so a box the frustum test cannot rule out is still drawn (the frustum's own contract:
+/// never `Outside` for something a pixel could show).
+fn skinned_draw_visible(frustum: &Frustum, bounds: Aabb, transform: Mat4) -> bool {
+    frustum.test_aabb(bounds.transformed(transform)) != Visibility::Outside
 }
 
 /// A unit cube (from -0.5 to 0.5) seen from inside: one quad per [`CubeFace`] in [`CubeFace::ALL`] order, its UVs
@@ -1205,5 +1243,69 @@ fn linear_to_srgb(c: f32) -> f32 {
         c * 12.92
     } else {
         1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+#[cfg(test)]
+mod skinned_culling_tests {
+    use ss2_render_api::{Camera, Projection};
+
+    use super::*;
+
+    /// A camera at the origin looking down -Z, matching [`ss2_render_api::culling`]'s own test camera.
+    fn frustum() -> Frustum {
+        let camera = Camera {
+            projection: Projection::Perspective {
+                fov_y: std::f32::consts::FRAC_PI_2,
+                near: 1.0,
+            },
+            ..Camera::default()
+        };
+        Frustum::from_camera(&camera, 1.0)
+    }
+
+    fn unit_box() -> Aabb {
+        Aabb::new(Vec3::splat(-0.5), Vec3::splat(0.5))
+    }
+
+    #[test]
+    fn a_draw_placed_ahead_is_visible_and_one_placed_far_to_the_side_is_not() {
+        let f = frustum();
+        let ahead = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
+        assert!(skinned_draw_visible(&f, unit_box(), ahead));
+        let far_aside = Mat4::from_translation(Vec3::new(40.0, 0.0, -5.0));
+        assert!(!skinned_draw_visible(&f, unit_box(), far_aside));
+    }
+
+    #[test]
+    fn a_box_straddling_the_frustums_edge_is_not_culled() {
+        let f = frustum();
+        // At z = -5 the view half-extent is 5 (a 90 degree vertical fov, aspect 1): a box centred just past it
+        // still reaches inside, so it must be drawn (the frustum's contract: never `Outside` for the visible).
+        let straddling = Mat4::from_translation(Vec3::new(5.2, 0.0, -5.0));
+        assert!(skinned_draw_visible(&f, unit_box(), straddling));
+    }
+
+    #[test]
+    fn scale_and_rotation_grow_the_tested_box_conservatively() {
+        let f = frustum();
+        // A small box far to the side, scaled up enough that its grown (axis-aligned, rotation-conservative) bound
+        // reaches back into view.
+        let big = Mat4::from_scale_rotation_translation(
+            Vec3::splat(20.0),
+            Quat::from_rotation_y(0.3),
+            Vec3::new(30.0, 0.0, -5.0),
+        );
+        assert!(skinned_draw_visible(&f, unit_box(), big));
+    }
+
+    #[test]
+    fn an_invalid_camera_sees_nothing_not_everything() {
+        let f = Frustum::from_view_projection(Mat4::from_cols_array(&[f32::NAN; 16]));
+        assert!(!skinned_draw_visible(
+            &f,
+            unit_box(),
+            Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0))
+        ));
     }
 }
