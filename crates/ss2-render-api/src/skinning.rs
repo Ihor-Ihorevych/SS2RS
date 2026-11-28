@@ -15,19 +15,27 @@
 //! The palette comes from a [`SkeletonData`]: parent-relative bone transforms (the rest pose, or
 //! a pose sampled from an animation) composed down the hierarchy by
 //! [`SkeletonData::model_transforms`]. The types here name no file format: the caller copies a
-//! skeleton's bones into [`SkeletonData`] and binds an animation's tracks to bones by id with
-//! [`SkeletonData::pose_from_tracks`]. With the readers of the game's files that is:
+//! skeleton's bones and their names into [`SkeletonData`] and binds an animation's tracks to bones
+//! **by name** with [`SkeletonData::pose_from_named_tracks`]. A track's numeric target id is an
+//! index into *its own file's* identifier table and is not a bone id of a skeleton from another
+//! file (`docs/re/ans.md`, "Target ids" and reader invariant 3); only the name is comparable. With
+//! the readers of the game's files that is:
 //!
 //! ```ignore
-//! let skeleton = SkeletonData::new(skl.lods()[0].bones().iter().map(|b| SkeletonBone {
+//! let lod = &skl.lods()[0];
+//! let skeleton = SkeletonData::new(lod.bones().iter().map(|b| SkeletonBone {
 //!     id: b.id, parent: b.parent, rest: BoneTransform::new(b.local_rotation, b.local_translation),
-//!     inverse_bind: b.inverse_bind }).collect())?;
+//!     inverse_bind: b.inverse_bind }).collect())?
+//!     .with_bone_names(lod.bones().iter().map(|b| b.name.clone()))?;
 //! let pose = animation.sample(time, LoopMode::Loop);                    // ss2_format_ans::Pose
-//! let local = skeleton.pose_from_tracks(
-//!     animation.translations.iter().map(|t| t.target_id).zip(pose.translations.iter().copied()),
-//!     animation.rotations.iter().map(|t| t.target_id).zip(pose.rotations.iter().copied()));
+//! let local = skeleton.pose_from_named_tracks(
+//!     animation.translations.iter().map(|t| t.target.as_str()).zip(pose.translations.iter().copied()),
+//!     animation.rotations.iter().map(|t| t.target.as_str()).zip(pose.rotations.iter().copied()));
 //! let palette = skeleton.model_transforms(&local)?;
 //! ```
+//!
+//! [`SkeletonData::pose_from_tracks`] binds by bone id instead, for callers whose track ids are
+//! known to be bone ids of the same skeleton.
 //!
 //! A model attached to a bone (a weapon in a hand) is placed with [`attachment_transform`].
 //!
@@ -45,6 +53,8 @@
 //! let skin = skin_matrices(&palette, &skeleton.inverse_binds()).unwrap();
 //! assert!(skin.iter().all(|m| m.abs_diff_eq(Mat4::IDENTITY, 1e-6)));
 //! ```
+
+use std::collections::BTreeMap;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
@@ -219,7 +229,8 @@ impl BoneTransform {
 /// One bone of a [`SkeletonData`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SkeletonBone {
-    /// The bone's id, unique in its skeleton (animation tracks address bones by it).
+    /// The bone's id, unique in its skeleton (parent links and [`SkeletonData::index_of`] use it;
+    /// animation tracks find bones by name, [`SkeletonData::with_bone_names`]).
     pub id: u32,
     /// The parent's id; `None` for a root. The parent comes earlier in the bone list.
     pub parent: Option<u32>,
@@ -247,6 +258,10 @@ pub struct SkeletonData {
     bones: Vec<SkeletonBone>,
     /// The index of each bone's parent in `bones`.
     parents: Vec<Option<usize>>,
+    /// Each bone's name, in bone order (empty: no name).
+    names: Vec<String>,
+    /// Name to the first bone index with that name.
+    name_indices: BTreeMap<String, usize>,
 }
 
 impl SkeletonData {
@@ -285,7 +300,55 @@ impl SkeletonData {
             };
             parents.push(parent);
         }
-        Ok(Self { bones, parents })
+        let names = vec![String::new(); bones.len()];
+        Ok(Self {
+            bones,
+            parents,
+            names,
+            name_indices: BTreeMap::new(),
+        })
+    }
+
+    /// The same skeleton with a name for each bone, in bone order (an empty string leaves that
+    /// bone unnamed). Animation tracks find their bone by this name
+    /// ([`SkeletonData::pose_from_named_tracks`]). Names match exactly; if several bones share a
+    /// name, the first in bone order is the one found.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if the number of names is not the number of bones.
+    pub fn with_bone_names<S: Into<String>>(
+        mut self,
+        names: impl IntoIterator<Item = S>,
+    ) -> Result<Self> {
+        let names: Vec<String> = names.into_iter().map(Into::into).collect();
+        if names.len() != self.bones.len() {
+            return Err(Error::invalid(
+                "skeleton",
+                format!("{} names for {} bones", names.len(), self.bones.len()),
+            ));
+        }
+        self.name_indices.clear();
+        for (i, name) in names.iter().enumerate() {
+            if !name.is_empty() {
+                self.name_indices.entry(name.clone()).or_insert(i);
+            }
+        }
+        self.names = names;
+        Ok(self)
+    }
+
+    /// The name of the bone at `index` in [`SkeletonData::bones`]; `None` for a bad index or an
+    /// unnamed bone.
+    pub fn bone_name(&self, index: usize) -> Option<&str> {
+        self.names
+            .get(index)
+            .map(String::as_str)
+            .filter(|n| !n.is_empty())
+    }
+
+    /// The position in [`SkeletonData::bones`] of the (first) bone named `name`.
+    pub fn index_of_name(&self, name: &str) -> Option<usize> {
+        self.name_indices.get(name).copied()
     }
 
     /// The bones in order.
@@ -309,10 +372,13 @@ impl SkeletonData {
         self.bones.iter().map(|b| b.rest).collect()
     }
 
-    /// A local pose from animation tracks: the rest pose, with the translation of each bone named
-    /// in `translations` and the rotation of each bone named in `rotations` (quaternions
+    /// A local pose from tracks that address bones by id: the rest pose, with the translation of
+    /// each bone named in `translations` and the rotation of each bone named in `rotations` (quaternions
     /// `[x, y, z, w]`, normalised here) replaced. Tracks whose id is not a bone are skipped, as are
     /// non-finite values and zero quaternions.
+    ///
+    /// An `.ans` track's `target_id` is **not** a bone id of a skeleton from another file; bind
+    /// such tracks by name with [`SkeletonData::pose_from_named_tracks`].
     pub fn pose_from_tracks(
         &self,
         translations: impl IntoIterator<Item = (u32, [f32; 3])>,
@@ -320,20 +386,38 @@ impl SkeletonData {
     ) -> Vec<BoneTransform> {
         let mut pose = self.rest_pose();
         for (id, t) in translations {
-            let t = Vec3::from(t);
-            if let Some(i) = self.index_of(id)
-                && t.is_finite()
-            {
-                pose[i].translation = t;
+            if let Some(i) = self.index_of(id) {
+                set_translation(&mut pose[i], t);
             }
         }
         for (id, q) in rotations {
-            let q = Quat::from_array(q);
-            if let Some(i) = self.index_of(id)
-                && q.is_finite()
-                && q.length_squared() > 1e-12
-            {
-                pose[i].rotation = q.normalize();
+            if let Some(i) = self.index_of(id) {
+                set_rotation(&mut pose[i], q);
+            }
+        }
+        pose
+    }
+
+    /// A local pose from animation tracks that name their bones by string (`docs/re/ans.md`,
+    /// reader invariant 3): the rest pose, with the translation of the bone named by each entry of
+    /// `translations` and the rotation of the bone named by each entry of `rotations`
+    /// (quaternions `[x, y, z, w]`, normalised here) replaced. A track whose name is no bone of
+    /// this skeleton (an animation exported for another skeleton) is skipped, as are non-finite
+    /// values and zero quaternions. If two tracks name the same bone, the later one wins.
+    pub fn pose_from_named_tracks<'a>(
+        &self,
+        translations: impl IntoIterator<Item = (&'a str, [f32; 3])>,
+        rotations: impl IntoIterator<Item = (&'a str, [f32; 4])>,
+    ) -> Vec<BoneTransform> {
+        let mut pose = self.rest_pose();
+        for (name, t) in translations {
+            if let Some(i) = self.index_of_name(name) {
+                set_translation(&mut pose[i], t);
+            }
+        }
+        for (name, q) in rotations {
+            if let Some(i) = self.index_of_name(name) {
+                set_rotation(&mut pose[i], q);
             }
         }
         pose
@@ -360,6 +444,22 @@ impl SkeletonData {
             });
         }
         Ok(model)
+    }
+}
+
+/// Replace `bone`'s translation with `t` if it is finite.
+fn set_translation(bone: &mut BoneTransform, t: [f32; 3]) {
+    let t = Vec3::from(t);
+    if t.is_finite() {
+        bone.translation = t;
+    }
+}
+
+/// Replace `bone`'s rotation with `q` normalised, if it is finite and not zero.
+fn set_rotation(bone: &mut BoneTransform, q: [f32; 4]) {
+    let q = Quat::from_array(q);
+    if q.is_finite() && q.length_squared() > 1e-12 {
+        bone.rotation = q.normalize();
     }
 }
 
@@ -560,6 +660,70 @@ mod tests {
         // A quaternion that is not unit is normalised.
         let local = s.pose_from_tracks([], [(1, [0.0, 0.0, 0.0, 2.0])]);
         assert_eq!(local[0].rotation, Quat::IDENTITY);
+    }
+
+    #[test]
+    fn named_tracks_bind_to_the_bone_of_that_name() {
+        let s = two_bones().with_bone_names(["Pelvis", "Spine"]).unwrap();
+        assert_eq!(s.index_of_name("Spine"), Some(1));
+        assert_eq!(s.bone_name(0), Some("Pelvis"));
+        let local = s.pose_from_named_tracks(
+            [("Spine", [0.0, 3.0, 0.0])],
+            [("Pelvis", Quat::from_rotation_z(FRAC_PI_2).to_array())],
+        );
+        assert_eq!(local[1].translation, Vec3::new(0.0, 3.0, 0.0));
+        assert!(
+            local[0]
+                .rotation
+                .abs_diff_eq(Quat::from_rotation_z(FRAC_PI_2), 1e-6)
+        );
+        assert_eq!(local[0].translation, Vec3::ZERO);
+        assert_eq!(local[1].rotation, Quat::IDENTITY);
+        // The child sits 3 up its rotated parent's Y axis, which now points along -X.
+        let model = s.model_transforms(&local).unwrap();
+        assert!(near(
+            model[1].transform_point3(Vec3::ZERO),
+            Vec3::new(-3.0, 0.0, 0.0)
+        ));
+    }
+
+    #[test]
+    fn unknown_and_unnamed_bones_are_skipped_and_names_match_exactly() {
+        let s = two_bones().with_bone_names(["Pelvis", ""]).unwrap();
+        assert_eq!(s.bone_name(1), None);
+        assert_eq!(s.bone_name(2), None);
+        assert_eq!(s.index_of_name(""), None);
+        let local = s.pose_from_named_tracks(
+            [
+                ("L_Hand", [1.0, 1.0, 1.0]),
+                ("", [2.0, 2.0, 2.0]),
+                ("pelvis", [3.0; 3]),
+            ],
+            [("Pelvis", [0.0; 4]), ("Pelvis", [f32::NAN, 0.0, 0.0, 1.0])],
+        );
+        assert_eq!(local, s.rest_pose());
+        // Without names nothing binds.
+        let unnamed = two_bones();
+        assert_eq!(
+            unnamed.pose_from_named_tracks([("Pelvis", [1.0; 3])], []),
+            unnamed.rest_pose()
+        );
+    }
+
+    #[test]
+    fn duplicate_names_find_the_first_bone_and_the_last_track_wins() {
+        let s = two_bones().with_bone_names(["Bone", "Bone"]).unwrap();
+        assert_eq!(s.index_of_name("Bone"), Some(0));
+        let local =
+            s.pose_from_named_tracks([("Bone", [1.0, 0.0, 0.0]), ("Bone", [2.0, 0.0, 0.0])], []);
+        assert_eq!(local[0].translation, Vec3::new(2.0, 0.0, 0.0));
+        assert_eq!(local[1], s.rest_pose()[1]);
+        // Renaming replaces every name.
+        let s = s.with_bone_names(["A", "Bone"]).unwrap();
+        assert_eq!(s.index_of_name("Bone"), Some(1));
+        assert_eq!(s.index_of_name("A"), Some(0));
+        assert!(two_bones().with_bone_names(["only one"]).is_err());
+        assert!(two_bones().with_bone_names(["a", "b", "c"]).is_err());
     }
 
     #[test]

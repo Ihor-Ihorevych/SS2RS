@@ -57,6 +57,33 @@ fn registered_loader_preserves_lod_order_sparse_ids_and_source_transforms() {
     assert_eq!(bone.angle_max, Vec3::new(1.0, 2.0, 3.0));
     assert_eq!(bone.ik_flags, 5);
     assert_eq!(bone.raw_member_3, 0.25);
+    assert_eq!(bone.name, "Bone9");
+    assert_eq!(lods[0].bone_by_name("Bone4").unwrap().id, 4);
+    assert_eq!(lods[1].bone_by_name("Bone9").unwrap().parent, Some(4));
+    assert!(lods[1].bone_by_name("Bone1").is_none());
+    assert!(
+        lods[0].bone_by_name("bone4").is_none(),
+        "names match exactly"
+    );
+}
+
+#[test]
+fn bone_names_come_from_the_identifier_table_at_the_bone_id() {
+    // Ids 2 and 3 share a name; id 5 is past the end of the table.
+    let bytes = support::skeleton_named(
+        &[&[(1, 0), (2, 1), (3, 1), (5, 0)]],
+        Quat::IDENTITY.to_array(),
+        "CSkeleton",
+        &["Pelvis", "L_Hand", "L_Hand", "Unused"],
+    );
+    let skeleton = Skeleton::parse(&bytes).unwrap();
+    let lod = &skeleton.lods()[0];
+    let names: Vec<&str> = lod.bones().iter().map(|b| b.name.as_str()).collect();
+    assert_eq!(names, ["Pelvis", "L_Hand", "L_Hand", ""]);
+    assert_eq!(lod.bone_by_name("Pelvis").unwrap().id, 1);
+    assert_eq!(lod.bone_by_name("L_Hand").unwrap().id, 2, "first bone wins");
+    assert!(lod.bone_by_name("Unused").is_none(), "no bone has id 4");
+    assert!(lod.bone_by_name("").is_none());
 }
 
 #[test]
@@ -101,6 +128,7 @@ fn loads_every_skeleton_in_the_local_install() {
     let mut files = 0;
     let mut lods = 0;
     let mut bones = 0;
+    let mut named = 0;
 
     while let Some(dir) = dirs.pop() {
         for entry in vfs.list(&dir).unwrap() {
@@ -114,14 +142,23 @@ fn loads_every_skeleton_in_the_local_install() {
                     .unwrap_or_else(|| panic!("{path}: {:?}", handle.error()));
                 files += 1;
                 lods += skeleton.lods().len();
-                bones += skeleton
-                    .lods()
-                    .iter()
-                    .map(|lod| lod.bones().len())
-                    .sum::<usize>();
+                for lod in skeleton.lods() {
+                    bones += lod.bones().len();
+                    for bone in lod.bones() {
+                        // `ans.md`, "Target ids": every bone's name sits at its id in the table.
+                        assert!(
+                            !bone.name.is_empty(),
+                            "{path}: bone {} has no name",
+                            bone.id
+                        );
+                        assert_eq!(lod.bone_by_name(&bone.name).map(|b| b.id), Some(bone.id));
+                        named += 1;
+                    }
+                }
             }
         }
     }
     assert!(files > 0 && lods > 0 && bones > 0, "no skeletons found");
-    eprintln!("loaded {files} skeletons with {lods} LODs and {bones} bones");
+    assert_eq!(named, bones);
+    eprintln!("loaded {files} skeletons with {lods} LODs and {bones} named bones");
 }

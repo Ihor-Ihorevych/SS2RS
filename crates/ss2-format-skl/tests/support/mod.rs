@@ -2,6 +2,19 @@ use ss2_testkit::fixtures::ctsemeta::{MetaBuilder, ObjectBytes, TypeBlock};
 
 // Class and member numbers come from the format spec. The values, type IDs and hierarchy are synthetic.
 pub fn skeleton(lods: &[&[(i32, i32)]], rotation: [f32; 4], skeleton_class: &str) -> Vec<u8> {
+    let names: Vec<String> = (1..=9).map(|id| format!("Bone{id}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    skeleton_named(lods, rotation, skeleton_class, &names)
+}
+
+/// A skeleton whose identifier table holds `names` at indices 1, 2, … (the bone of id `n` is
+/// named `names[n - 1]`, as in the game's files).
+pub fn skeleton_named(
+    lods: &[&[(i32, i32)]],
+    rotation: [f32; 4],
+    skeleton_class: &str,
+    names: &[&str],
+) -> Vec<u8> {
     const FLOAT: u32 = 1;
     const INT: u32 = 2;
     const FLAGS: u32 = 3;
@@ -18,6 +31,9 @@ pub fn skeleton(lods: &[&[(i32, i32)]], rotation: [f32; 4], skeleton_class: &str
     const RESOURCE: u32 = 14;
 
     let mut fixture = MetaBuilder::new();
+    for name in names {
+        fixture.identifier(name);
+    }
     for block in [
         TypeBlock::primitive(FLOAT, "FLOAT", 4, 4),
         TypeBlock::primitive(INT, "SLONG", 4, 4),
