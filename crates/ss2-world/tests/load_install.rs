@@ -103,7 +103,7 @@ fn legacy_textures_of_two_levels_load() {
             scene.skipped
         );
         // Every texture of both levels reads (before T02-041 the legacy textures were drawn
-        // white: 15 skipped lines in `dm_dockingbay`, 31 in `dm_deserttemple`).
+        // white: 15 skipped texture lines in `dm_dockingbay`, 31 in `dm_deserttemple`).
         assert!(textures.is_empty(), "{textures:#?}");
         let sky = scene.sky.as_ref().expect("a sky");
         let faces: Vec<_> = sky
