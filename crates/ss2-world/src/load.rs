@@ -53,18 +53,17 @@
 //! A static model whose model instance carries an oven modifier (`wld-lighting.md`, "Baked
 //! lightmaps", read by [`ss2_format_wld::Lightmap`]) is lit by its own baked texture
 //! (T07-035). The modifier's UV map id names none of the mesh's streams, so the lightmap's UVs
-//! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407): of the UV
-//! streams of the drawn level of detail, the one whose coordinates all lie in [0, 1] and whose
-//! triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized area
-//! covered twice). With no such stream, the spec's data also says the lightmap stream is usually
-//! one the surface's own material does not use (T01-407), so the lowest-indexed stream that every
-//! drawn surface has and no surface's material uses (the UV map of a non-empty texture group of
-//! any config) is taken, else slot 0 (T01-414's fallback). Every part of the model gets
-//! [`MeshData::lightmap_uvs`] from the chosen stream. A model with several such streams gets
-//! none yet (T01-414's lowest-index rule looked wrong on a real level; the case waits on
-//! T01-420), nor does one where some drawn surface has no UV stream at all: their lit placements
-//! stay unlit and one skipped line says why. This is done only for models
-//! that some lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
+//! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407 and T01-420):
+//! of the UV streams of the drawn level of detail, the one whose coordinates all lie in [0, 1]
+//! and whose triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized
+//! area covered twice). Of several such streams the one with the least overlap is taken; with
+//! none, the least-overlapping stream that still lies in [0, 1]; equal overlaps go to a stream
+//! no surface's material uses (the UV map of a non-empty texture group of any config), then to
+//! the lowest position. Every part of the model gets [`MeshData::lightmap_uvs`] from the chosen
+//! stream. A model with no stream in [0, 1] at all gets none and its lit placements stay unlit
+//! with one skipped line: **a departure from the spec**, whose slot-0 fallback samples the
+//! lightmap through a tiling channel there (dark bands). This is done only for models that some
+//! lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
 //! converted by the same texture path as the others (the size limit, BC kept, RGBA8 from
 //! BGR/BGRA, appended after the file textures); a lightmap that cannot be read or converted
 //! leaves the placement unlit with a skipped line. Of several oven modifiers only the first is
@@ -203,8 +202,8 @@ pub struct LightmapReport {
     pub lit_placements: usize,
     /// Placements that got a lightmap ([`Instance::lightmap`]).
     pub lightmapped: usize,
-    /// Lit placements left unlit because their model has no lightmap UVs (several candidate
-    /// streams, or no candidate and a drawn surface without any stream).
+    /// Lit placements left unlit because their model has no lightmap UVs (no UV stream in
+    /// [0, 1]).
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
@@ -216,19 +215,16 @@ pub struct LightmapReport {
     /// Of those, models with exactly one candidate stream, by the stream's position in the
     /// surfaces' UV streams (slot order).
     pub one_candidate: BTreeMap<usize, usize>,
-    /// Lit models with several candidate streams: no lightmap UVs (until T01-420).
-    pub several_left_unlit: usize,
-    /// Lit models without any candidate stream, given the lowest-indexed stream their material
-    /// does not use.
-    pub none_unused: usize,
-    /// Lit models without any candidate stream whose material uses every stream, given slot 0.
-    pub slot_zero: usize,
-    /// Of the models without a candidate, those whose stream is not slot 0 (the material uses
-    /// slot 0).
-    pub none_moved: usize,
-    /// Lit models without any candidate stream where some drawn surface has no stream at all:
-    /// no lightmap UVs.
-    pub no_stream: usize,
+    /// Lit models with several candidate streams, given the least-overlapping one.
+    pub several_least_overlap: usize,
+    /// Of those, models whose stream is not the lowest-positioned candidate.
+    pub several_not_lowest: usize,
+    /// Lit models without a candidate, given the least-overlapping stream in [0, 1].
+    pub near_miss: usize,
+    /// Of those, models whose stream is not slot 0.
+    pub near_miss_not_slot_zero: usize,
+    /// Lit models without any UV stream in [0, 1]: no lightmap UVs.
+    pub none_in_range: usize,
 }
 
 /// Load the level whose world is `wld`, reporting progress through `progress`.
@@ -829,33 +825,20 @@ impl Loader<'_> {
         report.lit_models += 1;
         match choice {
             lightmap::StreamChoice::One(k) => *report.one_candidate.entry(*k).or_default() += 1,
-            lightmap::StreamChoice::Several(ks) => {
-                report.several_left_unlit += 1;
-                let slots = ks
-                    .iter()
-                    .map(usize::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
+            lightmap::StreamChoice::Several { candidates, stream } => {
+                report.several_least_overlap += 1;
+                report.several_not_lowest += usize::from(candidates.first() != Some(stream));
+            }
+            lightmap::StreamChoice::NearMiss { stream } => {
+                report.near_miss += 1;
+                report.near_miss_not_slot_zero += usize::from(*stream != 0);
+            }
+            lightmap::StreamChoice::NoneInRange => {
+                report.none_in_range += 1;
                 let placements = if lit == 1 { "placement" } else { "placements" };
                 self.skip(format!(
-                    "model `{name}`: several lightmap streams (slots {slots}): no lightmap UVs \
-                     until T01-420 ({lit} lit {placements} drawn unlit)"
-                ));
-            }
-            lightmap::StreamChoice::NoCandidate { stream, unused } => {
-                *if *unused {
-                    &mut report.none_unused
-                } else {
-                    &mut report.slot_zero
-                } += 1;
-                report.none_moved += usize::from(*stream != 0);
-            }
-            lightmap::StreamChoice::Nothing => {
-                report.no_stream += 1;
-                let placements = if lit == 1 { "placement" } else { "placements" };
-                self.skip(format!(
-                    "model `{name}`: no UV stream lies in [0, 1] without overlap and a surface has \
-                     no UV stream at all, so no lightmap UVs ({lit} lit {placements} drawn unlit)"
+                    "model `{name}`: no UV stream lies in [0, 1], so no lightmap UVs \
+                     ({lit} lit {placements} drawn unlit)"
                 ));
             }
         }

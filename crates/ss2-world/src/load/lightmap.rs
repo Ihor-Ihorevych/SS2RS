@@ -1,27 +1,26 @@
 //! Which UV stream of a mesh is its lightmap's (`wld-lighting.md`, "Baked lightmaps", reader
-//! invariant 3: T01-407 and the T01-414 tie-breaks).
+//! invariant 3: T01-407's candidate test and T01-420's ranking).
 //!
 //! The world's oven modifier names a UV map id that is none of the mesh's own ids (reader
 //! invariant 3), so the stream is found from the mesh data: a lightmap unwrap lies entirely
-//! inside [0, 1] and its triangles do not overlap (each texel lights one spot). A stream is a
-//! **candidate** when, over every surface of the level of detail that has triangles, its
-//! coordinates are inside [0, 1] (within [`RANGE_EPS`]) and at most [`MAX_OVERLAP`] of the
+//! inside [0, 1] and its triangles do not overlap (each texel lights one spot). A stream is
+//! **in range** when, on every surface of the level of detail that has triangles, it exists and
+//! its coordinates are inside [0, 1] (within [`RANGE_EPS`]); its **overlap** is the share of the
 //! rasterized area of all its triangles (all surfaces together, since they share one lightmap)
-//! is covered twice or more. Streams are identified by their position in each surface's
-//! [`Surface::uv_sets`] (slot order, `bmf.md` member 12/14).
+//! covered twice or more. A **candidate** is in range with at most [`MAX_OVERLAP`] overlap.
+//! Streams are identified by their position in each surface's [`Surface::uv_sets`] (slot order,
+//! `bmf.md` member 12/14).
 //!
-//! Exactly one candidate is the lightmap's stream. With no candidate, the spec's data says the
-//! lightmap stream is usually one the surface's own material does not use for any of its texture
-//! groups (T01-407: 83 % of the single-candidate instances), so a stream is **material-unused**
-//! when, on no surface with triangles, the material's UV map ids (the UV map of each non-empty
-//! texture group of every config, `mtr.md`) include the id that surface declares at that
-//! position; of the streams every surface with triangles has, the lowest-indexed material-unused
-//! one is taken, else slot 0 (T01-414's fallback), regardless of range or overlap.
-//!
-//! With several candidates no stream is chosen yet: T01-414's lowest-index rule picked a stream
-//! that renders visibly wrong on a real level, and preferring a material-unused one does not
-//! separate the candidates there, so these meshes wait on T01-420. A mesh where some surface with
-//! triangles has no stream at all gets none either.
+//! - Exactly one candidate is the lightmap's stream.
+//! - Several candidates: the one with the least overlap (T01-420).
+//! - No candidate: the in-range stream with the least overlap, the 2 % cutoff relaxed but never
+//!   the [0, 1] requirement (T01-420).
+//! - Equal overlaps go to a stream the material does not use (no surface's material has the id
+//!   that surface declares at that position among its UV map ids: the UV map of each non-empty
+//!   texture group of every config, `mtr.md`), then to the lowest position.
+//! - No stream in range at all: nothing is chosen. **This departs from the spec**, which keeps
+//!   T01-414's slot-0 fallback there: such a slot 0 is a tiling channel, and sampling a lightmap
+//!   through it tiles the texture into dark bands, so the model is drawn unlit instead.
 
 use ss2_format_bmf::Surface;
 
@@ -38,22 +37,25 @@ const GRID: usize = 256;
 pub(crate) enum StreamChoice {
     /// Exactly one candidate: the stream at this position.
     One(usize),
-    /// Several streams qualify (their positions, ascending): none is taken (T01-420).
-    Several(Vec<usize>),
-    /// No stream qualifies; `stream` is taken: the lowest material-unused one when `unused`,
-    /// else slot 0.
-    NoCandidate { stream: usize, unused: bool },
-    /// No stream qualifies and some surface with triangles has no stream: nothing is taken.
-    Nothing,
+    /// Several candidates (`candidates`, ascending): `stream` has the least overlap.
+    Several {
+        candidates: Vec<usize>,
+        stream: usize,
+    },
+    /// No candidate: `stream` is the in-range stream with the least overlap.
+    NearMiss { stream: usize },
+    /// No stream is in range: none is taken (a departure from the spec's slot-0 fallback).
+    NoneInRange,
 }
 
 impl StreamChoice {
     /// The position of the chosen stream, if any.
     pub(crate) fn stream(&self) -> Option<usize> {
         match self {
-            Self::One(k) => Some(*k),
-            Self::NoCandidate { stream, .. } => Some(*stream),
-            Self::Several(_) | Self::Nothing => None,
+            Self::One(k) | Self::Several { stream: k, .. } | Self::NearMiss { stream: k } => {
+                Some(*k)
+            }
+            Self::NoneInRange => None,
         }
     }
 }
@@ -69,40 +71,52 @@ pub(crate) fn choose(surfaces: &[Surface], material_uv_ids: &[Vec<u32>]) -> Stre
             .filter(|(_, s)| s.indices.len() >= 3)
     };
     let streams = drawn().map(|(_, s)| s.uv_sets.len()).max().unwrap_or(0);
-    let unused = |k: usize| {
-        drawn().all(|(i, s)| {
-            let used = material_uv_ids.get(i).map_or(&[][..], Vec::as_slice);
-            s.uv_map_ids.get(k).is_none_or(|id| !used.contains(id))
+    let used = |k: usize| {
+        drawn().any(|(i, s)| {
+            let ids = material_uv_ids.get(i).map_or(&[][..], Vec::as_slice);
+            s.uv_map_ids.get(k).is_some_and(|id| ids.contains(id))
         })
     };
-    let candidates: Vec<usize> = (0..streams)
-        .filter(|&k| is_candidate(surfaces, k))
+    // (overlap, position) of every stream in range, by position.
+    let in_range: Vec<(f64, usize)> = (0..streams)
+        .filter(|&k| is_in_range(surfaces, k))
+        .map(|k| (overlap(surfaces, k), k))
         .collect();
+    let candidates: Vec<usize> = in_range
+        .iter()
+        .filter(|(o, _)| *o <= MAX_OVERLAP)
+        .map(|(_, k)| *k)
+        .collect();
+    // The least overlap; ties to a stream the material does not use, then the lowest position.
+    let best = |pool: &[(f64, usize)]| {
+        pool.iter()
+            .min_by(|a, b| {
+                a.0.total_cmp(&b.0)
+                    .then(used(a.1).cmp(&used(b.1)))
+                    .then(a.1.cmp(&b.1))
+            })
+            .map(|(_, k)| *k)
+    };
     match candidates.as_slice() {
-        [] => {
-            // Only a stream every surface with triangles has.
-            let common = drawn().map(|(_, s)| s.uv_sets.len()).min().unwrap_or(0);
-            if common == 0 {
-                return StreamChoice::Nothing;
-            }
-            match (0..common).find(|&k| unused(k)) {
-                Some(stream) => StreamChoice::NoCandidate {
-                    stream,
-                    unused: true,
-                },
-                None => StreamChoice::NoCandidate {
-                    stream: 0,
-                    unused: false,
-                },
-            }
-        }
         [k] => StreamChoice::One(*k),
-        _ => StreamChoice::Several(candidates),
+        [] => match best(&in_range) {
+            Some(stream) => StreamChoice::NearMiss { stream },
+            None => StreamChoice::NoneInRange,
+        },
+        _ => {
+            let pool: Vec<(f64, usize)> = in_range
+                .iter()
+                .copied()
+                .filter(|(o, _)| *o <= MAX_OVERLAP)
+                .collect();
+            let stream = best(&pool).unwrap_or(candidates[0]);
+            StreamChoice::Several { candidates, stream }
+        }
     }
 }
 
-/// Whether stream `k` is in [0, 1] and does not overlap, over every surface with triangles.
-fn is_candidate(surfaces: &[Surface], k: usize) -> bool {
+/// Whether stream `k` exists and is in [0, 1] on every surface with triangles (and there is one).
+fn is_in_range(surfaces: &[Surface], k: usize) -> bool {
     let mut any = false;
     for s in surfaces.iter().filter(|s| s.indices.len() >= 3) {
         let Some(uvs) = s.uv_sets.get(k) else {
@@ -117,7 +131,7 @@ fn is_candidate(surfaces: &[Surface], k: usize) -> bool {
         }
         any = true;
     }
-    any && overlap(surfaces, k) <= MAX_OVERLAP
+    any
 }
 
 fn inside(c: f32) -> bool {
@@ -228,9 +242,21 @@ mod tests {
         (0..quads).flat_map(f).collect()
     }
 
-    /// Choose with no material: every stream is material-unused.
+    /// Choose with no material: no stream is used by the material.
     fn pick(surfaces: &[Surface]) -> StreamChoice {
         choose(surfaces, &[])
+    }
+
+    /// `strip` with quad 0 widened to `w` (it then overlaps quad 1).
+    fn widened(n: usize, w: f32) -> impl Fn(usize) -> [[f32; 2]; 4] {
+        move |q| {
+            let mut s = strip(q, n);
+            if q == 0 {
+                s[1][0] = w;
+                s[3][0] = w;
+            }
+            s
+        }
     }
 
     #[test]
@@ -265,78 +291,6 @@ mod tests {
     }
 
     #[test]
-    fn several_candidates_choose_nothing_even_if_the_material_uses_some() {
-        // Slot 0 tiles; slots 1 and 2 (UV ids 4 and 5) are both unwraps.
-        let s = surface(
-            2,
-            vec![
-                stream(2, |_| tile(3.0)),
-                stream(2, |q| strip(q, 2)),
-                stream(2, |q| strip(q, 4)),
-            ],
-        );
-        let s = std::slice::from_ref(&s);
-        for used in [vec![], vec![4], vec![4, 5]] {
-            let choice = choose(s, &[used]);
-            assert_eq!(choice, StreamChoice::Several(vec![1, 2]));
-            assert_eq!(choice.stream(), None);
-        }
-    }
-
-    #[test]
-    fn an_id_used_on_any_surface_makes_the_stream_used() {
-        // No candidate: both slots tile outside [0, 1].
-        let a = surface(1, vec![stream(1, |_| tile(2.0)), stream(1, |_| tile(2.0))]);
-        let b = surface(1, vec![stream(1, |_| tile(2.0)), stream(1, |_| tile(2.0))]);
-        // Surface 1's material uses id 3 (slot 0), surface 0 has none.
-        assert_eq!(choose(&[a, b], &[vec![], vec![3]]).stream(), Some(1));
-    }
-
-    #[test]
-    fn no_candidate_prefers_the_lowest_material_unused_stream_then_slot_zero() {
-        // Slot 0 tiles outside [0, 1], slot 1 is stacked inside it: neither qualifies.
-        let s = surface(2, vec![stream(2, |_| tile(2.0)), stream(2, |_| tile(1.0))]);
-        let s = std::slice::from_ref(&s);
-        let none = |stream, unused| StreamChoice::NoCandidate { stream, unused };
-        assert_eq!(pick(s), none(0, true));
-        // The material uses id 3 (slot 0): slot 1.
-        let choice = choose(s, &[vec![3]]);
-        assert_eq!(choice, none(1, true));
-        assert_eq!(choice.stream(), Some(1));
-        // It uses both: slot 0.
-        let choice = choose(s, &[vec![4, 3]]);
-        assert_eq!(choice, none(0, false));
-        assert_eq!(choice.stream(), Some(0));
-    }
-
-    #[test]
-    fn no_candidate_only_takes_a_stream_every_surface_has() {
-        // Surface 1 has only slot 0, which surface 0's material uses (id 3); slot 1 is missing
-        // from surface 1, so slot 0 is taken although it is used.
-        let a = surface(2, vec![stream(2, |_| tile(2.0)), stream(2, |_| tile(2.0))]);
-        let b = surface(2, vec![stream(2, |_| tile(2.0))]);
-        assert_eq!(
-            choose(&[a, b], &[vec![3]]),
-            StreamChoice::NoCandidate {
-                stream: 0,
-                unused: false
-            }
-        );
-    }
-
-    #[test]
-    fn without_a_stream_on_every_surface_nothing_is_chosen() {
-        assert_eq!(pick(&[]), StreamChoice::Nothing);
-        assert_eq!(pick(&[surface(2, vec![])]), StreamChoice::Nothing);
-        // One surface has a stream (it does not qualify), the other none at all.
-        let tiling = surface(2, vec![stream(2, |_| tile(2.0))]);
-        let bare = surface(1, vec![]);
-        let choice = pick(&[tiling, bare]);
-        assert_eq!(choice, StreamChoice::Nothing);
-        assert_eq!(choice.stream(), None);
-    }
-
-    #[test]
     fn a_single_candidate_is_taken_even_when_the_material_uses_it() {
         let s = surface(
             4,
@@ -349,7 +303,90 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_missing_from_one_surface_or_not_finite_is_not_a_candidate() {
+    fn of_several_candidates_the_least_overlap_wins_over_the_lower_slot() {
+        // Slot 0 overlaps a little (about 1 %, under the cutoff), slot 2 not at all.
+        let s = surface(
+            4,
+            vec![
+                stream(4, widened(4, 0.26)),
+                stream(4, |_| tile(3.0)),
+                stream(4, |q| strip(q, 4)),
+            ],
+        );
+        let s = std::slice::from_ref(&s);
+        let o = overlap(s, 0);
+        assert!(o > 0.0 && o <= MAX_OVERLAP, "{o}");
+        let choice = pick(s);
+        assert_eq!(
+            choice,
+            StreamChoice::Several {
+                candidates: vec![0, 2],
+                stream: 2
+            }
+        );
+        assert_eq!(choice.stream(), Some(2));
+        // The overlap ranks before the material: slot 2 wins although the material uses it.
+        assert_eq!(choose(s, &[vec![5]]).stream(), Some(2));
+    }
+
+    #[test]
+    fn with_no_candidate_the_least_overlapping_stream_in_range_wins() {
+        // Slot 0 tiles outside [0, 1], slot 1 is stacked inside it (all overlap), slot 2 is a
+        // near-miss unwrap (a few percent of overlap, over the cutoff).
+        let s = surface(
+            4,
+            vec![
+                stream(4, |_| tile(3.0)),
+                stream(4, |_| tile(1.0)),
+                stream(4, widened(4, 0.3)),
+            ],
+        );
+        let s = std::slice::from_ref(&s);
+        assert!(overlap(s, 2) > MAX_OVERLAP);
+        let choice = pick(s);
+        assert_eq!(choice, StreamChoice::NearMiss { stream: 2 });
+        assert_eq!(choice.stream(), Some(2));
+    }
+
+    #[test]
+    fn a_stream_outside_the_unit_square_is_never_chosen() {
+        // Neither stream is in [0, 1]; the material uses neither, slot 0 is lowest: still nothing.
+        let s = surface(2, vec![stream(2, |_| tile(3.0)), stream(2, |_| tile(2.0))]);
+        let choice = pick(&[s]);
+        assert_eq!(choice, StreamChoice::NoneInRange);
+        assert_eq!(choice.stream(), None);
+        // A stream in range on one surface but missing from another is not in range either.
+        let a = surface(1, vec![stream(1, |_| tile(2.0)), stream(1, |_| tile(1.0))]);
+        let b = surface(1, vec![stream(1, |_| tile(2.0))]);
+        assert_eq!(pick(&[a, b]), StreamChoice::NoneInRange);
+        assert_eq!(pick(&[]), StreamChoice::NoneInRange);
+        assert_eq!(pick(&[surface(2, vec![])]), StreamChoice::NoneInRange);
+    }
+
+    #[test]
+    fn equal_overlaps_go_to_a_stream_the_material_does_not_use_then_the_lowest_slot() {
+        // Several candidates with the same (zero) overlap: slots 0 and 1 (ids 3 and 4).
+        let s = surface(
+            2,
+            vec![stream(2, |q| strip(q, 2)), stream(2, |q| strip(q, 2))],
+        );
+        let s = std::slice::from_ref(&s);
+        assert_eq!(pick(s).stream(), Some(0));
+        assert_eq!(choose(s, &[vec![3]]).stream(), Some(1));
+        assert_eq!(choose(s, &[vec![3, 4]]).stream(), Some(0));
+        // No candidate, two streams stacked alike: the same order.
+        let t = surface(2, vec![stream(2, |_| tile(1.0)), stream(2, |_| tile(1.0))]);
+        let t = std::slice::from_ref(&t);
+        assert_eq!(pick(t), StreamChoice::NearMiss { stream: 0 });
+        assert_eq!(choose(t, &[vec![3]]), StreamChoice::NearMiss { stream: 1 });
+        // An id used on any surface makes the stream used.
+        let a = surface(1, vec![stream(1, |_| tile(1.0)), stream(1, |_| tile(1.0))]);
+        let b = surface(1, vec![stream(1, |_| tile(1.0)), stream(1, |_| tile(1.0))]);
+        assert_eq!(choose(&[a, b], &[vec![], vec![3]]).stream(), Some(1));
+    }
+
+    #[test]
+    fn a_stream_missing_from_one_surface_or_not_finite_is_not_in_range() {
         let a = surface(
             1,
             vec![stream(1, |q| strip(q, 2)), stream(1, |q| strip(q, 2))],
@@ -358,13 +395,7 @@ mod tests {
         assert_eq!(pick(&[a, b]), StreamChoice::One(0));
         let mut nan = stream(2, |q| strip(q, 2));
         nan[1] = [f32::NAN, 0.0];
-        assert_eq!(
-            pick(&[surface(2, vec![nan])]),
-            StreamChoice::NoCandidate {
-                stream: 0,
-                unused: true
-            }
-        );
+        assert_eq!(pick(&[surface(2, vec![nan])]), StreamChoice::NoneInRange);
     }
 
     #[test]
