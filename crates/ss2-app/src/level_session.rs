@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_physics::controller::WalkConfig;
-use ss2_render::{Renderer, SkinnedDraw, SkyBatch, TextureHandle, WorldBatch};
+use ss2_render::{MeshHandle, Renderer, SkinnedDraw, SkyBatch, TextureHandle, WorldBatch};
 use ss2_render_api::scene_data::{AlphaMode, MaterialData, TextureData};
+use ss2_render_api::skinning::attachment_transform;
 use ss2_render_api::{Aabb, Camera};
 use ss2_ui::Color;
 use ss2_vfs::levels::{LevelInfo, discover_levels};
@@ -133,6 +134,41 @@ pub(crate) struct UploadReport {
     pub skinned_instances: usize,
     /// Skinned draws: one per part of each animated placement.
     pub skinned_draws: usize,
+    /// Attachment slots read across every animated model (RFC 0013 amendment 11, T04-046).
+    pub attachments: usize,
+    /// Of those, filled and not hidden: drawn every frame as world batches, one per part of the held model.
+    pub attachments_drawn: usize,
+}
+
+/// One part of one attachment's held model, uploaded once (T04-046): the mesh and material stay fixed; only the
+/// instance matrix (which follows the bone) is rebuilt every frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct AttachmentPart {
+    mesh: MeshHandle,
+    texture: Option<TextureHandle>,
+    tint: [f32; 4],
+    alpha_cutoff: Option<f32>,
+}
+
+/// One visible, filled attachment of one animated placement (T04-046): which bone of the placement's own palette
+/// it follows, its bone-space offset, and its held model's draw parts.
+struct AttachmentDraw {
+    /// Index into [`ss2_world::scene::LevelScene::skinned_instances`].
+    skinned_instance: usize,
+    /// Index into the placement's model's skeleton bones (`ss2_world::scene::Attachment::bone`).
+    bone: usize,
+    /// The slot's placement relative to the bone.
+    offset: Mat4,
+    parts: Vec<AttachmentPart>,
+}
+
+/// What [`upload`] keeps on hand so attachments can be re-posed every frame ([`pose_attachments`]) without
+/// recreating any mesh: [`Renderer::set_world`] replaces the whole draw list, so the static batches (model meshes
+/// never move) are re-sent unchanged alongside the attachments' freshly computed instance matrices.
+pub(crate) struct WorldUpload {
+    pub(crate) report: UploadReport,
+    static_batches: Vec<WorldBatch>,
+    attachments: Vec<AttachmentDraw>,
 }
 
 /// How a material's alpha is drawn: blending is drawn as a cutout until the renderer sorts transparent surfaces.
@@ -150,7 +186,7 @@ fn alpha_cutoff(material: &MaterialData) -> Option<f32> {
 /// # Errors
 /// When a mesh cannot be uploaded or the batches are refused (the scene was validated by the loader, so this means a
 /// GPU problem).
-pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<UploadReport, String> {
+pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<WorldUpload, String> {
     renderer.clear_world();
     let mut report = UploadReport::default();
     let white = renderer
@@ -220,7 +256,8 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
             }
         }
     }
-    renderer.set_world(batches).map_err(|e| e.to_string())?;
+    let attachments = prepare_attachments(renderer, scene, &textures, &mut report)?;
+    set_world_with_attachments(renderer, scene, &batches, &attachments, 0.0)?;
     upload_skinned(renderer, scene, &textures, &mut report)?;
     // The sky's faces are textures of the scene like any other (stand-ins included).
     let sky = scene.sky.map(|sky| SkyBatch {
@@ -232,7 +269,144 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
     });
     report.sky = sky.is_some();
     renderer.set_sky(sky).map_err(|e| e.to_string())?;
-    Ok(report)
+    Ok(WorldUpload {
+        report,
+        static_batches: batches,
+        attachments,
+    })
+}
+
+/// Create the GPU meshes for every animated model's attachments (once per model, T04-046: placements of the same
+/// model share the same slots), then one [`AttachmentDraw`] per placement's visible, filled attachment.
+fn prepare_attachments(
+    renderer: &mut Renderer,
+    scene: &LevelScene,
+    textures: &[TextureHandle],
+    report: &mut UploadReport,
+) -> Result<Vec<AttachmentDraw>, String> {
+    // One entry per skinned model, one per attachment slot, the held model's parts (empty: no model, or it is
+    // hidden and never drawn).
+    let mut templates: Vec<Vec<Vec<AttachmentPart>>> =
+        Vec::with_capacity(scene.skinned_models.len());
+    for model in &scene.skinned_models {
+        report.attachments += model.attachments.len();
+        let mut per_attachment = Vec::with_capacity(model.attachments.len());
+        for attachment in &model.attachments {
+            let mut parts = Vec::new();
+            if !attachment.hidden
+                && let Some(held) = &attachment.model
+            {
+                for part in &held.parts {
+                    let material = scene.materials[part.material as usize];
+                    let mesh = renderer
+                        .create_mesh(&part.mesh)
+                        .map_err(|e| e.to_string())?;
+                    report.meshes += 1;
+                    parts.push(AttachmentPart {
+                        mesh,
+                        texture: material.base_texture.map(|t| textures[t as usize]),
+                        tint: material.base_color,
+                        alpha_cutoff: alpha_cutoff(&material),
+                    });
+                }
+            }
+            per_attachment.push(parts);
+        }
+        templates.push(per_attachment);
+    }
+    let mut draws = Vec::new();
+    for (i, inst) in scene.skinned_instances.iter().enumerate() {
+        let m = inst.model as usize;
+        for (a, attachment) in scene.skinned_models[m].attachments.iter().enumerate() {
+            let parts = &templates[m][a];
+            if parts.is_empty() {
+                continue; // hidden, an empty slot, or its model could not be uploaded
+            }
+            report.attachments_drawn += parts.len();
+            draws.push(AttachmentDraw {
+                skinned_instance: i,
+                bone: attachment.bone,
+                offset: Mat4::from_rotation_translation(
+                    attachment.offset.rotation,
+                    attachment.offset.translation,
+                ),
+                parts: parts.clone(),
+            });
+        }
+    }
+    Ok(draws)
+}
+
+/// Rebuild every attachment's current instance matrix at `time` and send the whole world: the static batches
+/// unchanged, plus one extra batch per attached model part at its freshly posed place
+/// ([`ss2_render_api::skinning::attachment_transform`] on the placement's own palette). [`Renderer::set_world`]
+/// replaces the whole draw list, so the static batches are re-sent even though they do not move; there are no
+/// attachments to re-send in most levels, and model meshes are not recreated, only the matrices. Returns how many
+/// attachment parts were posed.
+///
+/// # Errors
+/// When the renderer refuses the batches (the scene was validated, so this means a GPU-side problem).
+fn set_world_with_attachments(
+    renderer: &mut Renderer,
+    scene: &LevelScene,
+    static_batches: &[WorldBatch],
+    attachments: &[AttachmentDraw],
+    time: f32,
+) -> Result<usize, String> {
+    if attachments.is_empty() {
+        renderer
+            .set_world(static_batches.to_vec())
+            .map_err(|e| e.to_string())?;
+        return Ok(0);
+    }
+    let mut batches = static_batches.to_vec();
+    let mut posed = 0;
+    for a in attachments {
+        let inst = &scene.skinned_instances[a.skinned_instance];
+        let model = &scene.skinned_models[inst.model as usize];
+        let palette = model.palette_of(&inst.animation, time);
+        let Some(world) = attachment_transform(inst.transform.matrix(), &palette, a.bone, a.offset)
+        else {
+            continue;
+        };
+        for part in &a.parts {
+            batches.push(WorldBatch {
+                mesh: part.mesh,
+                texture: part.texture,
+                tint: part.tint,
+                alpha_cutoff: part.alpha_cutoff,
+                instances: vec![world],
+                lightmap: None,
+            });
+            posed += 1;
+        }
+    }
+    renderer.set_world(batches).map_err(|e| e.to_string())?;
+    Ok(posed)
+}
+
+/// Re-pose every attachment of `scene`'s animated placements at `time` seconds and resend the world
+/// ([`set_world_with_attachments`]); called every frame alongside [`pose_skinned`]. Returns how many attachment
+/// parts were drawn (0 when `upload`'s batches are not the renderer's current ones).
+///
+/// # Errors
+/// As [`set_world_with_attachments`].
+pub(crate) fn pose_attachments(
+    renderer: &mut Renderer,
+    scene: &LevelScene,
+    upload: &WorldUpload,
+    time: f32,
+) -> Result<usize, String> {
+    if upload.attachments.is_empty() {
+        return Ok(0);
+    }
+    set_world_with_attachments(
+        renderer,
+        scene,
+        &upload.static_batches,
+        &upload.attachments,
+        time,
+    )
 }
 
 /// The box [`SkinnedDraw::bounds`] culls a model's draws with, in its own space (T04-048):
@@ -368,7 +542,8 @@ pub(crate) fn take_level_screenshot(
     let scene = game.load(info, &mut |_| {})?;
     let loaded = started.elapsed();
     let mut renderer = Renderer::new_offscreen(size).map_err(|e| e.to_string())?;
-    let report = upload(&mut renderer, &scene)?;
+    let uploaded = upload(&mut renderer, &scene)?;
+    let report = &uploaded.report;
     let camera = start_camera(&scene);
     let fog = scene.fog_at(camera.position);
     renderer.set_fog(fog).map_err(|e| e.to_string())?;
@@ -386,6 +561,8 @@ pub(crate) fn take_level_screenshot(
         textures = report.textures,
         textures_replaced = report.textures_replaced,
         animated = report.skinned_instances,
+        attachments = report.attachments,
+        attachments_drawn = report.attachments_drawn,
         skipped = scene.skipped.len(),
         hazes = scene.hazes.len(),
         fog = ?fog,
@@ -470,7 +647,8 @@ mod tests {
             Err(e) => panic!("{e}"),
         };
         let room = LevelScene::test_room();
-        let report = upload(&mut renderer, &room).unwrap();
+        let uploaded = upload(&mut renderer, &room).unwrap();
+        let report = uploaded.report;
         assert_eq!(report.meshes, 1);
         assert_eq!(
             report.textures,
@@ -486,7 +664,7 @@ mod tests {
         assert!(not_sky > 160 * 90 / 2, "the room fills the view: {not_sky}");
         // Uploading again replaces the world.
         let again = upload(&mut renderer, &room).unwrap();
-        assert_eq!(again, report);
+        assert_eq!(again.report, report);
         // Straight up from the start there is no roof: the sky's top face shows, unlit.
         assert!(report.sky);
         let up = Camera {
@@ -543,7 +721,7 @@ mod tests {
         // A level without a sky clears to the sky colour.
         let mut bare = LevelScene::test_room();
         bare.sky = None;
-        assert!(!upload(&mut renderer, &bare).unwrap().sky);
+        assert!(!upload(&mut renderer, &bare).unwrap().report.sky);
         let image = renderer.render_world_to_image(&up, None, SKY).unwrap();
         assert_eq!(
             &image.pixels[((45 * 160 + 80) * 4)..][..4],
@@ -562,7 +740,7 @@ mod tests {
             Err(e) => panic!("{e}"),
         };
         let room = LevelScene::test_room_animated();
-        let report = upload(&mut renderer, &room).unwrap();
+        let report = upload(&mut renderer, &room).unwrap().report;
         assert_eq!((report.skinned_instances, report.skinned_draws), (1, 1));
         assert_eq!(renderer.skinned_count(), 1);
         let camera = start_camera(&room);
