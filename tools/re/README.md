@@ -52,6 +52,7 @@ Animation evidence (docs/re/ans.md):
 
 ```
 python -I tools/re/ans_verify.py "C:\path\to\Serious Sam 2"    # keyframe rules for every envelope, bone ids, events (about 5 minutes)
+python -I tools/re/ans_bone_name_verify.py "C:\path\to\Serious Sam 2"    # T01-430: target_id -> bone-name resolution, over every model, skeleton and animation set (about 1 minute)
 ```
 
 Material evidence (docs/re/mtr.md):
