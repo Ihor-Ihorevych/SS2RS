@@ -12,3 +12,4 @@ pub mod play;
 pub mod player_view;
 pub mod settings;
 pub mod spectate;
+pub mod weapon_state;
