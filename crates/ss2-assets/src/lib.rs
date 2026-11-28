@@ -664,7 +664,17 @@ impl fmt::Debug for AssetManager {
 
 impl Drop for AssetManager {
     fn drop(&mut self) {
-        self.core.queue.closed.store(true, Ordering::Release);
+        {
+            // Set the flag under the queue lock: a worker that has just seen it clear and is about
+            // to wait would otherwise miss the wake-up below and never return (a hung join).
+            let _jobs = self
+                .core
+                .queue
+                .jobs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            self.core.queue.closed.store(true, Ordering::Release);
+        }
         self.core.queue.wake.notify_all();
         for worker in self.workers.drain(..) {
             let _ = worker.join();
