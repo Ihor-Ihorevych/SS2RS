@@ -399,9 +399,7 @@ impl Walker {
         // Fall-height measurement and footstep events (T09-007), from this substep's final
         // grounded state.
         if self.grounded {
-            if !was_grounded
-                && let Some(peak) = self.air_peak_y.take()
-            {
+            if !was_grounded && let Some(peak) = self.air_peak_y.take() {
                 let fall = peak - self.position.y;
                 if fall > 1e-3 {
                     self.landed_fall_height = Some(fall);
