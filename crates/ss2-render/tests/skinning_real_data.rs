@@ -3,13 +3,16 @@
 //!
 //! The model is found, not named: the first skeleton (in path order) whose model folder holds a skinned PC surface
 //! whose bone palette names bones of the skeleton's first LOD (`docs/re/mdl.md`: palette entries are 1-based bone
-//! ids) and an animation that turns one of the bones moving that surface, its tracks bound to bones by id
-//! (`docs/re/ans.md`: tracks address bone ids).
+//! ids) and an animation that turns one of the bones moving that surface, its tracks bound to bones **by name**
+//! (`docs/re/ans.md`, "Target ids" and reader invariant 3, T04-045: a track's `target_id` indexes its own file's
+//! identifier table; the skeleton's table holds each bone's name at the bone's id).
+//!
+//! A second test checks the binding on the spec's test vectors ("Test vectors for the binding rule").
 
 use ss2_core::math::{Quat, Vec3};
 use ss2_format_ans::{AnimSet, Animation, LoopMode};
 use ss2_format_bmf::{Mesh, Surface};
-use ss2_format_skl::Skeleton;
+use ss2_format_skl::{Skeleton, SkeletonLod};
 use ss2_render_api::skinning::{
     BoneTransform, SkeletonBone, SkeletonData, SkinnedMeshData, SkinnedVertex,
 };
@@ -56,7 +59,11 @@ fn model_folder(skl: &VfsPath) -> VfsPath {
 }
 
 fn skeleton_data(skl: &Skeleton) -> Option<SkeletonData> {
-    let lod = skl.lods().first()?;
+    lod_data(skl.lods().first()?)
+}
+
+/// A skeleton LOD as boundary data, with its bone names.
+fn lod_data(lod: &SkeletonLod) -> Option<SkeletonData> {
     SkeletonData::new(
         lod.bones()
             .iter()
@@ -68,6 +75,8 @@ fn skeleton_data(skl: &Skeleton) -> Option<SkeletonData> {
             })
             .collect(),
     )
+    .ok()?
+    .with_bone_names(lod.bones().iter().map(|b| b.name.clone()))
     .ok()
 }
 
@@ -123,28 +132,47 @@ fn skinned_surface(surface: &Surface, skeleton: &SkeletonData) -> Option<Skinned
     Some(mesh)
 }
 
-/// How many of the animation's rotation tracks address bones of the skeleton.
+/// How many of the animation's rotation tracks name bones of the skeleton.
 fn driven_bones(animation: &Animation, skeleton: &SkeletonData) -> usize {
     animation
         .rotations
         .iter()
-        .filter(|t| skeleton.index_of(t.target_id).is_some())
+        .filter(|t| skeleton.index_of_name(&t.target).is_some())
         .count()
 }
 
 /// How many of the animation's translation tracks carry the reciprocal of their bone's length as their length hint
 /// (`docs/re/ans.md`, "Translation member `len`"): a sign of whether the tracks are bound to the right bones.
-fn fitting_length_hints(animation: &Animation, lengths: &[(u32, f32)]) -> usize {
+fn fitting_length_hints(animation: &Animation, lod: &SkeletonLod) -> usize {
     animation
         .translations
         .iter()
         .filter(|t| {
-            lengths
-                .iter()
-                .find(|(id, _)| *id == t.target_id)
-                .is_some_and(|(_, len)| (t.inverse_bone_length * len - 1.0).abs() < 1e-3)
+            lod.bone_by_name(&t.target)
+                .is_some_and(|b| (t.inverse_bone_length * b.length - 1.0).abs() < 1e-3)
         })
         .count()
+}
+
+/// A local pose of `animation` at `time`, its tracks bound to `skeleton`'s bones by name.
+fn pose_at(
+    skeleton: &SkeletonData,
+    animation: &Animation,
+    time: f64,
+) -> Vec<ss2_render_api::skinning::BoneTransform> {
+    let pose = animation.sample(time, LoopMode::Once);
+    skeleton.pose_from_named_tracks(
+        animation
+            .translations
+            .iter()
+            .map(|t| t.target.as_str())
+            .zip(pose.translations.iter().copied()),
+        animation
+            .rotations
+            .iter()
+            .map(|t| t.target.as_str())
+            .zip(pose.rotations.iter().copied()),
+    )
 }
 
 /// `true` if `animation` turns, away from its rest rotation, a bone that moves `mesh`: one of its weighted joints or an
@@ -162,7 +190,7 @@ fn moves(animation: &Animation, skeleton: &SkeletonData, mesh: &SkinnedMeshData)
         }
     }
     animation.rotations.iter().any(|t| {
-        skeleton.index_of(t.target_id).is_some_and(|i| {
+        skeleton.index_of_name(&t.target).is_some_and(|i| {
             affected[i]
                 && t.keys
                     .iter()
@@ -224,18 +252,13 @@ fn find(vfs: &dyn Vfs) -> Option<Found> {
                     Some((mesh, animation.clone()))
                 });
             if let Some((mesh, animation)) = found {
-                let lengths: Vec<(u32, f32)> = skl.lods()[0]
-                    .bones()
-                    .iter()
-                    .map(|b| (b.id, b.length))
-                    .collect();
                 return Some(Found {
                     what: format!(
-                        "{} + {} + animation {:?} ({} of {} translation length hints fit the bone bound by id)",
+                        "{} + {} + animation {:?} ({} of {} translation length hints fit the bone bound by name)",
                         skl_path.as_str(),
                         bmf_path.as_str(),
                         animation.name,
-                        fitting_length_hints(&animation, &lengths),
+                        fitting_length_hints(&animation, &skl.lods()[0]),
                         animation.translations.len()
                     ),
                     skeleton,
@@ -281,19 +304,7 @@ fn a_real_model_poses_to_a_finite_palette_and_stays_in_bounds() {
     let mut moved = 0.0f32;
     for k in 0..5 {
         let time = span * f64::from(k) / 4.0;
-        let pose = animation.sample(time, LoopMode::Once);
-        let local = skeleton.pose_from_tracks(
-            animation
-                .translations
-                .iter()
-                .map(|t| t.target_id)
-                .zip(pose.translations.iter().copied()),
-            animation
-                .rotations
-                .iter()
-                .map(|t| t.target_id)
-                .zip(pose.rotations.iter().copied()),
-        );
+        let local = pose_at(&skeleton, &animation, time);
         let palette = skeleton.model_transforms(&local).unwrap();
         assert!(palette.iter().all(|m| m.is_finite()), "palette at {time} s");
         // Root motion may carry the model, so the bound is generous: within a few model sizes of the origin.
@@ -311,8 +322,200 @@ fn a_real_model_poses_to_a_finite_palette_and_stays_in_bounds() {
             "a vertex went {farthest} from the origin at {time} s"
         );
     }
-    // The animation turns a bone of the surface, so the surface moves. Whether it moves the right way is not checked:
-    // binding tracks to bones by `target_id` does not hold for every file (T04-045).
+    // The animation turns a bone of the surface, so the surface moves; that the tracks reach the right bones is checked
+    // on the spec's vectors below.
     eprintln!("largest move from the bind pose: {moved:.4}");
     assert!(moved > 1e-3, "the animation moved no vertex");
+}
+
+/// One row of `docs/re/ans.md`, "Test vectors for the binding rule (T01-430)".
+struct Vector {
+    skeleton: &'static str,
+    animations: &'static str,
+    animation: &'static str,
+    bones: usize,
+    envelopes: usize,
+    /// Envelopes whose raw `target_id` happens to be a bone id of the skeleton (the spec's "direct-id matches").
+    direct: usize,
+    /// The animation was exported against this skeleton, so every length hint fits its bone (`ans.md`, "Translation
+    /// member `len`"); a shared animation carries the hints of the skeleton it was exported with.
+    own: bool,
+}
+
+const VECTORS: [Vector; 3] = [
+    Vector {
+        skeleton: "Content/SeriousSam2/Models/Enemies/ScorpSoldier/Sources/Skeleton.skl",
+        animations: "Content/SeriousSam2/Models/Enemies/ScorpSoldier/Animations/Scorp.ans",
+        animation: "ScorpSoldier_Idle",
+        bones: 40,
+        envelopes: 80,
+        direct: 56,
+        own: true,
+    },
+    Vector {
+        skeleton: "Content/SeriousSam2/Models/Enemies/Tank/Sources/Tank.skl",
+        animations: "Content/SeriousSam2/Models/Enemies/Tank/Animations/Animations.ans",
+        animation: "Walk",
+        bones: 15,
+        envelopes: 30,
+        direct: 4,
+        own: true,
+    },
+    Vector {
+        skeleton: "Content/SeriousSam2/Models/Npcs/Brimland/Sources/Skeletons/Female.skl",
+        // The spec's table names the shared `Biped_Rides.ans`, which has no `BackPedal`; the animation (48 envelopes,
+        // 0 direct-id matches, as the table says) is in the shared `Biped_Movement.ans` next to it.
+        animations: "Content/SeriousSam2/Models/Animations/Biped_Movement.ans",
+        animation: "BackPedal",
+        bones: 24,
+        envelopes: 48,
+        direct: 0,
+        own: false,
+    },
+];
+
+fn read_vector(vfs: &dyn Vfs, v: &Vector) -> (Skeleton, Animation) {
+    let read = |p: &str| {
+        vfs.read(&VfsPath::new(p).unwrap())
+            .unwrap_or_else(|e| panic!("{p}: {e}"))
+    };
+    let skl = Skeleton::parse(&read(v.skeleton)).unwrap();
+    // A shared file may hold several animation sets: look in each.
+    let bytes = read(v.animations);
+    let container = ss2_meta::Container::parse(&bytes).unwrap();
+    let decoded = container.decode_objects().unwrap();
+    let animation = decoded
+        .objects
+        .iter()
+        .filter(|o| decoded.types.type_name(o.type_id) == Some("CAnimSet"))
+        .filter_map(|o| AnimSet::from_object(&container, &decoded, o.id).ok())
+        .find_map(|set| set.animation(v.animation).cloned())
+        .unwrap_or_else(|| panic!("{}: no animation {}", v.animations, v.animation));
+    (skl, animation)
+}
+
+#[test]
+fn tracks_bind_to_bones_by_name_on_the_spec_vectors() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    for v in &VECTORS {
+        let (skl, animation) = read_vector(&vfs, v);
+        let lod = &skl.lods()[0];
+        assert_eq!(lod.bones().len(), v.bones, "{}", v.skeleton);
+        let skeleton = lod_data(lod).unwrap();
+        let names: Vec<&str> = animation
+            .translations
+            .iter()
+            .map(|t| t.target.as_str())
+            .chain(animation.rotations.iter().map(|t| t.target.as_str()))
+            .collect();
+        let ids: Vec<u32> = animation
+            .translations
+            .iter()
+            .map(|t| t.target_id)
+            .chain(animation.rotations.iter().map(|t| t.target_id))
+            .collect();
+        let by_name = names
+            .iter()
+            .filter(|n| skeleton.index_of_name(n).is_some())
+            .count();
+        // The old reading: the raw `target_id` as a bone id. It is a bone id for a minority, and the bone it names is
+        // rarely the track's own.
+        let direct = ids.iter().filter(|id| lod.bone(**id).is_some()).count();
+        let same_bone = names
+            .iter()
+            .zip(&ids)
+            .filter(|(n, id)| lod.bone(**id).is_some_and(|b| b.name == **n))
+            .count();
+        let hints = fitting_length_hints(&animation, lod);
+        eprintln!(
+            "{} + {}: {by_name} of {} envelopes bound by name; raw id a bone id for {direct}, the same bone for {same_bone}; {hints} of {} length hints fit",
+            v.skeleton,
+            v.animation,
+            names.len(),
+            animation.translations.len()
+        );
+        assert_eq!(names.len(), v.envelopes);
+        assert_eq!(by_name, v.envelopes, "every envelope names a bone");
+        assert_eq!(direct, v.direct, "direct-id matches");
+        assert!(
+            same_bone < v.envelopes,
+            "the raw id is not the bone id here"
+        );
+        if v.own {
+            assert_eq!(
+                hints,
+                animation.translations.len(),
+                "every length hint fits the bone bound by name"
+            );
+        }
+
+        // The bound pose stays plausible: a bound translation (other than a root's, which may carry the model) keeps
+        // about its bone's rest offset length across the animation. Most hold it to 5 % (bones barely stretch;
+        // `ans.md`: the first key equals the rest translation for 96 % of envelopes), none strays past half or
+        // double (a gait may shift a hip, as the scorpion's do by up to 27 %). A shared animation keeps the offsets
+        // of the skeleton it was exported with, whose bone length its hint gives (retargeting it is not done here),
+        // so its translations are measured against that length instead.
+        let span = animation.span_seconds();
+        let (mut checked, mut close) = (0usize, 0usize);
+        for k in 0..=8 {
+            let local = pose_at(&skeleton, &animation, span * f64::from(k) / 8.0);
+            let palette = skeleton.model_transforms(&local).unwrap();
+            assert!(palette.iter().all(|m| m.is_finite()));
+            for t in &animation.translations {
+                let i = skeleton.index_of_name(&t.target).unwrap();
+                let bone = &skeleton.bones()[i];
+                // A hint of exactly 1 is the source's length for a zero offset (`skl.md`), not a length.
+                let rest = if v.own {
+                    bone.rest.translation.length()
+                } else if t.inverse_bone_length == 1.0 {
+                    0.0
+                } else {
+                    1.0 / t.inverse_bone_length
+                };
+                if bone.parent.is_none() || rest < 1e-3 {
+                    continue;
+                }
+                let ratio = local[i].translation.length() / rest;
+                assert!(
+                    (0.5..=2.0).contains(&ratio),
+                    "{}: bone {} offset scaled by {ratio}",
+                    v.animation,
+                    t.target
+                );
+                checked += 1;
+                close += usize::from((ratio - 1.0).abs() < 0.05);
+            }
+        }
+        eprintln!(
+            "  {close} of {checked} sampled bone offsets within 5 % of their reference length"
+        );
+        assert!(
+            checked > 0 && close * 4 >= checked * 3,
+            "{close} of {checked}"
+        );
+    }
+}
+
+#[test]
+fn the_worked_example_reaches_bone_10() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let (skl, animation) = read_vector(&vfs, &VECTORS[0]);
+    let lod = &skl.lods()[0];
+    let skeleton = lod_data(lod).unwrap();
+    let first = &animation.translations[0];
+    assert_eq!((first.target_id, first.target.as_str()), (13, "RF_Foot"));
+    let index = skeleton.index_of_name(&first.target).unwrap();
+    assert_eq!(skeleton.bones()[index].id, 10, "RF_Foot is bone 10");
+    assert_eq!(
+        lod.bone(13).unwrap().name,
+        "RB_Foot",
+        "bone 13 is another leg"
+    );
+    assert!((first.inverse_bone_length * lod.bone(10).unwrap().length - 1.0).abs() < 1e-3);
+    // The pose moves bone 10, not bone 13.
+    let pose = animation.sample(0.0, LoopMode::Once);
+    let local = pose_at(&skeleton, &animation, 0.0);
+    assert_eq!(local[index].translation, Vec3::from(pose.translations[0]));
 }

@@ -3019,6 +3019,7 @@ dependencies = [
  "ss2-format-ans",
  "ss2-format-bmf",
  "ss2-format-skl",
+ "ss2-meta",
  "ss2-render-api",
  "ss2-testkit",
  "ss2-ui",
