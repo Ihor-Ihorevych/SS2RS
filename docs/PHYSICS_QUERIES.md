@@ -58,7 +58,9 @@ infinities give `QueryError::BadInput` (a ray cast with a bad length just hits n
 **How the new casts work** (all standard geometry). A capsule is a segment grown by a radius, so against a triangle the first contact is
 one of: an end of the segment against the triangle (a sphere sweep), a corner of the triangle against the segment (a ray from the corner,
 backwards, against the capsule), or an edge against the inside of the segment (a ray against the parallelogram the edge and the segment
-span, moved out by the radius); the earliest is exact (`Triangle::sweep_capsule`, any segment direction). A box against a triangle is
+span, moved out by the radius); the earliest is exact (`Triangle::sweep_capsule`, any segment direction). Two exact early-outs skip the work for triangles the sweep cannot reach (T07-047): a triangle outside the box around the
+whole sweep, and one whose plane all four corners of the swept segment stay more than the radius from, on one side (a capsule walking
+above a floor). A box against a triangle is
 the separating axis test in motion over the 13 candidate axes (`Triangle::sweep_aabb`). Against moving colliders both shapes stand along
 Y, so a capsule against a sphere or a capsule is a point against one bigger capsule, against a box a sphere against a taller box, and a
 box against a sphere or a capsule is the same thing turned round. A shape that only **grazes** a surface it slides along (a capsule

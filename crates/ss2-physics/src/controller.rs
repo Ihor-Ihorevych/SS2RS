@@ -6,8 +6,9 @@
 //! controller is then replaced or retuned. The original also has a short air-control window after leaving the
 //! ground and a separate movement formula; neither is modelled here.
 //!
-//! The body is three spheres stacked along +Y (capsule casts exist since T07-004b; using them is T07-047),
-//! swept against the static world of a [`SpatialQuery`]. [`Walker::step`] is a pure function of
+//! The body is one capsule standing along +Y from `radius` to `height - radius` above the feet (T07-047;
+//! it was three stacked spheres, which left gaps a thin ledge could slip into), swept against the static
+//! world of a [`SpatialQuery`]. [`Walker::step`] is a pure function of
 //! (state, input, world, dt): it runs fixed substeps of [`SUBSTEP`] seconds and carries the
 //! remainder to the next call, so frame rate does not change the path. No clock, no hash maps.
 //!
@@ -43,13 +44,15 @@ pub const SUBSTEP: f32 = 1.0 / 120.0;
 pub const MAX_FRAME: f32 = 0.1;
 /// How far the body keeps from surfaces, metres.
 const SKIN: f32 = 0.01;
+/// An overlap shallower than this (metres) is rounding at a resting contact, not penetration.
+const TOUCH: f32 = 1e-4;
 /// Slide iterations per move.
 const MAX_SLIDES: usize = 4;
 
 /// The walker's size and feel. Units: metres, seconds, radians.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WalkConfig {
-    /// Radius of the body's spheres.
+    /// Radius of the body's capsule.
     pub radius: f32,
     /// Height from feet to the top of the head.
     pub height: f32,
@@ -255,7 +258,7 @@ impl Walker {
             if len < 1e-6 {
                 break;
             }
-            let Some(hit) = cast_body(world, cfg, self.position, delta) else {
+            let Some(hit) = cast_body(world, cfg, &mut self.position, delta) else {
                 self.position += delta;
                 break;
             };
@@ -301,7 +304,7 @@ impl Walker {
         let mut trial = *self;
         trial.position = start;
         let up = Vec3::Y * cfg.step_height;
-        let rise = match cast_body(world, cfg, start, up) {
+        let rise = match cast_body(world, cfg, &mut trial.position, up) {
             Some(hit) if !hit.started_overlapping => (hit.distance - SKIN).max(0.0),
             Some(_) => return,
             None => cfg.step_height,
@@ -322,32 +325,69 @@ impl Walker {
     }
 }
 
-/// The nearest hit of the body's spheres moved by `delta`.
-fn cast_body(world: &dyn SpatialQuery, cfg: &WalkConfig, feet: Vec3, delta: Vec3) -> Option<Hit> {
+/// The body: a capsule standing along +Y from `radius` to `height - radius` above the feet
+/// (never shorter than a sphere), and how far above the feet its middle is.
+fn body(cfg: &WalkConfig) -> (Shape, f32) {
     let r = cfg.radius;
     let top = (cfg.height - r).max(r);
-    let mut best: Option<Hit> = None;
-    for y in [r, (r + top) * 0.5, top] {
-        if let Some(hit) = cast_sphere(world, feet + Vec3::Y * y, r, delta) {
-            let better = match &best {
-                None => true,
-                Some(b) => {
-                    (hit.started_overlapping && !b.started_overlapping)
-                        || (hit.started_overlapping == b.started_overlapping
-                            && hit.distance < b.distance)
-                }
-            };
-            if better {
-                best = Some(hit);
-            }
-        }
-    }
-    best
+    let shape = Shape::Capsule {
+        half_height: (top - r) * 0.5,
+        radius: r,
+    };
+    (shape, (r + top) * 0.5)
 }
 
-/// One sphere against the static world; a rejected query counts as no hit, and so does a
-/// surface the sphere already touches but moves away from or along (standing on a floor does not
-/// stop a step up or a walk).
+/// The first thing the body standing at `feet` meets when moved by `delta`, against the static
+/// world; a rejected query counts as no hit.
+///
+/// A surface the body already touches but moves away from or along does not stop it (standing
+/// on a floor does not stop a step up or a walk). Because one cast reports only the nearest
+/// contact, such a surface would hide anything behind it, so the body first steps out of it, by
+/// its depth plus [`SKIN`] along its normal (moving `feet`), and casts again; at most
+/// [`MAX_SLIDES`] times, which bounds the push-out. An overlap it moves into comes back as a hit
+/// (one shallower than [`TOUCH`] as a plain touch at distance 0).
+fn cast_body(
+    world: &dyn SpatialQuery,
+    cfg: &WalkConfig,
+    feet: &mut Vec3,
+    delta: Vec3,
+) -> Option<Hit> {
+    let (shape, middle) = body(cfg);
+    let r = cfg.radius;
+    let top = (cfg.height - r).max(r);
+    let filter = QueryFilter {
+        dynamics: false,
+        ..QueryFilter::default()
+    };
+    for _ in 0..MAX_SLIDES {
+        let mut hit = world
+            .shapecast(&shape, *feet + Vec3::Y * middle, delta, &filter)
+            .ok()
+            .flatten()?;
+        if !hit.started_overlapping {
+            return Some(hit);
+        }
+        // `point` is the nearest point of the surface; the nearest point of the axis is
+        // straight across from it, so the depth is the radius less the distance between them.
+        let axis = *feet + Vec3::Y * (hit.point.y - feet.y).clamp(r, top);
+        let depth = (r - (hit.point - axis).length()).max(0.0);
+        if hit.normal.dot(delta) < -1e-6 {
+            // Moving into it. Resting exactly on a surface can round to a hair inside it: that
+            // is a touch at 0, not something to be pushed out of.
+            if depth <= TOUCH {
+                hit.started_overlapping = false;
+                hit.distance = 0.0;
+            }
+            return Some(hit);
+        }
+        *feet += hit.normal * (depth + SKIN);
+    }
+    None
+}
+
+/// One sphere against the static world (the ground probes cast the capsule's bottom end); a
+/// rejected query counts as no hit, and so does a surface the sphere already touches but moves
+/// away from or along.
 fn cast_sphere(world: &dyn SpatialQuery, center: Vec3, radius: f32, delta: Vec3) -> Option<Hit> {
     let filter = QueryFilter {
         dynamics: false,
