@@ -3,6 +3,11 @@
 //! Register [`SkeletonLoader`] with the asset manager or call [`Skeleton::parse`] on bytes.
 //! Geometry uses the file's coordinate basis and units. The stored inverse bind matrix is
 //! preserved independently of the local pose. Each LOD has its own bone IDs and hierarchy.
+//!
+//! Each bone also carries its **name**: the file's own identifier (`IDNT`) table stores a bone's
+//! name at the index equal to the bone's id (`docs/re/ans.md`, "Target ids"). Animation tracks
+//! name their bones by string, so a track binds to the bone of the same name
+//! ([`SkeletonLod::bone_by_name`]), never by treating its identifier index as a bone id.
 
 use std::collections::BTreeMap;
 
@@ -26,6 +31,7 @@ pub struct SkeletonLod {
     pub platform_mask: u32,
     bones: Vec<Bone>,
     bone_indices: BTreeMap<u32, usize>,
+    name_indices: BTreeMap<String, usize>,
 }
 
 impl SkeletonLod {
@@ -38,6 +44,12 @@ impl SkeletonLod {
     pub fn bone(&self, id: u32) -> Option<&Bone> {
         self.bone_indices.get(&id).map(|&index| &self.bones[index])
     }
+
+    /// Look up a bone by its name (exact match). If two bones share a name, the first in source
+    /// order is returned. Bones without a name are never found.
+    pub fn bone_by_name(&self, name: &str) -> Option<&Bone> {
+        self.name_indices.get(name).map(|&index| &self.bones[index])
+    }
 }
 
 /// One bone in a skeleton LOD.
@@ -45,6 +57,9 @@ impl SkeletonLod {
 pub struct Bone {
     /// The nonzero source bone ID.
     pub id: u32,
+    /// The bone's name: the file's identifier-table entry at index [`Self::id`]. Empty if the
+    /// table has no entry there.
+    pub name: String,
     /// A parent bone ID in the same LOD. Roots have no parent.
     pub parent: Option<u32>,
     /// Source member 3, whose meaning is open.
@@ -72,7 +87,8 @@ impl Skeleton {
     /// An error if the container or skeleton fields are invalid, a quaternion is unusable, or
     /// a bone is duplicated or references a parent that does not precede it in the same LOD.
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        let decoded = Container::parse(bytes)?.decode_objects()?;
+        let container = Container::parse(bytes)?;
+        let decoded = container.decode_objects()?;
         let [resource, skeleton] = decoded.objects.as_slice() else {
             return Err(invalid(
                 "expected two main objects: CResourceFile and CSkeleton",
@@ -84,7 +100,7 @@ impl Skeleton {
         let lods = skeleton
             .list("1")?
             .iter()
-            .map(|value| read_lod(types, value))
+            .map(|value| read_lod(&container, types, value))
             .collect::<Result<_>>()?;
         Ok(Self { lods })
     }
@@ -110,10 +126,11 @@ impl AssetLoader for SkeletonLoader {
     }
 }
 
-fn read_lod(types: &TypeSystem, value: &Value) -> Result<SkeletonLod> {
+fn read_lod(container: &Container<'_>, types: &TypeSystem, value: &Value) -> Result<SkeletonLod> {
     let lod = Fields::new(types, value, "CSkeletonLOD")?;
     let mut bones = Vec::new();
     let mut bone_indices = BTreeMap::new();
+    let mut name_indices = BTreeMap::new();
     for value in lod.list("2")? {
         let fields = Fields::new(types, value, "SkeletonBone")?;
         let id = fields.uint("1")?;
@@ -144,8 +161,13 @@ fn read_lod(types: &TypeSystem, value: &Value) -> Result<SkeletonLod> {
         let inverse_bind =
             Mat4::from_cols_array(&[a, d, g, 0.0, b, e, h, 0.0, c, f, i, 0.0, x, y, z, 1.0]);
 
+        let name = container.ident(id).unwrap_or_default().to_owned();
+        if !name.is_empty() {
+            name_indices.entry(name.clone()).or_insert(bones.len());
+        }
         bones.push(Bone {
             id,
+            name,
             parent,
             raw_member_3: fields.float("3")?,
             local_rotation: rotation.normalize(),
@@ -164,6 +186,7 @@ fn read_lod(types: &TypeSystem, value: &Value) -> Result<SkeletonLod> {
         platform_mask: lod.uint("4")?,
         bones,
         bone_indices,
+        name_indices,
     })
 }
 
