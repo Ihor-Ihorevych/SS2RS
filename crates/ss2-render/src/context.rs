@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use ss2_render_api::Camera;
-use ss2_render_api::scene_data::{Fog, MeshData, TexelFormat, TextureData};
+use ss2_render_api::scene_data::{Bloom, Fog, MeshData, TexelFormat, TextureData};
+
+use crate::bloom::BloomGpu;
 use ss2_ui::{Canvas, Color, DrawList, Vec2};
 use wgpu::util::DeviceExt;
 
@@ -98,6 +100,9 @@ pub struct Renderer {
     vertex_capacity: u64,
     text: TextPainter,
     world: WorldGpu,
+    /// The bloom chain and the blooms of the next frames ([`Renderer::set_blooms`]).
+    bloom: BloomGpu,
+    blooms: Vec<Bloom>,
     instance: wgpu::Instance,
     config: GpuConfig,
     lost: LostSignal,
@@ -321,6 +326,7 @@ impl Renderer {
         });
         let text = TextPainter::new(&device, &queue, format);
         let world = WorldGpu::new(&device, &queue, format, 0);
+        let bloom = BloomGpu::new(&device, format);
         Renderer {
             device,
             queue,
@@ -339,6 +345,8 @@ impl Renderer {
             vertex_capacity,
             text,
             world,
+            bloom,
+            blooms: Vec::new(),
             instance,
             config,
             lost,
@@ -836,15 +844,31 @@ impl Renderer {
         let Some(camera) = camera else {
             return Some(clear);
         };
-        self.world.encode(
-            &self.device,
-            &self.queue,
-            encoder,
-            view,
-            size,
-            camera,
-            clear,
-        );
+        if self.blooms.is_empty() {
+            self.world.encode(
+                &self.device,
+                &self.queue,
+                encoder,
+                view,
+                size,
+                camera,
+                clear,
+            );
+        } else {
+            // The world goes into the bloom's own texture, the blooms run on it, and the result is copied to `view`.
+            let scene = self.bloom.scene(&self.device, size).clone();
+            self.world.encode(
+                &self.device,
+                &self.queue,
+                encoder,
+                &scene,
+                size,
+                camera,
+                clear,
+            );
+            self.bloom
+                .encode(&self.device, encoder, view, size, &self.blooms);
+        }
         None
     }
 
@@ -1008,6 +1032,17 @@ impl Renderer {
     /// rebuild. Nothing changes if it returns an error ([`Fog::validate`]).
     pub fn set_fog(&mut self, fog: Option<Fog>) -> Result<(), RenderError> {
         self.world.set_fog(fog)
+    }
+
+    /// Bloom the world from the next frame on, each of `blooms` in turn (empty: no bloom; RFC 0013 amendment 6). Call
+    /// it every frame with the blooms where the camera is. Nothing changes if any fails [`Bloom::validate`].
+    pub fn set_blooms(&mut self, blooms: &[Bloom]) -> Result<(), RenderError> {
+        for b in blooms {
+            b.validate()
+                .map_err(|e| RenderError::World(e.to_string()))?;
+        }
+        self.blooms = blooms.to_vec();
+        Ok(())
     }
 
     /// Drop every mesh, texture and batch of the world, and the sky.
