@@ -72,8 +72,10 @@ pub fn meta_container(data: &[u8]) {
     );
 }
 
-/// `ss2-format-tex`: whatever reads has a pixel buffer that matches its size, format and mip chain exactly.
+/// `ss2-format-tex`: whatever reads has a pixel buffer that matches its size, format and mip chain exactly, and every
+/// level decodes to RGBA8 of its size (T02-043); the raw bytes, read as one level of any format, decode or are refused.
 pub fn format_tex(data: &[u8]) {
+    tex_decode_raw(cap(data));
     let Ok(t) = ss2_format_tex::Texture::from_bytes(cap(data)) else {
         return;
     };
@@ -87,6 +89,11 @@ pub fn format_tex(data: &[u8]) {
                 .expect("every level of a read texture exists");
             assert_eq!(l.data.len() as u64, t.format.level_bytes(l.width, l.height));
             assert!(l.width >= 1 && l.height >= 1);
+            let rgba = t
+                .decode_face_level(face, level)
+                .expect("every level of a read texture decodes");
+            assert_eq!((rgba.width, rgba.height), (l.width, l.height));
+            assert_eq!(rgba.pixels.len(), l.width as usize * l.height as usize * 4);
             total += l.data.len();
         }
     }
@@ -97,6 +104,39 @@ pub fn format_tex(data: &[u8]) {
     );
     assert!(t.level(t.faces, 0).is_none());
     assert!(t.level(0, t.mip_levels).is_none());
+}
+
+/// The software decoder of `ss2-format-tex` on bytes that are not a texture: the first two bytes choose a size up to
+/// 16 x 16, the rest is one level of each format; it decodes exactly when the length fits.
+fn tex_decode_raw(data: &[u8]) {
+    use ss2_format_tex::{PixelFormat, decode_pixels};
+    let (w, h) = match data {
+        [a, b, ..] => (u32::from(a % 16) + 1, u32::from(b % 16) + 1),
+        _ => return,
+    };
+    let rest = &data[2..];
+    for format in [
+        PixelFormat::Bgr8,
+        PixelFormat::Bgra8,
+        PixelFormat::Dxt1,
+        PixelFormat::Dxt3,
+        PixelFormat::Dxt5,
+    ] {
+        let fits = rest.len() as u64 == format.level_bytes(w, h);
+        match decode_pixels(format, w, h, rest) {
+            Ok(img) => assert!(fits && img.pixels.len() == (w * h * 4) as usize),
+            Err(_) => assert!(
+                !fits,
+                "a {w} x {h} {format:?} level of the right length was refused"
+            ),
+        }
+        let need = format.level_bytes(w, h) as usize;
+        if let Some(level) = rest.get(..need) {
+            let img =
+                decode_pixels(format, w, h, level).expect("a level of the right length decodes");
+            assert_eq!(img.pixels.len(), (w * h * 4) as usize);
+        }
+    }
 }
 
 /// `ss2-format-bmf`: whatever reads has every stream the length of its vertex count and every index inside the vertices.

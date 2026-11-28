@@ -53,17 +53,23 @@
 //! A static model whose model instance carries an oven modifier (`wld-lighting.md`, "Baked
 //! lightmaps", read by [`ss2_format_wld::Lightmap`]) is lit by its own baked texture
 //! (T07-035). The modifier's UV map id names none of the mesh's streams, so the lightmap's UVs
-//! are chosen from the mesh data by the spec's rule (T01-407): of the UV streams of the drawn
-//! level of detail, the one whose coordinates all lie in [0, 1] and whose triangles, over all
-//! surfaces together, do not overlap (at most 2 % of the rasterized area covered twice). With
-//! exactly one such stream every part of the model gets [`MeshData::lightmap_uvs`] from it;
-//! with none or several the model gets none, its lit placements stay unlit and one skipped line
-//! says why (the spec has no confirmed rule for these). This is done only for models that some
-//! lit placement uses. A placement then gets [`Instance::lightmap`]: its texture, converted by
-//! the same texture path as the others (the size limit, BC kept, RGBA8 from BGR/BGRA, appended
-//! after the file textures); a lightmap that cannot be read or converted leaves the placement
-//! unlit with a skipped line. Of several oven modifiers only the first is used (the spec does
-//! not say how they combine). The UVs are kept as authored, like the base UVs.
+//! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407 and T01-420):
+//! of the UV streams of the drawn level of detail, the one whose coordinates all lie in [0, 1]
+//! and whose triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized
+//! area covered twice). With no such stream, the least-overlapping stream that still lies in
+//! [0, 1] is taken; equal overlaps go to a stream no surface's material uses (the UV map of a
+//! non-empty texture group of any config), then to the lowest position. Every part of the model
+//! gets [`MeshData::lightmap_uvs`] from the chosen stream. Two cases get none, and their lit
+//! placements stay unlit with one skipped line: a model with several such streams (the spec
+//! breaks their usual 0 % tie with a per-instance test on the baked lightmap, T01-420 stage 2,
+//! which this loader does not have yet), and a model with no stream in [0, 1] at all (**a
+//! departure from the spec**, whose slot-0 fallback samples the lightmap through a tiling
+//! channel there: dark bands). This is done only for models that some
+//! lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
+//! converted by the same texture path as the others (the size limit, BC kept, RGBA8 from
+//! BGR/BGRA, appended after the file textures); a lightmap that cannot be read or converted
+//! leaves the placement unlit with a skipped line. Of several oven modifiers only the first is
+//! used (the spec does not say how they combine). The UVs are kept as authored, like the base UVs.
 //! [`load_level_with_report`] also returns how often each case happened ([`LightmapReport`]).
 //!
 //! ## Sky
@@ -156,7 +162,7 @@ use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
-use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
+use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig, TextureRef};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
 use ss2_format_wld::{Haze, Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
@@ -198,8 +204,8 @@ pub struct LightmapReport {
     pub lit_placements: usize,
     /// Placements that got a lightmap ([`Instance::lightmap`]).
     pub lightmapped: usize,
-    /// Lit placements left unlit because their model has no lightmap UVs (no or several
-    /// candidate streams).
+    /// Lit placements left unlit because their model has no lightmap UVs (several candidate
+    /// streams, or no UV stream in [0, 1]).
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
@@ -211,10 +217,14 @@ pub struct LightmapReport {
     /// Of those, models with exactly one candidate stream, by the stream's position in the
     /// surfaces' UV streams (slot order).
     pub one_candidate: BTreeMap<usize, usize>,
-    /// Lit models without any candidate stream.
-    pub no_candidate: usize,
-    /// Lit models with several candidate streams.
-    pub several_candidates: usize,
+    /// Lit models with several candidate streams: no lightmap UVs yet (T01-420 stage 2).
+    pub several_left_unlit: usize,
+    /// Lit models without a candidate, given the least-overlapping stream in [0, 1].
+    pub near_miss: usize,
+    /// Of those, models whose stream is not slot 0.
+    pub near_miss_not_slot_zero: usize,
+    /// Lit models without any UV stream in [0, 1]: no lightmap UVs.
+    pub none_in_range: usize,
 }
 
 /// Load the level whose world is `wld`, reporting progress through `progress`.
@@ -719,7 +729,7 @@ impl Loader<'_> {
     }
 
     /// The parts (and collision) of `mesh`; `embedded` finds the presets stored with the mesh.
-    /// With `lit` placements, the parts get lightmap UVs if the mesh has one candidate stream.
+    /// With `lit` placements, the parts get lightmap UVs from the stream `lightmap::choose` picks.
     fn build<'m>(
         &mut self,
         name: &str,
@@ -733,19 +743,28 @@ impl Loader<'_> {
             .iter()
             .find(|l| l.is_for_pc())
             .ok_or("no level of detail is for the PC")?;
-        let lightmap_stream = if lit > 0 {
-            self.lightmap_stream(name, lod, lit)
-        } else {
-            None
-        };
-        let mut parts: Vec<ModelPart> = Vec::new();
-        let mut part_of: BTreeMap<u32, usize> = BTreeMap::new();
-        for surface in &lod.surfaces {
-            let material = match &surface.material {
+        let materials: Vec<Option<Material>> = lod
+            .surfaces
+            .iter()
+            .map(|surface| match &surface.material {
                 MaterialRef::None => None,
                 MaterialRef::Embedded(id) => embedded(*id).cloned(),
                 MaterialRef::External(raw) => self.mtr(raw, name),
-            };
+            })
+            .collect();
+        let lightmap_choice = (lit > 0).then(|| {
+            let uv_ids: Vec<Vec<u32>> = materials
+                .iter()
+                .map(|m| m.as_ref().map(material_uv_ids).unwrap_or_default())
+                .collect();
+            lightmap::choose(&lod.surfaces, &uv_ids)
+        });
+        let lightmap_stream = lightmap_choice
+            .as_ref()
+            .and_then(lightmap::StreamChoice::stream);
+        let mut parts: Vec<ModelPart> = Vec::new();
+        let mut part_of: BTreeMap<u32, usize> = BTreeMap::new();
+        for (surface, material) in lod.surfaces.iter().zip(&materials) {
             let (material, uv_map) = self.material(material.as_ref());
             let i = *part_of.entry(material).or_insert_with(|| {
                 parts.push(ModelPart {
@@ -767,11 +786,8 @@ impl Loader<'_> {
         if kept.is_empty() {
             return Err("nothing to draw".to_string());
         }
-        if lit > 0 {
-            self.report.lit_models += 1;
-            if let Some(k) = lightmap_stream {
-                *self.report.one_candidate.entry(k).or_default() += 1;
-            }
+        if let Some(choice) = &lightmap_choice {
+            self.count_lightmap_choice(name, choice, lit);
         }
         let collision = if collide {
             let coarsest = mesh
@@ -802,28 +818,37 @@ impl Loader<'_> {
         })
     }
 
-    /// The lightmap stream of `lod` by the spec's rule (`lightmap::choose`); `None` with a
-    /// skipped line when there is no single candidate. Counts the case.
-    fn lightmap_stream(&mut self, name: &str, lod: &Lod, lit: usize) -> Option<usize> {
-        let placements = if lit == 1 { "placement" } else { "placements" };
-        match lightmap::choose(&lod.surfaces) {
-            lightmap::StreamChoice::One(k) => Some(k),
-            lightmap::StreamChoice::None => {
-                self.report.no_candidate += 1;
+    /// Count which rule chose the lightmap stream of a lit model; a model left without one gets a
+    /// skipped line.
+    fn count_lightmap_choice(&mut self, name: &str, choice: &lightmap::StreamChoice, lit: usize) {
+        let report = &mut self.report;
+        report.lit_models += 1;
+        match choice {
+            lightmap::StreamChoice::One(k) => *report.one_candidate.entry(*k).or_default() += 1,
+            lightmap::StreamChoice::Several(ks) => {
+                report.several_left_unlit += 1;
+                let slots = ks
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let placements = if lit == 1 { "placement" } else { "placements" };
                 self.skip(format!(
-                    "model `{name}`: no UV stream lies in [0, 1] without overlap, so no lightmap UVs \
+                    "model `{name}`: several lightmap streams (slots {slots}): left unlit until \
+                     the per-instance lit test (T01-420 stage 2) ({lit} lit {placements})"
+                ));
+            }
+            lightmap::StreamChoice::NearMiss { stream } => {
+                report.near_miss += 1;
+                report.near_miss_not_slot_zero += usize::from(*stream != 0);
+            }
+            lightmap::StreamChoice::NoneInRange => {
+                report.none_in_range += 1;
+                let placements = if lit == 1 { "placement" } else { "placements" };
+                self.skip(format!(
+                    "model `{name}`: no UV stream lies in [0, 1], so no lightmap UVs \
                      ({lit} lit {placements} drawn unlit)"
                 ));
-                None
-            }
-            lightmap::StreamChoice::Several(ks) => {
-                self.report.several_candidates += 1;
-                self.skip(format!(
-                    "model `{name}`: {} UV streams (positions {ks:?}) lie in [0, 1] without overlap, \
-                     so no lightmap UVs ({lit} lit {placements} drawn unlit)",
-                    ks.len()
-                ));
-                None
             }
         }
     }
@@ -973,6 +998,27 @@ fn alpha_of(config: &ShaderConfig) -> AlphaMode {
         return AlphaMode::Mask { cutoff };
     }
     AlphaMode::Opaque
+}
+
+/// Every UV map id `material` uses: of all its configs, the UV map of each texture group whose
+/// texture is not empty (`mtr.md`: the UV map id is the member after its texture, "UV map ids").
+fn material_uv_ids(material: &Material) -> Vec<u32> {
+    material
+        .configs
+        .iter()
+        .flat_map(|c| {
+            c.params.iter().filter_map(|(member, p)| match p {
+                Param::UvMap(id)
+                    if member.checked_sub(1).and_then(|t| c.param(t)).is_some_and(
+                        |t| matches!(t, Param::Texture(r) if *r != TextureRef::None),
+                    ) =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+        })
+        .collect()
 }
 
 /// Append one surface's triangles to `mesh`, taking the UV stream with map id `uv_map` (else the
