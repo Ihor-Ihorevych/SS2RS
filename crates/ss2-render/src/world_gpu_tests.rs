@@ -806,3 +806,75 @@ fn a_missing_floor_is_left_open_under_a_ceiling_and_tinted_without_one() {
         px(&img, 16, 16)
     );
 }
+
+fn test_bloom(fade: f32, ramp: f32) -> ss2_render_api::scene_data::Bloom {
+    ss2_render_api::scene_data::Bloom {
+        colour: [1.0, 1.0, 1.0, 1.0],
+        fade,
+        strength: 1.0,
+        blur: 1.0,
+        balance: 1.0,
+        // Everything passes the high-pass (k = 1), so the spread itself is visible.
+        high_pass: 1.0,
+        ramp,
+    }
+}
+
+#[test]
+fn a_bright_square_glows_past_its_edge_and_a_zero_fade_adds_nothing() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((64, 64)) else {
+        return;
+    };
+    let mesh = r.create_mesh(&square()).unwrap();
+    // A white square 3 m away covers the middle of the view; the rest is black.
+    r.set_world(vec![batch(mesh, [1.0; 4], -3.0)]).unwrap();
+    let black = Color([0.0, 0.0, 0.0, 1.0]);
+    let plain = r.render_world_to_image(&camera(), None, black).unwrap();
+    // Find the square's left edge on the middle row, and look a few pixels outside it.
+    let edge = (0..32)
+        .find(|&x| px(&plain, x, 32)[0] > 200)
+        .expect("the square is drawn");
+    assert!(edge > 6, "there is black to the left of the square: {edge}");
+    let outside = edge - 3;
+    assert_eq!(px(&plain, outside, 32)[..3], [0, 0, 0]);
+
+    r.set_blooms(&[test_bloom(1.0, 2.0)]).unwrap();
+    let bloomed = r.render_world_to_image(&camera(), None, black).unwrap();
+    let glow = px(&bloomed, outside, 32);
+    assert!(glow[0] > 8, "the glow reaches past the edge: {glow:?}");
+    assert!(
+        px(&bloomed, 32, 32)[0] >= px(&plain, 32, 32)[0],
+        "the square is not darkened"
+    );
+
+    // A bloom the camera is at the edge of (fade 0) adds nothing at all.
+    r.set_blooms(&[test_bloom(0.0, 2.0)]).unwrap();
+    let faded = r.render_world_to_image(&camera(), None, black).unwrap();
+    assert_eq!(faded.pixels, plain.pixels);
+
+    // Two blooms run in turn, each on the other's result: stronger than one, and the order matters.
+    r.set_blooms(&[test_bloom(1.0, 2.0), test_bloom(1.0, 0.0)])
+        .unwrap();
+    let both = r.render_world_to_image(&camera(), None, black).unwrap();
+    assert!(
+        px(&both, outside, 32)[0] > glow[0],
+        "{:?} vs {glow:?}",
+        px(&both, outside, 32)
+    );
+    r.set_blooms(&[test_bloom(1.0, 0.0), test_bloom(1.0, 2.0)])
+        .unwrap();
+    let swapped = r.render_world_to_image(&camera(), None, black).unwrap();
+    assert_ne!(
+        both.pixels, swapped.pixels,
+        "each bloom sees the one before it"
+    );
+
+    // A bad bloom is refused and the old ones are kept; an empty list turns bloom off.
+    let mut bad = test_bloom(1.0, 1.0);
+    bad.fade = 2.0;
+    assert!(r.set_blooms(&[bad]).is_err());
+    r.set_blooms(&[]).unwrap();
+    let off = r.render_world_to_image(&camera(), None, black).unwrap();
+    assert_eq!(off.pixels, plain.pixels);
+}
