@@ -262,9 +262,7 @@ pub(crate) fn take_level_screenshot(
     let report = upload(&mut renderer, &scene)?;
     let camera = start_camera(&scene);
     let fog = scene.fog_at(camera.position);
-    renderer
-        .set_fog(fog)
-        .map_err(|e| e.to_string())?;
+    renderer.set_fog(fog).map_err(|e| e.to_string())?;
     let image = renderer
         .render_world_to_image(&camera, None, SKY)
         .map_err(|e| e.to_string())?;
