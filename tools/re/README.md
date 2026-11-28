@@ -355,6 +355,12 @@ Weapon view (docs/re/weapon-view.md):
 python -I tools/re/weapon_view_verify.py "C:\path\to\Serious Sam 2"    # the six sway members and the double-weapon fire delay of the 17 weapons, the eight members of the 16 rendering files (with the field of view in degrees), the sniper zoom curve and the player's view-spring numbers (about 1 minute; the formulas come from the spec, the script reads data only)
 ```
 
+Weapon state machine and timing (docs/re/weapon-timing.md):
+
+```
+python -I tools/re/weapon_timing_verify.py "C:\path\to\Serious Sam 2" [--table OUT.md]    # the per-weapon recoil, charging, reload, double-weapon and spin-up/down timing members of the 17 weapon files (single player and deathmatch), plus a cross-check that the charging/spin-up flags (read from the binary) match which weapons have nonzero charging-time/spin-speed data (about 1 minute; the rules come from the spec, the script reads data only)
+```
+
 Weapon pickups (docs/re/weapon-pickups.md):
 
 ```
