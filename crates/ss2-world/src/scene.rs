@@ -425,35 +425,45 @@ impl LevelScene {
     }
 
     /// The fog with the eye at `eye` (RFC 0013 amendment 4, `docs/re/environment.md` "Combining several hazes",
-    /// T01-412): every volume with a [`HazeVolume::fade`] above 0 contributes, weighted by its fade. Near, far and
-    /// the colour are the fade-weighted averages (the colour's weighting is the spec's medium-low reading); when the
-    /// fades sum to less than 1 the range widens towards no fog: near times the sum, far divided by it. `None` when
-    /// no volume reaches the eye.
+    /// T01-412 and T01-415): every volume with a [`HazeVolume::fade`] above 0 contributes. Its weight is its fade
+    /// times (the largest contributing box diagonal / its own box diagonal), so a small haze outweighs a large one at
+    /// the same fade; near, far and the colour are the averages by that weight (alpha is averaged by the original too,
+    /// but its effect on the pixels is open, T01-427, and it is not carried). When the plain fades sum to less than 1
+    /// the range widens towards no fog: near times that sum, far divided by it. `None` when no volume reaches the eye.
     pub fn fog_at(&self, eye: Vec3) -> Option<Fog> {
-        let mut total = 0.0;
-        let (mut near, mut far, mut colour) = (0.0, 0.0, [0.0f32; 3]);
-        for h in &self.hazes {
-            let fade = h.fade(eye);
-            if fade <= 0.0 {
-                continue;
-            }
-            total += fade;
-            near += fade * h.near;
-            far += fade * h.far;
-            for (c, v) in colour.iter_mut().zip(h.colour) {
-                *c += fade * v;
-            }
-        }
-        if total <= 0.0 {
+        let active: Vec<(f32, &HazeVolume)> = self
+            .hazes
+            .iter()
+            .map(|h| (h.fade(eye), h))
+            .filter(|(fade, _)| *fade > 0.0)
+            .collect();
+        if active.is_empty() {
             return None;
         }
-        let (mut near, mut far) = (near / total, far / total);
-        if total < 1.0 {
-            near *= total;
-            far /= total;
+        let diagonal = |h: &HazeVolume| (h.max - h.min).length().max(1e-6);
+        let largest = active
+            .iter()
+            .map(|(_, h)| diagonal(h))
+            .fold(0.0f32, f32::max);
+        let (mut fades, mut weights) = (0.0, 0.0);
+        let (mut near, mut far, mut colour) = (0.0, 0.0, [0.0f32; 3]);
+        for (fade, h) in &active {
+            let w = fade * largest / diagonal(h);
+            fades += fade;
+            weights += w;
+            near += w * h.near;
+            far += w * h.far;
+            for (c, v) in colour.iter_mut().zip(h.colour) {
+                *c += w * v;
+            }
+        }
+        let (mut near, mut far) = (near / weights, far / weights);
+        if fades < 1.0 {
+            near *= fades;
+            far /= fades;
         }
         Some(Fog {
-            colour: colour.map(|c| c / total),
+            colour: colour.map(|c| c / weights),
             near,
             far: far.max(near),
             strength: 1.0,
@@ -1022,6 +1032,42 @@ mod haze_tests {
         }
         // Outside both: no fog.
         assert_eq!(scene.fog_at(Vec3::splat(100.0)), None);
+    }
+
+    #[test]
+    fn a_small_haze_outweighs_a_large_one_by_their_box_diagonals() {
+        // The spec's corrected worked example (`1_2_approachingvillage`, T01-415): with both hazes full, the result
+        // lands near the small haze A's own values. A's box diagonal is 1/27.8 of B's here, which gives the spec's
+        // near -144.8 and far 192.
+        let a = HazeVolume {
+            min: Vec3::splat(-10.0),
+            max: Vec3::splat(10.0),
+            near: -150.0,
+            far: 20.0,
+            fade_margin: 1.0,
+            ..TEST_HAZE
+        };
+        let b = HazeVolume {
+            min: Vec3::splat(-278.0),
+            max: Vec3::splat(278.0),
+            near: 0.0,
+            far: 5000.0,
+            colour: [1.0, 0.0, 0.0, 1.0],
+            ..a
+        };
+        let mut scene = LevelScene::test_room();
+        scene.hazes = vec![a, b];
+        let fog = scene.fog_at(Vec3::ZERO).unwrap();
+        assert!((fog.near - -144.8).abs() < 0.1, "{fog:?}");
+        assert!((fog.far - 192.0).abs() < 1.0, "{fog:?}");
+        assert!(
+            fog.colour[0] < 0.4,
+            "the colour stays near the small haze's: {fog:?}"
+        );
+        // The order does not matter.
+        scene.hazes = vec![b, a];
+        let swapped = scene.fog_at(Vec3::ZERO).unwrap();
+        assert!((swapped.near - fog.near).abs() < 1e-3 && (swapped.far - fog.far).abs() < 1e-2);
     }
 
     #[test]
