@@ -3,7 +3,9 @@
 - **Roadmap task:** T01-410 (feeds T07-037, the retuning of the provisional walker of T07-030; the
   measured version stays T01-024 — T01-038 (2026-11-28) got the oracle harness attached to the
   running original for the first time, but could not yet read the player's position or velocity; see
-  "Live-check attempt, 2026-11-28" below)
+  "Live-check attempt, 2026-11-28" below. **T01-432 (2026-11-28) found the stable placement/velocity
+  chain and measured ground speed, acceleration/deceleration, a jump arc and gravity on the running
+  original; see "Live-check, T01-432, 2026-11-28" below.**)
 - **Author:** @Ihor-Ihorevych/agent · **Reviewer:** _none yet (T01-049)_
 - **Confidence:** **high** for every number read directly from `EntityParams/PlayerPuppet.ep` and
   `PlayerPuppet_DM.ep` and reproduced by `tools/re/player_movement_verify.py`; **medium** for the
@@ -11,7 +13,10 @@
   pose-to-environment choice — all already read for `puppet-legged-classes.md` and
   `puppet-record-members.md`, plus two getters and one reset site read in full for this page); **low
   or open** where stated, in particular the player's collision shape and size, crouch movement
-  speed, and whether the player's gravity is scaled. Nothing was run on the original game.
+  speed, and whether the player's gravity is scaled. **high** (measured, repeated) for steady ground
+  speed (including diagonal) and gravity; **medium** for the measured acceleration/deceleration
+  rates and the jump apex height (T01-432, see below); step-up height and eye height were not
+  measured this run.
 
 Prerequisites: `player-rules.md` (the global and puppet parameters),
 [`puppet-legged-classes.md`](puppet-legged-classes.md) (the three environment records, jump and
@@ -301,6 +306,70 @@ object needs more targeted work than this run's time box — most likely reading
 placement/mechanism accessors in the local decompile tree against the now-corrected puppet chain,
 rather than further blind memory scanning — and is split off as a follow-up task (see
 `docs/roadmap/T01-reverse-engineering.md`, the task appended after T01-038).
+
+## Live-check, T01-432, 2026-11-28
+
+- **Roadmap task:** T01-432 (follow-up to T01-038) · **Author:** @Ihor-Ihorevych/agent
+
+**The placement/velocity chain.** T01-038 left the puppet's own handle chain corrected, but its
+*position* guess (one more handle hop off the puppet, then a float offset) resolved to a
+pooled/reused temporary, not the puppet's placement. Reading the puppet/mechanism/body placement
+and velocity accessors in the local decompile tree (binary, medium; `CLEANROOM.md` — prose and
+numbers only, no decompiler text copied or committed) showed that the earlier guess's overall shape
+was already right. The bug T01-038 already found and fixed for `player.health`/`health_max`/
+`armour`/`alive` (one hop off the game-info entity needed correcting) was the **same** bug in the
+position/velocity/quaternion fields' own copy of that hop — it had just not been propagated there
+yet. Fixing that one hop (no other step in the existing position/velocity/quaternion guess needed
+to change) was enough.
+
+**Validation.** With the fix applied, a 180 s capture at 60 Hz (10,800 samples) read valid position
+and velocity on 10,760 of them (99.6%; the few gaps sit exactly at the demo's own loop-restart
+seams, where the puppet is briefly destroyed and recreated — not the old every-frame garbage). The
+quaternion read back as a unit quaternion (sum of squares 1.000 to float precision) on every valid
+sample; position changed smoothly frame to frame and matched the integral of the read velocity;
+instantaneous speed repeatedly settled at exactly the data's stored nominal ground speed. **This is
+a stable, reusable field now, not a one-off reading.**
+
+**Driving the player.** Demo playback (`+sam_bStartDemoPlayback 1 +sam_bLoopDemo 1`, per
+`docs/ORACLE_HARNESS.md`) was the approach that worked: the same single-player demo (`Demo_0001`,
+level `BRANCHESTER`) was looped several times back-to-back in one capture, giving several
+independent, repeatable replays of identical inputs to measure against each other. Synthetic key
+injection into the game window was **not attempted** this run — the demo's repeatability already
+gave clean, independent repeats of the same run/stop/jump events (several per loop), which is what
+the measurements below needed; a future run can try real virtual-key input events if a scenario
+needs input the shipped demos don't contain (for example a deliberate step-up test).
+
+**Measurements** (single player; numbers only; each cross-checked across 4-5 independent repeats of
+the same demo loop unless stated):
+
+| Quantity | Measured (live) | T01-410 (data) | Confidence |
+|---|---|---|---|
+| Steady ground speed | **7.5** units/s (dominant cluster: over half of all valid velocity samples round to exactly 7.5 or 7.4) | 7.5 (SP) | **high** |
+| Diagonal ground speed | **7.5** units/s (mean 7.52 over samples with both horizontal axes clearly nonzero — the same cap, not a separate diagonal number) | 7.5 (SP, one nominal speed for all directions) | **high** |
+| Time to full speed (0 to the 7.5 cap) | **≈0.15-0.20 s**; fitted ramp slope **≈47 units/s²** (linear, not exponential — confirmed from raw per-sample deltas) | predicted 0.1 s from `pep_fAcceleration` (75) read as a literal `dv/dt` | **medium** — the measured rate does not match the stored constant; see note below |
+| Time to stop (7.5 cap to 0) | **≈0.13-0.15 s** on a clean stop (fitted slope **≈55-60 units/s²**) | predicted 0.167 s from `pep_fDecceleration` (45) read as a literal `dv/dt` | **medium** — same caveat |
+| Jump apex height (above takeoff) | **≈1.6** units | 1.667 (`v²/2g` from jump-up velocity 10 and gravity −30) | **medium** (clean parabolic arcs, but takeoff/apex times are interpolated between 60 Hz samples) |
+| Air time (this jump) | **≈0.73 s** | 0.667 s (`2v/g`, flat ground) | **medium-low** — this jump landed noticeably below its takeoff point (a ledge/slope in the demo route, not flat ground), so it is not a clean flat-ground round trip; reported with that caveat, not as a flat-ground number |
+| Gravity | **−30.0 m/s²** (linear fit of vertical velocity over the jump's free-fall window; sub-window slopes all within 0.5% of the mean) | −30 m/s² (`wld-root.md`, read from world data, medium) | **high** — now measured directly, not just inferred from data |
+| Step-up height | **not measured** — no clean step-up event found in this demo (one small vertical bump seen, inconclusive) | 2.0 (`ma_fStepUpHeight2`) | open |
+| Eye height | **not measured** — the view-origin/camera member was not mapped this run (out of time box) | 1.95 standing (`pbp_vViewOrigin.y`) | open |
+
+**Reading the acceleration/deceleration numbers.** The measured ramp is genuinely linear (confirmed
+sample-by-sample, not just at the endpoints) but its rate does not match either stored constant
+taken as a literal velocity derivative, and the measured ranking is the *opposite* of the data's:
+live deceleration is faster than live acceleration, while the stored data has acceleration (75)
+faster than deceleration (45). This is consistent with — and now confirms — this page's own
+description of `pep_fAcceleration`/`pep_fDecceleration` as "force per unit of puppet mass the
+ground motion joint is driven with" (not a direct velocity derivative) and with `T01-141`
+(`LerpToDesiredVelocityAndLook`, the real per-step formula) staying unread: something between the
+stored joint-drive parameters and the realised ground velocity changes the effective rate, in
+different directions for the two constants. **This is a genuine new data point, not a contradiction
+to resolve by re-reading the `.ep` file**: the data table above is unchanged; only the mapping from
+those constants to `dv/dt` is now known to be non-literal.
+
+**What remains open:** step-up height and eye height (no field mapped/no clean event this run);
+tying the measured rates to the actual per-step formula once `LerpToDesiredVelocityAndLook` is read
+(T01-141); a flat-ground air-time measurement (this run's only clean jump was off a ledge).
 
 ## Test vectors
 

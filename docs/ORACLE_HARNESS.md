@@ -153,6 +153,19 @@ What has been checked against the running original (2026-11-26): the harness att
 - `player.pos.*`, `player.vel.*` and `player.quat[]` are **still not mapped**: the map's existing guess (a placement object reached through a handle at the puppet's `+0x114`-equivalent member, then a further offset for x/y/z) resolves to a *different* object almost every time it is read, which reads as plausible position/orientation floats on some samples and obvious garbage (values like 10¹⁸) a fraction of a second later with the player not moving — i.e. that handle slot is reused very rapidly for something short-lived (a pooled temporary, not a stable placement reference), unlike the four-hop chain above which is stable for as long as the puppet exists. Finding the real placement/velocity needs more work than this run's time box (see the follow-up task appended to `docs/roadmap/T01-reverse-engineering.md`). **No position, velocity or orientation number is reported from this run.**
 - Practical notes for the next person: `Content/CurrentMod.txt` has to say `SeriousSam2.mod` (there is no such file in this install; an absent/non-matching file falls back to the original, which is what running under the original game's own build id needs) — this install's default was the `Sam2Renovation` mod and had to be switched back after; starting `Sam2.exe` with a demo on the command line, once its settings have been saved back into `Sam2.ini` by a normal shutdown, **persists**: a later start with no arguments at all replayed the same demo automatically, including restarting the whole process partway through this run (`Sam2.exe`'s PID changed) — always check the actual command line (`Get-CimInstance Win32_Process` on Windows) before assuming a capture reflects the scenario you asked for.
 
+**Update, 2026-11-28 (T01-432):** `player.pos.*`, `player.vel.*` and `player.quat[]` are now mapped
+and stable. The earlier guess's overall shape (a handle off the puppet, then a further handle, then
+a float offset) was already right; the bug was the same stale hop T01-038 had already found and
+fixed for the health/armour/alive fields, just not yet propagated to the position/velocity/
+quaternion fields' own copy of that hop. With it corrected, a 180 s capture at 60 Hz read valid
+position and velocity on 99.6% of samples (the rest sit exactly at a demo loop's own restart seam,
+where the puppet is briefly destroyed and recreated); the quaternion reads back as a unit quaternion
+on every valid sample; position tracks the integral of velocity smoothly. Demo playback with
+`+sam_bLoopDemo 1` (looping one demo several times in a single capture) gave repeatable,
+independent measurements of the same run/stop/jump events without needing any synthetic input;
+ground speed, acceleration/deceleration, a jump apex and gravity were measured this way — see
+`docs/re/player-movement-constants.md` "Live-check, T01-432, 2026-11-28" for the numbers.
+
 ### Steps for the first live check
 
 1. Start Steam and log in. Make sure `Content/CurrentMod.txt` selects the original game (see above).
