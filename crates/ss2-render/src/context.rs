@@ -1073,11 +1073,19 @@ impl Renderer {
         self.world.set_sky(&self.device, sky)
     }
 
-    /// Fog the world from the next frame on (`None`: no fog; RFC 0013 amendment 4). The sky is never fogged. Call it
+    /// Fog the world from the next frame on (`None`: no fog; RFC 0013 amendment 4). The sky is not fogged unless
+    /// [`Renderer::set_sky_fog`] is on. Call it
     /// every frame with the fog where the camera is; it survives [`Renderer::clear_world`] and is reset by a device
     /// rebuild. Nothing changes if it returns an error ([`Fog::validate`]).
     pub fn set_fog(&mut self, fog: Option<Fog>) -> Result<(), RenderError> {
         self.world.set_fog(fog)
+    }
+
+    /// With `on`, the sky is drawn as the flat fog colour whenever there is fog, as the original does (its sky shader
+    /// writes a constant full fog, `docs/re/environment.md` T01-429); off (the default) keeps the sky visible. It
+    /// survives [`Renderer::clear_world`] and is reset by a device rebuild.
+    pub fn set_sky_fog(&mut self, on: bool) {
+        self.world.set_sky_fog(on);
     }
 
     /// Bloom the world from the next frame on, each of `blooms` in turn (empty: no bloom; RFC 0013 amendment 6). Call

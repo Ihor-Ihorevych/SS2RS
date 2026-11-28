@@ -16,6 +16,7 @@ fn roundtrip_preserves_values() {
         master_volume: 0.35,
         music_volume: 0.1,
         sfx_volume: 0.9,
+        sky_fog: true,
     };
     s.save_to(&path).unwrap();
     assert_eq!(Settings::load_from(&path), s);

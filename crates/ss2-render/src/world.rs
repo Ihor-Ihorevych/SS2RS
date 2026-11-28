@@ -165,6 +165,8 @@ pub(crate) struct WorldGpu {
     sky: Option<GpuSky>,
     /// The fog of the next frames ([`WorldGpu::set_fog`]).
     fog: Option<Fog>,
+    /// Whether the sky takes the flat fog colour while there is fog ([`WorldGpu::set_sky_fog`]).
+    sky_fog: bool,
     camera: wgpu::Buffer,
     camera_group: wgpu::BindGroup,
     material_layout: wgpu::BindGroupLayout,
@@ -458,6 +460,7 @@ impl WorldGpu {
             sky_instance,
             sky: None,
             fog: None,
+            sky_fog: false,
             camera,
             camera_group,
             material_layout,
@@ -942,6 +945,11 @@ impl WorldGpu {
         Ok(())
     }
 
+    /// Draw the sky as the flat fog colour while there is fog (the original's behaviour, T01-429), or keep it clear.
+    pub(crate) fn set_sky_fog(&mut self, on: bool) {
+        self.sky_fog = on;
+    }
+
     pub(crate) fn set_sky(
         &mut self,
         device: &wgpu::Device,
@@ -1046,6 +1054,7 @@ impl WorldGpu {
             uniform[27] = fog.strength;
             uniform[28] = fog.near;
             uniform[29] = fog.far;
+            uniform[30] = if self.sky_fog { 1.0 } else { 0.0 };
         }
         queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&uniform));
         if let Some(sky) = &self.sky {
