@@ -1,4 +1,8 @@
-//! Keeps Croteam's proprietary game content out of the repository.
+//! Keeps Croteam's proprietary game content out of the repository, and decompiler text out of the docs.
+//!
+//! Besides paths and sizes, every Markdown file under `docs/` is read for the two marks decompiled output leaves
+//! when it is pasted: a Ghidra function name (`FUN_` and eight hex digits) and an address in the original DLLs'
+//! image (`0x10` and six hex digits). `CLEANROOM.md` forbids both; the specs are prose and numbers.
 //!
 //! Run as `cargo xtask guard` (all tracked files) or `cargo xtask guard --staged` (pre-commit).
 
@@ -33,6 +37,13 @@ pub enum Reason {
         /// Limit that applied.
         limit: u64,
     },
+    /// A doc quotes decompiler output: a Ghidra function name or an address in the original's image.
+    DecompilerText {
+        /// 1-based line number.
+        line: usize,
+        /// The matched text.
+        found: String,
+    },
 }
 
 /// A rejected path with the reason.
@@ -57,6 +68,13 @@ impl fmt::Display for Violation {
                 write!(
                     f,
                     "{}: {bytes} bytes exceeds the {limit}-byte limit",
+                    self.path
+                )
+            }
+            Reason::DecompilerText { line, found } => {
+                write!(
+                    f,
+                    "{}:{line}: decompiler text '{found}' (CLEANROOM.md: no function names or addresses)",
                     self.path
                 )
             }
@@ -107,6 +125,30 @@ pub fn check_path(path: &str, size_bytes: u64) -> Option<Violation> {
         });
     }
     None
+}
+
+/// Whether `path` is a doc whose text is checked for decompiler output (Markdown under `docs/`).
+pub fn is_checked_doc(path: &str) -> bool {
+    let p = path.replace('\\', "/").to_ascii_lowercase();
+    p.starts_with("docs/") && p.ends_with(".md")
+}
+
+/// The first decompiler mark in `text` (see the module docs), as a violation of `path`.
+pub fn check_text(path: &str, text: &str) -> Option<Violation> {
+    static MARK: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let mark = MARK.get_or_init(|| {
+        regex::Regex::new(r"\bFUN_[0-9A-Fa-f]{8}\b|\b0x10[0-9A-Fa-f]{6}\b")
+            .expect("a valid pattern")
+    });
+    text.lines().enumerate().find_map(|(i, line)| {
+        mark.find(line).map(|m| Violation {
+            path: path.replace('\\', "/"),
+            reason: Reason::DecompilerText {
+                line: i + 1,
+                found: m.as_str().to_string(),
+            },
+        })
+    })
 }
 
 /// Split `git ... -z` output (NUL-separated) into paths; empty entries are dropped.
@@ -171,6 +213,11 @@ pub fn run(mode: Mode) -> anyhow::Result<Vec<Violation>> {
             .unwrap_or(0);
         if let Some(v) = check_path(&path, size) {
             violations.push(v);
+        } else if is_checked_doc(&path)
+            && let Ok(text) = std::fs::read_to_string(Path::new(&root).join(&path))
+            && let Some(v) = check_text(&path, &text)
+        {
+            violations.push(v);
         }
     }
     Ok(violations)
@@ -196,6 +243,33 @@ mod tests {
             reason("tools/Sam2.exe", 10),
             Some(Reason::ForbiddenExtension(_))
         ));
+    }
+
+    #[test]
+    fn docs_may_not_quote_decompiler_names_or_addresses() {
+        let found = |text| check_text("docs/re/x.md", text).map(|v| v.reason);
+        assert_eq!(
+            found("ok line\nthe comparator FUN_10155940 sorts"),
+            Some(Reason::DecompilerText {
+                line: 2,
+                found: "FUN_10155940".into()
+            })
+        );
+        assert!(matches!(
+            found("at 0x1017b370 in Engine.dll"),
+            Some(Reason::DecompilerText { line: 1, .. })
+        ));
+        // Prose about the convention, ordinary hex numbers and colours pass.
+        assert_eq!(found("Ghidra names unnamed functions `FUN_...`"), None);
+        assert_eq!(
+            found("flag 0x10, mask 0x1F, colour 0xff463c26, size 0x100"),
+            None
+        );
+        assert_eq!(found("a 0x10000 byte block"), None);
+        assert!(is_checked_doc("docs/re/environment.md"));
+        assert!(is_checked_doc("docs\\roadmap\\T01.md"));
+        assert!(!is_checked_doc("crates/ss2-core/src/lib.rs"));
+        assert!(!is_checked_doc("README.md"));
     }
 
     #[test]

@@ -86,7 +86,7 @@ So the "table" the open question asked about is genuinely **two tables**: the ma
 
 **`CShakingParams` (10 words), named in full from the existing schema (T01-178; no new binary reading needed — `wld-entity-schema.md` already has the names from the data's own type table):** `sp_fHotSpot`, `sp_fFallOff` (the same distance-falloff shape as a sound), `sp_fDamping`, `sp_fYIntensity`, `sp_fZIntensity`, `sp_fBIntensity` (bank/roll), `sp_fYFreq`, `sp_fZFreq`, `sp_fBFreq` (one frequency per intensity axis) and `sp_fConstIntensityPeriod` (an initial period, presumably, during which the shake does not decay).
 
-**`CTextEffectEntity` and `samCreateShakerEffect`: still open.** The text effect genuinely has no exported function in this build (confirmed again in this reading, not just assumed); its behaviour is entirely the engine's own text-rendering system and cannot be read from `Sam2Game.dll`. `samCreateShakerEffect` and `FUN_10227b90`/`FUN_10227cc0` (the material's own lookup helpers) were not read this task.
+**`CTextEffectEntity` and `samCreateShakerEffect`: still open.** The text effect genuinely has no exported function in this build (confirmed again in this reading, not just assumed); its behaviour is entirely the engine's own text-rendering system and cannot be read from `Sam2Game.dll`. `samCreateShakerEffect` and the material's own two lookup helpers were not read this task.
 
 ### 3. The simple effect (`CSimpleEffectEntity`, binary-only)
 
