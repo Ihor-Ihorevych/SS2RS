@@ -1,8 +1,11 @@
 //! Play controls (T03-037): platform input events in, one [`PlayInput`] per frame out.
 //!
-//! Keyboard and mouse: W/A/S/D move, the mouse looks, Space jumps (rises while flying), Ctrl or C sinks while
-//! flying, Shift flies faster, F switches between walking and flying. Gamepad: the left stick moves, the right
-//! stick looks, South (A/Cross) jumps or rises, North (Y/Triangle) switches flying.
+//! Keyboard and mouse: W/A/S/D move, the mouse looks, Space jumps (rises while flying), Ctrl or C crouches while
+//! walking and sinks while flying, Shift sprints while walking and flies faster while flying (T09-007: both are
+//! context-sensitive on the same keys, since the walker only does one or the other depending on mode), F switches
+//! between walking and flying. Gamepad: the left stick moves, the right stick looks, South (A/Cross) jumps or
+//! rises, East (B/Circle) crouches or sinks, Left Bumper sprints or flies faster, North (Y/Triangle) switches
+//! flying.
 
 use std::collections::BTreeSet;
 
@@ -21,6 +24,10 @@ pub(crate) struct PlayControls {
     left_stick: Vec2,
     right_stick: Vec2,
     pad_south: bool,
+    /// East (B/Circle): crouch while walking, sink while flying (T09-007).
+    pad_east: bool,
+    /// Left Bumper: sprint while walking, faster flying (T09-007).
+    pad_left_bumper: bool,
     toggle_fly: bool,
 }
 
@@ -65,6 +72,8 @@ impl PlayControls {
                 button, pressed, ..
             } => match button {
                 GamepadButton::South => self.pad_south = pressed,
+                GamepadButton::East => self.pad_east = pressed,
+                GamepadButton::LeftBumper => self.pad_left_bumper = pressed,
                 GamepadButton::North if pressed => self.toggle_fly = true,
                 _ => {}
             },
@@ -72,6 +81,8 @@ impl PlayControls {
                 self.left_stick = Vec2::ZERO;
                 self.right_stick = Vec2::ZERO;
                 self.pad_south = false;
+                self.pad_east = false;
+                self.pad_left_bumper = false;
             }
             _ => {}
         }
@@ -94,7 +105,11 @@ impl PlayControls {
         let up = self
             .held(KeyCode::Space)
             .max(f32::from(u8::from(self.pad_south)));
-        let down = self.held(KeyCode::ControlLeft).max(self.held(KeyCode::C));
+        // The same "crouch or sink" key(s) serve both roles, walking or flying (T09-007 module docs).
+        let down = self
+            .held(KeyCode::ControlLeft)
+            .max(self.held(KeyCode::C))
+            .max(f32::from(u8::from(self.pad_east)));
         let mut movement = Vec3::new(
             keys_x + self.left_stick.x,
             up - down,
@@ -102,14 +117,19 @@ impl PlayControls {
         );
         movement.x = movement.x.clamp(-1.0, 1.0);
         movement.z = movement.z.clamp(-1.0, 1.0);
+        // The same "sprint or fly faster" key(s) serve both roles (T09-007 module docs).
+        let faster = self.keys.contains(&KeyCode::ShiftLeft)
+            || self.keys.contains(&KeyCode::ShiftRight)
+            || self.pad_left_bumper;
         // Stick up (positive) looks up, which is a negative look.y.
         let stick = Vec2::new(self.right_stick.x, -self.right_stick.y) * STICK_LOOK_SPEED * dt;
         PlayInput {
             movement,
             look: std::mem::take(&mut self.look) + stick,
             jump: self.held(KeyCode::Space) > 0.0 || self.pad_south,
-            boost: self.keys.contains(&KeyCode::ShiftLeft)
-                || self.keys.contains(&KeyCode::ShiftRight),
+            crouch: down > 0.0,
+            sprint: faster,
+            boost: faster,
             toggle_fly: std::mem::take(&mut self.toggle_fly),
         }
     }
@@ -174,11 +194,16 @@ mod tests {
         c.on_event(&key(KeyCode::Space, true));
         c.on_event(&key(KeyCode::ShiftLeft, true));
         let i = c.frame(0.016);
-        assert!(i.jump && i.boost);
+        assert!(
+            i.jump && i.boost && i.sprint,
+            "shift sprints and flies faster"
+        );
         assert_eq!(i.movement.y, 1.0);
         c.on_event(&key(KeyCode::Space, false));
         c.on_event(&key(KeyCode::ControlLeft, true));
-        assert_eq!(c.frame(0.016).movement.y, -1.0);
+        let i = c.frame(0.016);
+        assert_eq!(i.movement.y, -1.0);
+        assert!(i.crouch, "ctrl crouches and sinks");
     }
 
     #[test]
@@ -213,6 +238,31 @@ mod tests {
         assert_eq!(
             (i.movement, i.look, i.jump),
             (Vec3::ZERO, Vec2::ZERO, false)
+        );
+    }
+
+    #[test]
+    fn gamepad_east_crouches_and_left_bumper_sprints() {
+        let mut c = PlayControls::default();
+        let pad = GamepadId(0);
+        c.on_event(&InputEvent::GamepadButton {
+            pad,
+            button: GamepadButton::East,
+            pressed: true,
+        });
+        c.on_event(&InputEvent::GamepadButton {
+            pad,
+            button: GamepadButton::LeftBumper,
+            pressed: true,
+        });
+        let i = c.frame(0.016);
+        assert!(i.crouch && i.sprint && i.boost, "{i:?}");
+        assert_eq!(i.movement.y, -1.0, "East also sinks while flying");
+        c.on_event(&InputEvent::GamepadDisconnected(pad));
+        let i = c.frame(0.016);
+        assert!(
+            !i.crouch && !i.sprint,
+            "a disconnect forgets the held buttons"
         );
     }
 

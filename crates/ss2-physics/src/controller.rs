@@ -12,6 +12,25 @@
 //! (state, input, world, dt): it runs fixed substeps of [`SUBSTEP`] seconds and carries the
 //! remainder to the next call, so frame rate does not change the path. No clock, no hash maps.
 //!
+//! **T09-007** adds four things on top of T07-030's walk/jump: **crouch** (the capsule shrinks to
+//! [`WalkConfig::crouch_height`] while [`WalkInput::crouch`] is held and the eyes drop to
+//! [`WalkConfig::crouch_eye_height`], `docs/re/player-movement-constants.md`'s stored 0.7, data,
+//! high; standing back up is refused — stays crouched — while a short upward probe finds no room,
+//! since no walkable-slope-style constant for "how far up must be clear" exists in the data either);
+//! **sprint** ([`WalkInput::sprint`], ×[`WalkConfig::sprint_multiplier`] on the ground speed,
+//! mirroring `ss2_game::player_view`'s own sprint factor, gated off while crouched exactly as
+//! `docs/re/player-movement-constants.md`'s `GetSpeedMultiplier` reading describes — real
+//! single-player defaults this off at the game-rule level, `sgp_bEnableSprinting` = 0,
+//! `docs/re/console-config.md`, which this crate has no game-rules layer to gate on yet); a
+//! **footstep event stream** ([`Walker::footsteps`], distance-accumulated while grounded and
+//! moving, so cadence scales with speed and nothing fires while airborne — the original drives
+//! footsteps from animation hot-spots this crate has no animation system to read yet,
+//! `docs/re/puppet-legged-classes.md`'s `OnAnimEventStep`, so [`WalkConfig::footstep_stride`] is a
+//! guessed distance, not a data value); and a **fall-height measurement**
+//! ([`Walker::landed_fall_height`], the drop from the airborne peak to the landing) for
+//! `ss2_game::fall_damage`'s hook — `docs/re/puppet-damage.md` found no fall-damage formula to
+//! reproduce, so that hook always returns `None`.
+//!
 //! ```
 //! use ss2_core::math::{Vec2, Vec3};
 //! use ss2_physics::controller::{WalkConfig, WalkInput, Walker};
@@ -26,7 +45,7 @@
 //!
 //! let cfg = WalkConfig::PROVISIONAL;
 //! let mut walker = Walker::new(Vec3::new(0.0, 1.0, 0.0));
-//! let input = WalkInput { wish: Vec2::new(0.0, 1.0), yaw: 0.0, jump: false };
+//! let input = WalkInput { wish: Vec2::new(0.0, 1.0), ..WalkInput::default() };
 //! for _ in 0..60 {
 //!     walker.step(&world, &cfg, Vec3::new(0.0, -30.0, 0.0), &input, 1.0 / 60.0);
 //! }
@@ -36,7 +55,7 @@
 use ss2_core::math::{Vec2, Vec3};
 
 use crate::geometry::Ray;
-use crate::query::{Hit, QueryFilter, Shape, SpatialQuery};
+use crate::query::{Hit, PhysMaterialId, QueryFilter, Shape, SpatialQuery};
 
 /// Length of one internal step, seconds.
 pub const SUBSTEP: f32 = 1.0 / 120.0;
@@ -48,6 +67,13 @@ const SKIN: f32 = 0.01;
 const TOUCH: f32 = 1e-4;
 /// Slide iterations per move.
 const MAX_SLIDES: usize = 4;
+/// Horizontal speed below which no footstep distance accumulates (standing still, not a real
+/// step), metres per second.
+const MIN_FOOTSTEP_SPEED: f32 = 0.05;
+/// How many footstep events [`Walker::step`] keeps per call; far more than one frame (even the
+/// longest, [`MAX_FRAME`]) can produce at a sane stride and speed, so this is a safety cap, not a
+/// tuned limit.
+const MAX_FOOTSTEPS_PER_STEP: usize = 16;
 
 /// The walker's size and feel. Units: metres, seconds, radians.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -72,6 +98,16 @@ pub struct WalkConfig {
     pub air_accel: f32,
     /// Upward speed at the start of a jump.
     pub jump_speed: f32,
+    /// Height from feet to the top of the head while crouched (T09-007).
+    pub crouch_height: f32,
+    /// Height of the eyes above the feet while crouched (T09-007).
+    pub crouch_eye_height: f32,
+    /// Ground speed multiplier while sprinting (T09-007; gated off while crouched).
+    pub sprint_multiplier: f32,
+    /// Horizontal distance between footstep events while grounded and moving (T09-007); the
+    /// period between events is this divided by the current horizontal speed, so cadence scales
+    /// with speed on its own.
+    pub footstep_stride: f32,
 }
 
 impl WalkConfig {
@@ -100,6 +136,19 @@ impl WalkConfig {
         air_accel: 47.0,
         // Stored jump speed (high).
         jump_speed: 10.0,
+        // Guess: no crouch body height is in the data (collision shape is open, T01-410's own
+        // "Collision shape" section); tall enough to clear the stored crouch eye height below.
+        crouch_height: 1.2,
+        // Stored crouch view height (high; `pbp_fViewHeightCrouch`, `docs/re/player-movement-constants.md`).
+        crouch_eye_height: 0.7,
+        // `GetSpeedMultiplier`'s sprint factor (code, medium; `docs/re/player-movement-constants.md`),
+        // the same value `ss2_game::player_view::SPRINT_MULTIPLIER` uses for the cosmetic bob.
+        sprint_multiplier: 1.5,
+        // Guess: no footstep stride or period is in the data (the original drives footsteps from
+        // animation hot-spots, `docs/re/puppet-legged-classes.md`'s `OnAnimEventStep`, which this
+        // crate has no animation system to read yet); tuned to feel like a walk cycle at the
+        // nominal ground speed.
+        footstep_stride: 0.9,
     };
 }
 
@@ -112,10 +161,32 @@ pub struct WalkInput {
     pub yaw: f32,
     /// Jump if standing on ground.
     pub jump: bool,
+    /// Crouch (T09-007): held, the body shrinks to [`WalkConfig::crouch_height`]; released, it
+    /// stands back up only once there is room overhead.
+    pub crouch: bool,
+    /// Sprint (T09-007): `×`[`WalkConfig::sprint_multiplier`] on the ground speed, ignored while
+    /// crouched (`docs/re/player-movement-constants.md`'s `GetSpeedMultiplier` reading).
+    pub sprint: bool,
+}
+
+/// A footstep that happened during one [`Walker::step`] call (T09-007), for audio later — no
+/// sound is played here. Fired by distance travelled while grounded, not by animation (the
+/// original's own mechanism, `OnAnimEventStep`, needs an animation system this crate does not
+/// have yet).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FootstepEvent {
+    /// The walker's feet at the moment of the step.
+    pub position: Vec3,
+    /// The material of the ground walked on (`docs/re/puppet-legged-classes.md`'s
+    /// `OnAnimEventStep` spawns its effect "for the floor material under it"; this is the same
+    /// idea, read from the ground probe instead of an animation attachment).
+    pub material: PhysMaterialId,
+    /// The walker's horizontal speed at the moment of the step, metres per second.
+    pub speed: f32,
 }
 
 /// A walking body.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Walker {
     /// Feet position.
     pub position: Vec3,
@@ -125,6 +196,22 @@ pub struct Walker {
     pub grounded: bool,
     /// Time not yet simulated (less than one substep).
     carry: f32,
+    /// Crouched (T09-007): the body is [`WalkConfig::crouch_height`] tall and the eyes are at
+    /// [`WalkConfig::crouch_eye_height`] instead of the standing values.
+    crouched: bool,
+    /// The material of the ground last stood on (T09-007; for [`FootstepEvent::material`]).
+    ground_material: PhysMaterialId,
+    /// Distance accumulated towards the next footstep while grounded and moving, metres
+    /// (T09-007).
+    footstep_phase: f32,
+    /// This call's footstep events (T09-007); cleared at the start of every [`Walker::step`].
+    footsteps: Vec<FootstepEvent>,
+    /// The highest point reached since last leaving the ground, if currently airborne
+    /// (T09-007; for [`Walker::landed_fall_height`]).
+    air_peak_y: Option<f32>,
+    /// How far the walker fell before landing this call, if it landed this call (T09-007);
+    /// cleared at the start of every [`Walker::step`].
+    landed_fall_height: Option<f32>,
 }
 
 impl Walker {
@@ -135,12 +222,44 @@ impl Walker {
             velocity: Vec3::ZERO,
             grounded: false,
             carry: 0.0,
+            crouched: false,
+            ground_material: PhysMaterialId::default(),
+            footstep_phase: 0.0,
+            footsteps: Vec::new(),
+            air_peak_y: None,
+            landed_fall_height: None,
         }
     }
 
-    /// Where the eyes are.
+    /// Where the eyes are: [`WalkConfig::eye_height`], or [`WalkConfig::crouch_eye_height`]
+    /// while [`Walker::crouched`].
     pub fn eye(&self, cfg: &WalkConfig) -> Vec3 {
-        self.position + Vec3::Y * cfg.eye_height
+        let h = if self.crouched {
+            cfg.crouch_eye_height
+        } else {
+            cfg.eye_height
+        };
+        self.position + Vec3::Y * h
+    }
+
+    /// Crouched (T09-007): the body is shorter and the eyes are lower; set by
+    /// [`WalkInput::crouch`], but standing back up is refused while there is no room overhead.
+    pub fn crouched(&self) -> bool {
+        self.crouched
+    }
+
+    /// This call's footstep events (T09-007), for audio later; empty on a call that produced
+    /// none (not moving, not grounded, or no stride crossed yet).
+    pub fn footsteps(&self) -> &[FootstepEvent] {
+        &self.footsteps
+    }
+
+    /// How far the walker fell before landing, if it landed during this call to
+    /// [`Walker::step`] (T09-007); `None` on every other call. `ss2_game::fall_damage` is the
+    /// hook this measurement feeds, once a fall-damage formula exists (T01-436) — it does not
+    /// today.
+    pub fn landed_fall_height(&self) -> Option<f32> {
+        self.landed_fall_height
     }
 
     /// Advance by `dt` seconds. A non-finite or non-positive `dt` does nothing; more than
@@ -156,6 +275,8 @@ impl Walker {
         if !dt.is_finite() || dt <= 0.0 {
             return;
         }
+        self.footsteps.clear();
+        self.landed_fall_height = None;
         self.carry += dt.min(MAX_FRAME);
         // The jump press is taken once per frame, by the first substep that stands on ground.
         let mut jump = input.jump;
@@ -176,12 +297,39 @@ impl Walker {
         let h = SUBSTEP;
         let was_grounded = self.grounded;
 
-        // Horizontal velocity towards the wish.
+        // Crouch (T09-007): crouching down is always allowed; standing back up needs a short
+        // upward probe to find room, since no "walkable slope"-style constant exists for it in
+        // the data either (see the module docs).
+        if input.crouch {
+            self.crouched = true;
+        } else if self.crouched {
+            let needed = (cfg.height - cfg.crouch_height).max(0.0);
+            let crouch_top = (cfg.crouch_height - cfg.radius).max(cfg.radius);
+            let probe_from = self.position + Vec3::Y * crouch_top;
+            if needed <= 0.0
+                || cast_sphere(world, probe_from, cfg.radius, Vec3::Y * needed).is_none()
+            {
+                self.crouched = false;
+            }
+        }
+        let height = if self.crouched {
+            cfg.crouch_height
+        } else {
+            cfg.height
+        };
+
+        // Horizontal velocity towards the wish; sprinting (T09-007) scales the target, gated off
+        // while crouched.
         let wish = input.wish.clamp_length_max(1.0);
+        let sprint_factor = if input.sprint && !self.crouched {
+            cfg.sprint_multiplier
+        } else {
+            1.0
+        };
         let (sin, cos) = input.yaw.sin_cos();
         let forward = Vec3::new(-sin, 0.0, -cos);
         let right = Vec3::new(cos, 0.0, -sin);
-        let target = (right * wish.x + forward * wish.y) * cfg.speed;
+        let target = (right * wish.x + forward * wish.y) * cfg.speed * sprint_factor;
         let horizontal = Vec3::new(self.velocity.x, 0.0, self.velocity.z);
         let horizontal = if self.grounded {
             let rate = if wish == Vec2::ZERO {
@@ -214,43 +362,83 @@ impl Walker {
         // Move, sliding along what is hit.
         let start = self.position;
         let delta = self.velocity * h;
-        let blocked = self.slide(world, cfg, delta);
+        let blocked = self.slide(world, cfg, delta, height);
 
         // A wall met while walking may be a step: try again from higher up.
         if was_grounded && !jumped && blocked.is_some_and(|n| n.y.abs() < cfg.max_slope_cos) {
-            self.try_step_up(world, cfg, start, delta);
+            self.try_step_up(world, cfg, start, delta, height);
         }
 
-        // Find the ground under the feet; stick to it when walking down.
-        if jumped || (!was_grounded && self.velocity.y > 0.0) {
-            self.grounded = false;
-            return;
-        }
-        let probe = if was_grounded {
-            cfg.step_height
-        } else {
-            2.0 * SKIN
-        };
-        match cast_sphere(
-            world,
-            self.position + Vec3::Y * cfg.radius,
-            cfg.radius,
-            Vec3::NEG_Y * probe,
-        ) {
-            Some(hit) if walkable(world, cfg, &hit) => {
+        // Find the ground under the feet; stick to it when walking down. Skipped while rising
+        // out of a jump or off a ledge (there is nothing to stand on yet).
+        let skip_probe = jumped || (!was_grounded && self.velocity.y > 0.0);
+        let mut grounded_now = false;
+        if !skip_probe {
+            let probe = if was_grounded {
+                cfg.step_height
+            } else {
+                2.0 * SKIN
+            };
+            if let Some(hit) = cast_sphere(
+                world,
+                self.position + Vec3::Y * cfg.radius,
+                cfg.radius,
+                Vec3::NEG_Y * probe,
+            ) && walkable(world, cfg, &hit)
+            {
                 if !hit.started_overlapping {
                     self.position.y -= (hit.distance - SKIN).max(0.0);
                 }
-                self.grounded = true;
+                grounded_now = true;
                 self.velocity.y = 0.0;
+                self.ground_material = hit.material;
             }
-            _ => self.grounded = false,
+        }
+        self.grounded = grounded_now;
+
+        // Fall-height measurement and footstep events (T09-007), from this substep's final
+        // grounded state.
+        if self.grounded {
+            if !was_grounded
+                && let Some(peak) = self.air_peak_y.take()
+            {
+                let fall = peak - self.position.y;
+                if fall > 1e-3 {
+                    self.landed_fall_height = Some(fall);
+                }
+            }
+            let h_speed = Vec3::new(self.velocity.x, 0.0, self.velocity.z).length();
+            if h_speed > MIN_FOOTSTEP_SPEED && cfg.footstep_stride > 1e-3 {
+                self.footstep_phase += h_speed * h;
+                while self.footstep_phase >= cfg.footstep_stride
+                    && self.footsteps.len() < MAX_FOOTSTEPS_PER_STEP
+                {
+                    self.footstep_phase -= cfg.footstep_stride;
+                    self.footsteps.push(FootstepEvent {
+                        position: self.position,
+                        material: self.ground_material,
+                        speed: h_speed,
+                    });
+                }
+            }
+        } else {
+            self.air_peak_y = Some(
+                self.air_peak_y
+                    .map_or(self.position.y, |p| p.max(self.position.y)),
+            );
         }
     }
 
-    /// Move by `delta`, sliding along surfaces; returns the normal of the last surface that
-    /// blocked the move, if any.
-    fn slide(&mut self, world: &dyn SpatialQuery, cfg: &WalkConfig, delta: Vec3) -> Option<Vec3> {
+    /// Move by `delta`, sliding along surfaces; `height` is this substep's effective body height
+    /// (standing or crouched, T09-007). Returns the normal of the last surface that blocked the
+    /// move, if any.
+    fn slide(
+        &mut self,
+        world: &dyn SpatialQuery,
+        cfg: &WalkConfig,
+        delta: Vec3,
+        height: f32,
+    ) -> Option<Vec3> {
         let mut delta = delta;
         let mut planes = [Vec3::ZERO; MAX_SLIDES];
         let mut count = 0;
@@ -260,7 +448,7 @@ impl Walker {
             if len < 1e-6 {
                 break;
             }
-            let Some(hit) = cast_body(world, cfg, &mut self.position, delta) else {
+            let Some(hit) = cast_body(world, cfg, &mut self.position, delta, height) else {
                 self.position += delta;
                 break;
             };
@@ -292,27 +480,29 @@ impl Walker {
     }
 
     /// From `start`, rise by the step height, redo the horizontal part of `delta` and come back
-    /// down; keep the result only if it stands on walkable ground and got further.
+    /// down; keep the result only if it stands on walkable ground and got further. `height` is
+    /// this substep's effective body height (T09-007).
     fn try_step_up(
         &mut self,
         world: &dyn SpatialQuery,
         cfg: &WalkConfig,
         start: Vec3,
         delta: Vec3,
+        height: f32,
     ) {
         let flat = Vec3::new(delta.x, 0.0, delta.z);
         let progress = |p: Vec3| (p - start).dot(flat);
-        let blocked_at = *self;
-        let mut trial = *self;
+        let blocked_at_position = self.position;
+        let mut trial = self.clone();
         trial.position = start;
         let up = Vec3::Y * cfg.step_height;
-        let rise = match cast_body(world, cfg, &mut trial.position, up) {
+        let rise = match cast_body(world, cfg, &mut trial.position, up, height) {
             Some(hit) if !hit.started_overlapping => (hit.distance - SKIN).max(0.0),
             Some(_) => return,
             None => cfg.step_height,
         };
         trial.position.y += rise;
-        trial.slide(world, cfg, flat);
+        trial.slide(world, cfg, flat, height);
         let feet = trial.position + Vec3::Y * cfg.radius;
         match cast_sphere(world, feet, cfg.radius, Vec3::NEG_Y * (rise + SKIN * 2.0)) {
             Some(hit) if !hit.started_overlapping && walkable(world, cfg, &hit) => {
@@ -320,7 +510,7 @@ impl Walker {
             }
             _ => return,
         }
-        if progress(trial.position) > progress(blocked_at.position) + 1e-4 {
+        if progress(trial.position) > progress(blocked_at_position) + 1e-4 {
             trial.velocity.y = 0.0;
             *self = trial;
         }
@@ -328,10 +518,11 @@ impl Walker {
 }
 
 /// The body: a capsule standing along +Y from `radius` to `height - radius` above the feet
-/// (never shorter than a sphere), and how far above the feet its middle is.
-fn body(cfg: &WalkConfig) -> (Shape, f32) {
+/// (never shorter than a sphere), and how far above the feet its middle is. `height` is the
+/// effective body height for this call (standing or crouched, T09-007).
+fn body(cfg: &WalkConfig, height: f32) -> (Shape, f32) {
     let r = cfg.radius;
-    let top = (cfg.height - r).max(r);
+    let top = (height - r).max(r);
     let shape = Shape::Capsule {
         half_height: (top - r) * 0.5,
         radius: r,
@@ -340,7 +531,8 @@ fn body(cfg: &WalkConfig) -> (Shape, f32) {
 }
 
 /// The first thing the body standing at `feet` meets when moved by `delta`, against the static
-/// world; a rejected query counts as no hit.
+/// world; a rejected query counts as no hit. `height` is the effective body height for this call
+/// (standing or crouched, T09-007).
 ///
 /// A surface the body already touches but moves away from or along does not stop it (standing
 /// on a floor does not stop a step up or a walk). Because one cast reports only the nearest
@@ -353,10 +545,11 @@ fn cast_body(
     cfg: &WalkConfig,
     feet: &mut Vec3,
     delta: Vec3,
+    height: f32,
 ) -> Option<Hit> {
-    let (shape, middle) = body(cfg);
+    let (shape, middle) = body(cfg, height);
     let r = cfg.radius;
-    let top = (cfg.height - r).max(r);
+    let top = (height - r).max(r);
     let filter = QueryFilter {
         dynamics: false,
         ..QueryFilter::default()
