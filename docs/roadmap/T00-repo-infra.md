@@ -57,3 +57,4 @@ Each contract task yields: RFC, public trait/struct stub, a mock implementation,
 - [x] **T00-036** · Sky and lightmap plan: design doc, RFC 0013 amendment (`SkyData` in `LevelScene`, the face orientation convention) and the roadmap slices (T07-032, T04-039, T02-039, T07-033, T03-038) · `S` · `P0`
 - [x] **T00-037** · Lightmap plan: design note, RFC 0013 amendment 2 (a lightmap UV per vertex, a lightmap texture per instance, full-bright drawing) and the roadmap slices (T07-034, T04-040, T02-040, T07-035, T03-039) · `S` · `P0`
 - [x] **T00-038** · Distance haze plan: RFC 0013 amendment 4 (`Fog`, `HazeVolume`, `LevelScene::hazes`, `fog_at`, `Renderer::set_fog`) and the roadmap slices T07-041, T04-042, T07-042, T03-040 · `S` · `P0`
+- [x] **T00-043** · Bloom plan: RFC 0013 amendment 6 (`BloomVolume`, `LevelScene::blooms`, `blooms_at`, `Bloom`, `Renderer::set_blooms`) and the roadmap slices T07-048, T04-043, T07-049, T03-041 · `S` · `P1`
