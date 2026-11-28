@@ -263,6 +263,8 @@ pub(crate) fn take_level_screenshot(
     let camera = start_camera(&scene);
     let fog = scene.fog_at(camera.position);
     renderer.set_fog(fog).map_err(|e| e.to_string())?;
+    let blooms = scene.blooms_at(camera.position);
+    renderer.set_blooms(&blooms).map_err(|e| e.to_string())?;
     let image = renderer
         .render_world_to_image(&camera, None, SKY)
         .map_err(|e| e.to_string())?;
@@ -277,6 +279,7 @@ pub(crate) fn take_level_screenshot(
         skipped = scene.skipped.len(),
         hazes = scene.hazes.len(),
         fog = ?fog,
+        blooms = ?blooms,
         out = %out.display(),
         "level screenshot saved"
     );
