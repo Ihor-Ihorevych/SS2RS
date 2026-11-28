@@ -25,6 +25,19 @@ struct Variant {
     lightmap: LightmapKind,
     /// The chapter chain.
     chain: ChainKind,
+    /// Whether and how the world has a haze entity.
+    haze: HazeKind,
+}
+
+/// The haze entity of the synthetic world (entity 24, renderable 25, record 64).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HazeKind {
+    /// No `CHazeEntity`.
+    Absent,
+    /// A haze attached to entity 3, with its property record.
+    WithRecord,
+    /// The same haze without a property record and without a parent.
+    WithoutRecord,
 }
 
 /// The chapter chain of the synthetic world.
@@ -82,6 +95,7 @@ const NORMAL: Variant = Variant {
     sky: SkyKind::Absent,
     lightmap: LightmapKind::One,
     chain: ChainKind::Absent,
+    haze: HazeKind::Absent,
 };
 
 /// The lightmap pixels: 4 x 4 BGR (format code 0), so a test can check each texel.
@@ -483,6 +497,51 @@ fn world_file(v: Variant) -> Vec<u8> {
     ));
     b.type_block(TypeBlock::class(70, "CTexture", 1, 5, Some(69), &[]));
     b.type_block(TypeBlock::class(71, "CStaticTexture", 1, 5, Some(70), &[]));
+    // The haze classes (`environment-schema.md`).
+    b.type_block(TypeBlock::class(
+        73,
+        "Box3f",
+        1,
+        5,
+        None,
+        &[("1", 1), ("2", 1), ("3", 1), ("4", 1), ("5", 1), ("6", 1)],
+    ));
+    b.type_block(TypeBlock::class(
+        74,
+        "CHazeEffectRenderable",
+        6,
+        5,
+        Some(14),
+        &[("1", 73), ("2", 1), ("3", 40), ("4", 1), ("5", 1), ("7", 1)],
+    ));
+    b.type_block(TypeBlock::pointer(75, "CRenderable*", 74));
+    b.type_block(TypeBlock::pointer(76, "Handle<CBaseEntity>", 7));
+    b.type_block(TypeBlock::class(
+        77,
+        "CHazeEntity",
+        3,
+        5,
+        Some(7),
+        &[("1", 75), ("en_henParent", 76), ("en_idParentPart", 49)],
+    ));
+    b.type_block(TypeBlock::class(
+        78,
+        "CHazeProperties",
+        9,
+        5,
+        Some(10),
+        &[
+            ("1", 40),
+            ("2", 1),
+            ("3", 1),
+            ("4", 1),
+            ("5", 1),
+            ("6", 1),
+            ("7", 1),
+            ("10", 1),
+            ("11", 49),
+        ],
+    ));
     let texture_ident = b.identifier("3 texture");
     let uv_ident = b.identifier("3 uvmap");
     let shadow_ident = b.identifier("Shadow");
@@ -510,6 +569,12 @@ fn world_file(v: Variant) -> Vec<u8> {
     }
     if v.chain != ChainKind::Absent {
         entities.extend([8, 9]);
+    }
+    if v.haze != HazeKind::Absent {
+        entities.push(24);
+    }
+    if v.haze == HazeKind::WithRecord {
+        records.push(64);
     }
     if matches!(v.sky, SkyKind::WithRecord | SkyKind::NoFaces) {
         records.push(63);
@@ -801,6 +866,39 @@ fn world_file(v: Variant) -> Vec<u8> {
         );
     }
 
+    // Entity 24: the haze, its renderable 25 (turned 90 degrees about +y at (10, 0, 20); the
+    // record's values differ from the renderable's, to show which is read).
+    if v.haze != HazeKind::Absent {
+        let parent = (v.haze == HazeKind::WithRecord).then_some(3);
+        b.object(
+            24,
+            77,
+            entity(8)
+                .object_ref(Some(25))
+                .object_ref(parent)
+                .u32(0)
+                .finish(),
+        );
+        let placement = (ROT_Y90, [10.0, 0.0, 20.0]);
+        b.object(
+            25,
+            74,
+            aspect(None, placement, placement, Some(24))
+                .f32(-150.0)
+                .f32(-50.0)
+                .f32(-200.0)
+                .f32(150.0)
+                .f32(50.0)
+                .f32(200.0)
+                .f32(5.0)
+                .u32(0x112a_383d)
+                .f32(-15.0)
+                .f32(186.0)
+                .f32(7.0)
+                .finish(),
+        );
+    }
+
     // The property records, in the extra section.
     let record = |id: u32, type_id: u32, entity: u32, name: &str| {
         let r = ObjectBytes::new()
@@ -839,6 +937,26 @@ fn world_file(v: Variant) -> Vec<u8> {
         .f32(0.0)
         .u32(1)
         .u32(1);
+        extra.extend(r.finish());
+    }
+    if records.contains(&64) {
+        b.edty_pair(64, 78);
+        let r = quat_vect(
+            ObjectBytes::new().u32(64).u32(78).object_ref(Some(24)),
+            IDENTITY,
+            [0.0, 0.0, 0.0],
+        )
+        .cstring("Haze001")
+        .object_ref(None)
+        .u32(0x002a_383d)
+        .f32(300.0)
+        .f32(100.0)
+        .f32(400.0)
+        .f32(0.0)
+        .f32(-150.0)
+        .f32(1860.0)
+        .f32(0.0)
+        .u32(0);
         extra.extend(r.finish());
     }
     b.after_edob(records.len() as u32, &extra);
@@ -1124,6 +1242,75 @@ fn a_lightmap_whose_texture_cannot_be_read_says_why() {
     assert_eq!(lm.texture_object, Some(110));
     let err = lm.texture.as_ref().unwrap_err();
     assert!(err.contains("zlib"), "{err}");
+}
+
+#[test]
+fn a_world_without_a_haze_entity_has_no_haze() {
+    assert!(
+        World::from_bytes(&world_file(NORMAL))
+            .unwrap()
+            .hazes
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_haze_is_read_from_its_record_and_placed_by_its_renderable() {
+    let world = World::from_bytes(&world_file(Variant {
+        haze: HazeKind::WithRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    let [h] = world.hazes.as_slice() else {
+        panic!("{:?}", world.hazes);
+    };
+    assert_eq!((h.serial, h.name.as_str()), (8, "Haze001"));
+    // `1_3_village`'s numbers, from the record.
+    assert_eq!(h.color, 0x002a_383d);
+    assert_vec(h.size, [300.0, 100.0, 400.0]);
+    assert_eq!(
+        (h.fade, h.near, h.far, h.value_10),
+        (0.0, -150.0, 1860.0, 0.0)
+    );
+    assert_vec(h.local_box.0, [-150.0, -50.0, -200.0]);
+    assert_vec(h.local_box.1, [150.0, 50.0, 200.0]);
+    assert_quat(h.rotation, ROT_Y90);
+    assert_vec(h.translation, [10.0, 0.0, 20.0]);
+    // The parent is entity 3, the static model with serial 1.
+    assert_eq!(h.parent, Some(1));
+}
+
+#[test]
+fn a_haze_without_a_record_takes_the_renderables_values() {
+    let world = World::from_bytes(&world_file(Variant {
+        haze: HazeKind::WithoutRecord,
+        ..NORMAL
+    }))
+    .unwrap();
+    let h = &world.hazes[0];
+    assert_eq!(h.name, "");
+    assert_eq!(h.color, 0x112a_383d);
+    assert_vec(h.size, [300.0, 100.0, 400.0]);
+    assert_eq!(
+        (h.fade, h.near, h.far, h.value_10),
+        (5.0, -15.0, 186.0, 7.0)
+    );
+    assert_eq!(h.parent, None);
+}
+
+#[test]
+fn an_embedded_model_is_read_once_from_the_world() {
+    let world = World::from_bytes(&world_file(NORMAL)).unwrap();
+    // Entity 4 names object 15, an empty configuration: it is listed, and why it cannot be read
+    // is kept (the world itself still reads).
+    assert_eq!(world.embedded_models.len(), 1);
+    let e = world.embedded_model(15).unwrap();
+    assert_eq!(e.object, 15);
+    assert!(e.model.is_err(), "{e:?}");
+    assert!(
+        world.embedded_model(51).is_none(),
+        "an external model is not embedded"
+    );
 }
 
 #[test]

@@ -2901,6 +2901,7 @@ dependencies = [
  "flate2",
  "ss2-assets",
  "ss2-core",
+ "ss2-format-mdl",
  "ss2-format-tex",
  "ss2-meta",
  "ss2-testkit",
