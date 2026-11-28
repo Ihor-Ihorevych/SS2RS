@@ -263,7 +263,8 @@ draw the original's distance fog:
   `near`/`far` are `.6`/`.7` (`far >= near`, as the original clamps).
 - `LevelScene::fog_at(eye: Vec3) -> Option<Fog>`: each volume's weight is
   `fade = 1 - clamp(distance(eye, box inset by fade_margin) / fade_margin, 0, 1)`; every volume with `fade > 0`
-  contributes (T01-412): near, far and colour are the fade-weighted averages, and when the fades sum to less than 1
+  contributes (T01-412), weighted by its fade times (the largest contributing box diagonal / its own box diagonal)
+  (T01-415): near, far and colour are the averages by that weight, and when the plain fades sum to less than 1
   near is multiplied and far divided by that sum (the range widens towards no fog); `strength` is 1; `None` when
   every `fade` is 0. (First written as "the strongest wins", corrected by T01-412.)
 - `Renderer::set_fog(Option<Fog>)`, called by the app each frame with `fog_at(camera eye)`. The sky is not fogged
