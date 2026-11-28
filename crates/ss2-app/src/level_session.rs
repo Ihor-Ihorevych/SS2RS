@@ -412,7 +412,7 @@ mod tests {
         renderer.set_fog(Some(fog)).unwrap();
         let fogged_view = renderer.render_world_to_image(&inside, None, SKY).unwrap();
         renderer.set_fog(None).unwrap();
-        let fog_px = fog.colour.map(|c| (c.powf(1.0 / 2.2) * 255.0) as f32);
+        let fog_px = fog.colour.map(|c| c.powf(1.0 / 2.2) * 255.0);
         let distance = |p: &[u8]| -> f32 {
             (0..3)
                 .map(|i| (f32::from(p[i]) - fog_px[i]).abs())
