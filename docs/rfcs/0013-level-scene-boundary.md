@@ -277,6 +277,31 @@ like the render parts, and sets the flag; a model without a collision mesh, or w
 PC render LOD with the flag clear (procedural geometry such as the test room also has it clear). Consumers that only
 need triangles ignore the flag.
 
+### Amendment 6: bloom (T00-043)
+
+A level's bloom entities (`docs/re/environment.md`, "Bloom", T01-417/T01-423/T01-424) cross the boundary so the
+renderer can draw the original's bloom:
+
+- `ss2_world::scene::BloomVolume { min: Vec3, max: Vec3, rotation: Quat, colour: [f32; 4], fade_margin: f32,
+  strength: f32, blur: f32, balance: f32, high_pass: f32, ramp: f32 }` and `LevelScene::blooms: Vec<BloomVolume>` in
+  the file's list order. The box and its turn follow `HazeVolume`; `colour` is linear RGBA from the renderable's
+  `.3`; `fade_margin` is `.2` (at least 0.001); `strength` is renderable `.4` (record `.6`), `blur` `.6` (record
+  `.8`), `balance` `.12` (record `.13`), `high_pass` `.13` (record `.16`), `ramp` `.18` (record's second `.21`).
+  The HDR-only threshold `.19` and the mask texture `.7` (null in every retail bloom) are not carried.
+- `ss2_render_api::scene_data::Bloom { colour: [f32; 4], fade: f32, strength: f32, blur: f32, balance: f32,
+  high_pass: f32, ramp: f32 }`: one active bloom for one frame.
+- `LevelScene::blooms_at(eye: Vec3) -> Vec<Bloom>`: every volume whose box holds the eye, with its edge fade
+  (`1 - clamp(distance(eye, box inset by fade_margin) / fade_margin, 0, 1)`, as for haze) above 0, in list order.
+  The original runs each one's whole chain in turn on the frame, in its per-view sort order (open, T01-422): list
+  order is our provisional order.
+- `Renderer::set_blooms(&[Bloom])`, called by the app each frame. After the world pass and before the 2D overlay,
+  the renderer runs per bloom: `intensity = clamp(fade * strength * BLOOM_BIAS, 0, 2)` (`BLOOM_BIAS` = 1.0, the
+  video option's value, provisional), skipped below a small floor or on a target smaller than 32x32; then the
+  repeated quarter-size downscale with the two-tap blur (offsets of 1.5 texels scaled by `blur`, split by
+  `balance`) until both sides are at most 128; one high-pass pass (`high_pass * sqrt(intensity)`, at most 1); one
+  pass tinting by the fixed three-colour ramp at `ramp`; an additive composite of `colour` (RGB times `fade`, at
+  most 1; alpha not faded) onto the frame.
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
