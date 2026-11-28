@@ -167,6 +167,7 @@ Class catalogue (docs/re/classes.md, classes-catalog.md):
 
 ```
 python -X utf8 tools/re/class_catalog.py "C:\path\to\Serious Sam 2" --markdown docs/re/classes-catalog.md [--modules modules.json]    # about 30 seconds
+python -I tools/re/ctse_duplicate_members_verify.py "C:\path\to\Serious Sam 2"    # T01-425: every class's own STMB member list, swept for a repeated member name (docs/re/ctsemeta-types.md, invariant 4); about 30 seconds
 ```
 
 AI evidence (docs/re/ai.md):
