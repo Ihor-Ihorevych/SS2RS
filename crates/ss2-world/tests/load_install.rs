@@ -672,11 +672,17 @@ fn dm_stadium_is_lightmapped() {
         .count();
     assert!(lit_fences > 0);
     assert_eq!(report.lit_placements, 133);
-    assert!(
-        report.lightmapped * 10 >= report.lit_placements * 8,
+    // Every lit placement draws its lightmap but the one of the model with several candidate
+    // streams (left unlit until T01-420 stage 2).
+    assert_eq!(
+        (
+            report.lightmapped,
+            report.unlit_no_uvs,
+            report.several_left_unlit
+        ),
+        (132, 1, 1),
         "{report:?}"
     );
-    assert_eq!(report.unlit_texture, 0, "{report:?}");
 }
 
 /// With `SS2_LOAD_ALL=1` (release build): every level loads with its lightmaps; prints, per
@@ -716,7 +722,8 @@ fn every_level_is_lightmapped() {
         lit_instances += lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
-             models {:>3}: one {:?}, none {}, several {}",
+             models {:>3}: one {:?}, several {} unlit, near miss {} ({} not slot 0), \
+             none in range {}",
             info.id,
             r.lightmapped,
             r.lit_placements,
@@ -725,8 +732,10 @@ fn every_level_is_lightmapped() {
             r.dropped,
             r.lit_models,
             r.one_candidate,
-            r.no_candidate,
-            r.several_candidates
+            r.several_left_unlit,
+            r.near_miss,
+            r.near_miss_not_slot_zero,
+            r.none_in_range
         );
         all.lit_placements += r.lit_placements;
         all.lightmapped += r.lightmapped;
@@ -734,8 +743,10 @@ fn every_level_is_lightmapped() {
         all.unlit_texture += r.unlit_texture;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
-        all.no_candidate += r.no_candidate;
-        all.several_candidates += r.several_candidates;
+        all.several_left_unlit += r.several_left_unlit;
+        all.near_miss += r.near_miss;
+        all.near_miss_not_slot_zero += r.near_miss_not_slot_zero;
+        all.none_in_range += r.none_in_range;
         for (k, n) in r.one_candidate {
             *all.one_candidate.entry(k).or_default() += n;
         }
@@ -743,12 +754,12 @@ fn every_level_is_lightmapped() {
     eprintln!("{} worlds, in all: {all:?}", seen.len());
     assert!(failures.is_empty(), "{failures:#?}");
     assert_eq!(lit_instances, all.lightmapped);
-    // Most lit placements are drawn with their lightmap (the spec: 86.6 % of lit instances
-    // have exactly one candidate stream).
-    assert!(all.lightmapped * 10 >= all.lit_placements * 8, "{all:?}");
     assert_eq!(all.unlit_texture, 0, "{all:?}");
-    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels), 15,976 drawn
-    // with their lightmap, 2,182 whose model has no single candidate, 37 not in the scene.
+    // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels). Placements of
+    // models with several candidate streams (until T01-420 stage 2) and of models without any UV
+    // stream in [0, 1] (a departure from the spec's slot-0 fallback) are drawn unlit, and one
+    // placement of `dm_cockaleekie` is not in the scene. Before
+    // T07-044, 2,198 were drawn unlit for lack of a single candidate stream.
     assert_eq!(
         (
             all.lit_placements,
@@ -756,6 +767,23 @@ fn every_level_is_lightmapped() {
             all.unlit_no_uvs,
             all.dropped
         ),
-        (18_195, 15_976, 2_182, 37)
+        (18_195, 17_192, 1_002, 1)
+    );
+    // The models, by the rule that applied: one candidate (by its slot); several (left unlit);
+    // no candidate (least overlap in [0, 1], and how often that is not slot 0); no stream in
+    // [0, 1] (left unlit).
+    assert_eq!(
+        all.one_candidate,
+        BTreeMap::from([(0, 2_021), (1, 195), (2, 36), (3, 2), (4, 1)])
+    );
+    assert_eq!(
+        (
+            all.lit_models,
+            all.several_left_unlit,
+            all.near_miss,
+            all.near_miss_not_slot_zero,
+            all.none_in_range
+        ),
+        (2_645, 209, 156, 28, 25)
     );
 }
