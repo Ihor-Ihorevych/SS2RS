@@ -332,22 +332,39 @@ impl LevelScene {
         Ok(())
     }
 
-    /// The fog with the eye at `eye` (RFC 0013 amendment 4): the haze volume with the strongest
-    /// [`HazeVolume::fade`] (on a tie, the later one in list order) as a linear [`Fog`]; `None` when no volume
-    /// reaches the eye. How the original combines several hazes is open (T01-412): one winner is provisional.
+    /// The fog with the eye at `eye` (RFC 0013 amendment 4, `docs/re/environment.md` "Combining several hazes",
+    /// T01-412): every volume with a [`HazeVolume::fade`] above 0 contributes, weighted by its fade. Near, far and
+    /// the colour are the fade-weighted averages (the colour's weighting is the spec's medium-low reading); when the
+    /// fades sum to less than 1 the range widens towards no fog: near times the sum, far divided by it. `None` when
+    /// no volume reaches the eye.
     pub fn fog_at(&self, eye: Vec3) -> Option<Fog> {
-        let mut best: Option<(f32, &HazeVolume)> = None;
+        let mut total = 0.0;
+        let (mut near, mut far, mut colour) = (0.0, 0.0, [0.0f32; 3]);
         for h in &self.hazes {
             let fade = h.fade(eye);
-            if fade > 0.0 && best.is_none_or(|(b, _)| fade >= b) {
-                best = Some((fade, h));
+            if fade <= 0.0 {
+                continue;
+            }
+            total += fade;
+            near += fade * h.near;
+            far += fade * h.far;
+            for (c, v) in colour.iter_mut().zip(h.colour) {
+                *c += fade * v;
             }
         }
-        best.map(|(strength, h)| Fog {
-            colour: [h.colour[0], h.colour[1], h.colour[2]],
-            near: h.near,
-            far: h.far.max(h.near),
-            strength: strength.clamp(0.0, 1.0),
+        if total <= 0.0 {
+            return None;
+        }
+        let (mut near, mut far) = (near / total, far / total);
+        if total < 1.0 {
+            near *= total;
+            far /= total;
+        }
+        Some(Fog {
+            colour: colour.map(|c| c / total),
+            near,
+            far: far.max(near),
+            strength: 1.0,
         })
     }
 
@@ -858,8 +875,50 @@ mod haze_tests {
     }
 
     #[test]
-    fn the_test_room_fogs_its_far_half_and_the_strongest_haze_wins() {
-        let mut room = LevelScene::test_room();
+    fn several_hazes_are_averaged_by_their_fade_and_a_weak_total_widens_the_range() {
+        // The spec's worked example (`1_2_approachingvillage`): A near -150 far 20, B near 0 far 5000.
+        let a = HazeVolume {
+            min: Vec3::new(-10.0, -10.0, -10.0),
+            max: Vec3::new(10.0, 10.0, 10.0),
+            near: -150.0,
+            far: 20.0,
+            fade_margin: 10.0,
+            ..TEST_HAZE
+        };
+        let b = HazeVolume {
+            near: 0.0,
+            far: 5000.0,
+            colour: [1.0, 0.0, 0.0, 1.0],
+            ..a
+        };
+        let mut scene = LevelScene::test_room();
+        // Only A's shape, at fade 0.3: the box spans x -20..0 with a 10 m margin (inset face at x = -10), the eye 7 m
+        // past it.
+        let thirty = HazeVolume {
+            min: Vec3::new(-20.0, -20.0, -20.0),
+            max: Vec3::new(0.0, 20.0, 20.0),
+            ..a
+        };
+        scene.hazes = vec![thirty];
+        let eye = Vec3::new(-3.0, 0.0, 0.0);
+        assert!((thirty.fade(eye) - 0.3).abs() < 1e-5);
+        let fog = scene.fog_at(eye).unwrap();
+        assert!((fog.near - -45.0).abs() < 1e-3, "{fog:?}");
+        assert!((fog.far - 20.0 / 0.3).abs() < 1e-2, "{fog:?}");
+        // Deep inside both: the plain average, no widening.
+        scene.hazes = vec![a, b];
+        let fog = scene.fog_at(Vec3::ZERO).unwrap();
+        assert_eq!((fog.near, fog.far, fog.strength), (-75.0, 2510.0, 1.0));
+        for (got, want) in fog.colour.iter().zip([0.65, 0.175, 0.2]) {
+            assert!((got - want).abs() < 1e-5, "{:?}", fog.colour);
+        }
+        // Outside both: no fog.
+        assert_eq!(scene.fog_at(Vec3::splat(100.0)), None);
+    }
+
+    #[test]
+    fn the_test_room_fogs_its_far_half() {
+        let room = LevelScene::test_room();
         room.validate().unwrap();
         assert_eq!(
             room.fog_at(room.start().position + Vec3::Y),
@@ -872,27 +931,6 @@ mod haze_tests {
             ([0.3, 0.35, 0.4], 2.0, 15.0, 1.0)
         );
         fog.validate().unwrap();
-        // A second, red haze over the whole room: deep in the far half both are full, the later one wins; near the
-        // south edge of the first only the second is full.
-        room.hazes.push(HazeVolume {
-            min: Vec3::new(-20.0, -5.0, -20.0),
-            max: Vec3::new(20.0, 10.0, 20.0),
-            colour: [1.0, 0.0, 0.0, 1.0],
-            ..TEST_HAZE
-        });
-        assert_eq!(
-            room.fog_at(Vec3::new(0.0, 1.0, -5.0)).unwrap().colour,
-            [1.0, 0.0, 0.0]
-        );
-        assert_eq!(
-            room.fog_at(Vec3::new(0.0, 1.0, -0.5)).unwrap().colour,
-            [1.0, 0.0, 0.0]
-        );
-        room.hazes.reverse();
-        assert_eq!(
-            room.fog_at(Vec3::new(0.0, 1.0, -5.0)).unwrap().colour,
-            [0.3, 0.35, 0.4]
-        );
     }
 
     #[test]
