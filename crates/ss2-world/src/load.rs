@@ -56,13 +56,15 @@
 //! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407 and T01-420):
 //! of the UV streams of the drawn level of detail, the one whose coordinates all lie in [0, 1]
 //! and whose triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized
-//! area covered twice). Of several such streams the one with the least overlap is taken; with
-//! none, the least-overlapping stream that still lies in [0, 1]; equal overlaps go to a stream
-//! no surface's material uses (the UV map of a non-empty texture group of any config), then to
-//! the lowest position. Every part of the model gets [`MeshData::lightmap_uvs`] from the chosen
-//! stream. A model with no stream in [0, 1] at all gets none and its lit placements stay unlit
-//! with one skipped line: **a departure from the spec**, whose slot-0 fallback samples the
-//! lightmap through a tiling channel there (dark bands). This is done only for models that some
+//! area covered twice). With no such stream, the least-overlapping stream that still lies in
+//! [0, 1] is taken; equal overlaps go to a stream no surface's material uses (the UV map of a
+//! non-empty texture group of any config), then to the lowest position. Every part of the model
+//! gets [`MeshData::lightmap_uvs`] from the chosen stream. Two cases get none, and their lit
+//! placements stay unlit with one skipped line: a model with several such streams (the spec
+//! breaks their usual 0 % tie with a per-instance test on the baked lightmap, T01-420 stage 2,
+//! which this loader does not have yet), and a model with no stream in [0, 1] at all (**a
+//! departure from the spec**, whose slot-0 fallback samples the lightmap through a tiling
+//! channel there: dark bands). This is done only for models that some
 //! lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
 //! converted by the same texture path as the others (the size limit, BC kept, RGBA8 from
 //! BGR/BGRA, appended after the file textures); a lightmap that cannot be read or converted
@@ -202,8 +204,8 @@ pub struct LightmapReport {
     pub lit_placements: usize,
     /// Placements that got a lightmap ([`Instance::lightmap`]).
     pub lightmapped: usize,
-    /// Lit placements left unlit because their model has no lightmap UVs (no UV stream in
-    /// [0, 1]).
+    /// Lit placements left unlit because their model has no lightmap UVs (several candidate
+    /// streams, or no UV stream in [0, 1]).
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
@@ -215,10 +217,8 @@ pub struct LightmapReport {
     /// Of those, models with exactly one candidate stream, by the stream's position in the
     /// surfaces' UV streams (slot order).
     pub one_candidate: BTreeMap<usize, usize>,
-    /// Lit models with several candidate streams, given the least-overlapping one.
-    pub several_least_overlap: usize,
-    /// Of those, models whose stream is not the lowest-positioned candidate.
-    pub several_not_lowest: usize,
+    /// Lit models with several candidate streams: no lightmap UVs yet (T01-420 stage 2).
+    pub several_left_unlit: usize,
     /// Lit models without a candidate, given the least-overlapping stream in [0, 1].
     pub near_miss: usize,
     /// Of those, models whose stream is not slot 0.
@@ -825,9 +825,18 @@ impl Loader<'_> {
         report.lit_models += 1;
         match choice {
             lightmap::StreamChoice::One(k) => *report.one_candidate.entry(*k).or_default() += 1,
-            lightmap::StreamChoice::Several { candidates, stream } => {
-                report.several_least_overlap += 1;
-                report.several_not_lowest += usize::from(candidates.first() != Some(stream));
+            lightmap::StreamChoice::Several(ks) => {
+                report.several_left_unlit += 1;
+                let slots = ks
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let placements = if lit == 1 { "placement" } else { "placements" };
+                self.skip(format!(
+                    "model `{name}`: several lightmap streams (slots {slots}): left unlit until \
+                     the per-instance lit test (T01-420 stage 2) ({lit} lit {placements})"
+                ));
             }
             lightmap::StreamChoice::NearMiss { stream } => {
                 report.near_miss += 1;

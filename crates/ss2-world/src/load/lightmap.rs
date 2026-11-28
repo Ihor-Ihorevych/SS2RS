@@ -12,12 +12,15 @@
 //! `bmf.md` member 12/14).
 //!
 //! - Exactly one candidate is the lightmap's stream.
-//! - Several candidates: the one with the least overlap (T01-420).
 //! - No candidate: the in-range stream with the least overlap, the 2 % cutoff relaxed but never
-//!   the [0, 1] requirement (T01-420).
-//! - Equal overlaps go to a stream the material does not use (no surface's material has the id
-//!   that surface declares at that position among its UV map ids: the UV map of each non-empty
-//!   texture group of every config, `mtr.md`), then to the lowest position.
+//!   the [0, 1] requirement (T01-420, stage 1). Equal overlaps go to a stream the material does
+//!   not use (no surface's material has the id that surface declares at that position among its
+//!   UV map ids: the UV map of each non-empty texture group of every config, `mtr.md`), then to
+//!   the lowest position (T01-420, stage 3).
+//! - Several candidates: nothing is chosen yet. True candidates usually tie at 0 % overlap, and
+//!   the spec breaks that tie with how much of each footprint is lit in the instance's own baked
+//!   lightmap (T01-420, stage 2): a per-instance test this loader does not have yet, so these
+//!   meshes are drawn unlit.
 //! - No stream in range at all: nothing is chosen. **This departs from the spec**, which keeps
 //!   T01-414's slot-0 fallback there: such a slot 0 is a tiling channel, and sampling a lightmap
 //!   through it tiles the texture into dark bands, so the model is drawn unlit instead.
@@ -37,11 +40,8 @@ const GRID: usize = 256;
 pub(crate) enum StreamChoice {
     /// Exactly one candidate: the stream at this position.
     One(usize),
-    /// Several candidates (`candidates`, ascending): `stream` has the least overlap.
-    Several {
-        candidates: Vec<usize>,
-        stream: usize,
-    },
+    /// Several candidates (their positions, ascending): none is taken yet (T01-420 stage 2).
+    Several(Vec<usize>),
     /// No candidate: `stream` is the in-range stream with the least overlap.
     NearMiss { stream: usize },
     /// No stream is in range: none is taken (a departure from the spec's slot-0 fallback).
@@ -52,10 +52,8 @@ impl StreamChoice {
     /// The position of the chosen stream, if any.
     pub(crate) fn stream(&self) -> Option<usize> {
         match self {
-            Self::One(k) | Self::Several { stream: k, .. } | Self::NearMiss { stream: k } => {
-                Some(*k)
-            }
-            Self::NoneInRange => None,
+            Self::One(k) | Self::NearMiss { stream: k } => Some(*k),
+            Self::Several(_) | Self::NoneInRange => None,
         }
     }
 }
@@ -87,31 +85,19 @@ pub(crate) fn choose(surfaces: &[Surface], material_uv_ids: &[Vec<u32>]) -> Stre
         .filter(|(o, _)| *o <= MAX_OVERLAP)
         .map(|(_, k)| *k)
         .collect();
-    // The least overlap; ties to a stream the material does not use, then the lowest position.
-    let best = |pool: &[(f64, usize)]| {
-        pool.iter()
-            .min_by(|a, b| {
-                a.0.total_cmp(&b.0)
-                    .then(used(a.1).cmp(&used(b.1)))
-                    .then(a.1.cmp(&b.1))
-            })
-            .map(|(_, k)| *k)
-    };
     match candidates.as_slice() {
         [k] => StreamChoice::One(*k),
-        [] => match best(&in_range) {
-            Some(stream) => StreamChoice::NearMiss { stream },
+        // The least overlap; ties to a stream the material does not use, then the lowest
+        // position.
+        [] => match in_range.iter().min_by(|a, b| {
+            a.0.total_cmp(&b.0)
+                .then(used(a.1).cmp(&used(b.1)))
+                .then(a.1.cmp(&b.1))
+        }) {
+            Some(&(_, stream)) => StreamChoice::NearMiss { stream },
             None => StreamChoice::NoneInRange,
         },
-        _ => {
-            let pool: Vec<(f64, usize)> = in_range
-                .iter()
-                .copied()
-                .filter(|(o, _)| *o <= MAX_OVERLAP)
-                .collect();
-            let stream = best(&pool).unwrap_or(candidates[0]);
-            StreamChoice::Several { candidates, stream }
-        }
+        _ => StreamChoice::Several(candidates),
     }
 }
 
@@ -303,8 +289,9 @@ mod tests {
     }
 
     #[test]
-    fn of_several_candidates_the_least_overlap_wins_over_the_lower_slot() {
-        // Slot 0 overlaps a little (about 1 %, under the cutoff), slot 2 not at all.
+    fn several_candidates_choose_nothing() {
+        // Slot 0 overlaps a little (about 1 %, under the cutoff), slot 2 not at all; slot 1
+        // tiles. Neither the overlap nor the material decides between candidates yet.
         let s = surface(
             4,
             vec![
@@ -316,17 +303,11 @@ mod tests {
         let s = std::slice::from_ref(&s);
         let o = overlap(s, 0);
         assert!(o > 0.0 && o <= MAX_OVERLAP, "{o}");
-        let choice = pick(s);
-        assert_eq!(
-            choice,
-            StreamChoice::Several {
-                candidates: vec![0, 2],
-                stream: 2
-            }
-        );
-        assert_eq!(choice.stream(), Some(2));
-        // The overlap ranks before the material: slot 2 wins although the material uses it.
-        assert_eq!(choose(s, &[vec![5]]).stream(), Some(2));
+        for used in [vec![], vec![3], vec![5], vec![3, 5]] {
+            let choice = choose(s, &[used]);
+            assert_eq!(choice, StreamChoice::Several(vec![0, 2]));
+            assert_eq!(choice.stream(), None);
+        }
     }
 
     #[test]
@@ -365,20 +346,15 @@ mod tests {
 
     #[test]
     fn equal_overlaps_go_to_a_stream_the_material_does_not_use_then_the_lowest_slot() {
-        // Several candidates with the same (zero) overlap: slots 0 and 1 (ids 3 and 4).
-        let s = surface(
-            2,
-            vec![stream(2, |q| strip(q, 2)), stream(2, |q| strip(q, 2))],
-        );
-        let s = std::slice::from_ref(&s);
-        assert_eq!(pick(s).stream(), Some(0));
-        assert_eq!(choose(s, &[vec![3]]).stream(), Some(1));
-        assert_eq!(choose(s, &[vec![3, 4]]).stream(), Some(0));
-        // No candidate, two streams stacked alike: the same order.
+        // No candidate, two streams (ids 3 and 4) stacked alike: equal overlap.
         let t = surface(2, vec![stream(2, |_| tile(1.0)), stream(2, |_| tile(1.0))]);
         let t = std::slice::from_ref(&t);
         assert_eq!(pick(t), StreamChoice::NearMiss { stream: 0 });
         assert_eq!(choose(t, &[vec![3]]), StreamChoice::NearMiss { stream: 1 });
+        assert_eq!(
+            choose(t, &[vec![3, 4]]),
+            StreamChoice::NearMiss { stream: 0 }
+        );
         // An id used on any surface makes the stream used.
         let a = surface(1, vec![stream(1, |_| tile(1.0)), stream(1, |_| tile(1.0))]);
         let b = surface(1, vec![stream(1, |_| tile(1.0)), stream(1, |_| tile(1.0))]);
