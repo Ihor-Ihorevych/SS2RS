@@ -596,6 +596,14 @@ impl AppHandler for App {
                 pressed: true,
                 repeat,
             }) => self.key_pressed(key, repeat),
+            PlatformEvent::Input(InputEvent::Scroll { dy, .. }) => {
+                if self.wizard.is_none()
+                    && matches!(self.state.scene, Scene::Playing)
+                    && let Some(Phase::Picking(picker)) = &mut self.phase
+                {
+                    picker.wheel(dy);
+                }
+            }
             PlatformEvent::Input(InputEvent::CursorMoved { x, y }) => {
                 self.cursor = Vec2 { x, y };
                 self.pointer(UiInput::PointerMoved);
