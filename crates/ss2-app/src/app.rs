@@ -416,6 +416,8 @@ impl App {
         let mut world = None;
         // The fog where the camera is (RFC 0013 amendment 4); none outside a level.
         let mut fog = None;
+        // The blooms where the camera is (RFC 0013 amendment 6); none outside a level.
+        let mut blooms = Vec::new();
         let clear = match (self.state.scene, &mut self.phase) {
             _ if self.wizard.is_some() => {
                 if let Some(wizard) = &self.wizard {
@@ -459,6 +461,7 @@ impl App {
                 );
                 let camera = playing.session.camera();
                 fog = playing.session.scene().fog_at(camera.position);
+                blooms = playing.session.scene().blooms_at(camera.position);
                 world = Some(camera);
                 SKY
             }
@@ -471,6 +474,11 @@ impl App {
             && let Err(e) = renderer.set_fog(fog)
         {
             tracing::warn!(error = %e, "fog refused");
+        }
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Err(e) = renderer.set_blooms(&blooms)
+        {
+            tracing::warn!(error = %e, "blooms refused");
         }
         let rendered = {
             profiling::profile_scope!("render");
