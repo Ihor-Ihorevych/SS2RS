@@ -332,6 +332,15 @@ like `scene_data`. All additions:
   pipeline of the world shader (vertex entry `vs_skinned`, the same fragment stage: lighting, fog, alpha cutoff; no
   lightmap); each instance owns a uniform buffer of `MAX_BONES` skin matrices, multiplied on the CPU when its palette
   is set.
+- **Note (T04-045): tracks bind to bones by name.** An `.ans` track's `target_id` indexes its own file's identifier
+  table, so it is not a bone id of a skeleton from another file (`docs/re/ans.md`, "Target ids" and reader invariant
+  3). Additions, still format-free: `SkeletonData::with_bone_names(names)` (one string per bone, in bone order; empty
+  leaves a bone unnamed; the count must match), `bone_name(index)`, `index_of_name(name)` (exact match; the first bone
+  of a repeated name) and `pose_from_named_tracks(translations, rotations)` taking `(name, value)` tracks (names that
+  are no bone are skipped; the later of two tracks for one bone wins). `pose_from_tracks` keeps binding by bone id.
+  The caller passes a `.skl` LOD's bone names (`ss2_format_skl::Bone::name`, read from that file's identifier table
+  at the bone's id) and an animation's `TranslationTrack::target` / `RotationTrack::target` strings. No existing
+  signature changes.
 
 ## Alternatives considered
 

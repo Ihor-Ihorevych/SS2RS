@@ -206,9 +206,9 @@ impl<W> Schedule<W> {
 ///
 /// let mut sim = Simulation::new(TickConfig::default(), 0_u64).unwrap(); // the world is a counter
 /// sim.schedule_mut().add(Phase::Move, "count", 0, |world, _ctx| *world += 1).unwrap();
-/// let frame = sim.update(1_000_000); // one second of real time; the frame is clamped to 250 ms (7 ticks at 30 Hz)
-/// assert_eq!(frame.ticks, 7);
-/// assert_eq!(*sim.world(), 7);
+/// let frame = sim.update(1_000_000); // one second of real time; the frame is clamped to 100 ms (6 ticks at 60 Hz)
+/// assert_eq!(frame.ticks, 6);
+/// assert_eq!(*sim.world(), 6);
 /// ```
 pub struct Simulation<W> {
     clock: TickLoop,
@@ -279,6 +279,16 @@ impl<W> Simulation<W> {
 mod tests {
     use super::*;
     use crate::tick::{TickConfig, TickLoop};
+
+    /// The loop settings these tests were written for (30 Hz, frames capped at 250 ms), pinned so they test the loop's
+    /// mechanics independently of the engine's default rate (T01-089).
+    fn thirty() -> TickConfig {
+        TickConfig {
+            tick_hz: 30,
+            max_ticks_per_frame: 8,
+            max_frame_micros: 250_000,
+        }
+    }
 
     #[derive(Default)]
     struct Log {
@@ -410,7 +420,7 @@ mod tests {
 
     #[test]
     fn the_simulation_runs_every_system_once_per_tick_with_consecutive_tick_numbers() {
-        let mut sim = Simulation::new(TickConfig::default(), Log::default()).unwrap();
+        let mut sim = Simulation::new(thirty(), Log::default()).unwrap();
         sim.schedule_mut()
             .add(Phase::Move, "m", 0, logger("m"))
             .unwrap();
@@ -434,7 +444,7 @@ mod tests {
                     // Lumpy frames are long on purpose: the stall caps must not apply.
                     max_ticks_per_frame: 1000,
                     max_frame_micros: 100_000_000,
-                    ..TickConfig::default()
+                    ..thirty()
                 },
                 Log::default(),
             )
@@ -463,7 +473,7 @@ mod tests {
 
     #[test]
     fn a_paused_simulation_runs_nothing_and_a_step_runs_one_tick() {
-        let mut sim = Simulation::new(TickConfig::default(), Log::default()).unwrap();
+        let mut sim = Simulation::new(thirty(), Log::default()).unwrap();
         sim.schedule_mut()
             .add(Phase::Move, "m", 0, logger("m"))
             .unwrap();
@@ -481,7 +491,7 @@ mod tests {
         let mut sim = Simulation::new(
             TickConfig {
                 max_frame_micros: 100_000_000,
-                ..TickConfig::default()
+                ..thirty()
             },
             Log::default(),
         )
@@ -502,7 +512,7 @@ mod tests {
 
     #[test]
     fn a_standalone_loop_and_schedule_can_be_driven_by_hand() {
-        let mut clock = TickLoop::new(TickConfig::default()).unwrap();
+        let mut clock = TickLoop::new(thirty()).unwrap();
         let mut schedule = Schedule::new();
         schedule.add(Phase::Move, "m", 0, logger("m")).unwrap();
         let mut world = Log::default();

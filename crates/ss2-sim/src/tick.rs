@@ -38,14 +38,23 @@ pub struct TickConfig {
     pub max_frame_micros: u64,
 }
 
+/// The default tick rate (T01-089, the owner's decision): 60 ticks per second. The original has no
+/// fixed tick (`docs/re/main-loop.md`: a variable 1 to 100 ms step); a fixed rate keeps co-op and
+/// replays deterministic.
+pub const DEFAULT_TICK_HZ: u32 = 60;
+
+/// Physics sub-steps per tick at [`DEFAULT_TICK_HZ`]: 2, so physics runs at 120 Hz, under the
+/// original's 10 ms sub-step cap (`main-loop.md`); the walker's `SUBSTEP` of 1/120 s is the same step.
+pub const PHYSICS_SUBSTEPS_PER_TICK: u32 = 2;
+
 impl Default for TickConfig {
-    /// 30 ticks per second, at most 8 ticks and 250 ms per frame. 30 is a placeholder until the
-    /// main-loop spec (T01-022) gives the original's rate.
+    /// [`DEFAULT_TICK_HZ`] (60) ticks per second, at most 8 ticks per frame, and a frame longer
+    /// than 100 ms counted as 100 ms, as the original drops time beyond 100 ms (T01-089).
     fn default() -> Self {
         Self {
-            tick_hz: 30,
+            tick_hz: DEFAULT_TICK_HZ,
             max_ticks_per_frame: 8,
-            max_frame_micros: 250_000,
+            max_frame_micros: 100_000,
         }
     }
 }
