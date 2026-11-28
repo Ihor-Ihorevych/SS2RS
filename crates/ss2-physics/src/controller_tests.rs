@@ -60,6 +60,8 @@ fn forward() -> WalkInput {
         wish: Vec2::new(0.0, 1.0),
         yaw: 0.0,
         jump: false,
+        crouch: false,
+        sprint: false,
     }
 }
 
@@ -68,6 +70,8 @@ fn idle() -> WalkInput {
         wish: Vec2::ZERO,
         yaw: 0.0,
         jump: false,
+        crouch: false,
+        sprint: false,
     }
 }
 
@@ -266,6 +270,8 @@ fn the_same_inputs_give_the_same_trace_and_frame_splits_do_not_matter() {
         wish: Vec2::new(0.6, 0.8),
         yaw: 0.3,
         jump: true,
+        crouch: false,
+        sprint: false,
     };
     let mut a = Walker::new(Vec3::new(0.0, 1.0, 0.0));
     let mut b = Walker::new(Vec3::new(0.0, 1.0, 0.0));
@@ -339,6 +345,8 @@ fn the_capsule_walker_is_deterministic_across_runs_and_frame_splits() {
         wish: Vec2::new(0.3, 1.0),
         yaw: 0.2,
         jump: true,
+        crouch: false,
+        sprint: false,
     };
     let bits = |v: Vec3| v.to_array().map(f32::to_bits);
     let a = run(&w, &mut Walker::new(Vec3::new(0.0, 0.5, 0.0)), &input, 3.0);
@@ -380,4 +388,259 @@ fn the_eye_is_above_the_feet() {
     let p = Walker::new(Vec3::new(1.0, 2.0, 3.0));
     assert_eq!(p.eye(&cfg), Vec3::new(1.0, 2.0 + cfg.eye_height, 3.0));
     assert!(cfg.eye_height < cfg.height && cfg.step_height > 1.9 && cfg.step_height < 2.5);
+}
+
+// --- T09-007: crouch, sprint, footsteps, fall height -----------------------------------------
+
+#[test]
+fn crouching_lowers_the_eye_and_the_body_and_sprint_does_not_change_the_pose() {
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut p = Walker::new(Vec3::new(0.0, 0.0, 0.0));
+    assert!(!p.crouched());
+    let standing_eye = p.eye(&cfg).y;
+    p.step(
+        &world(&[floor()]),
+        &cfg,
+        GRAVITY,
+        &WalkInput {
+            crouch: true,
+            ..idle()
+        },
+        DT,
+    );
+    assert!(p.crouched());
+    assert!(p.eye(&cfg).y < standing_eye, "{}", p.eye(&cfg));
+    assert_eq!(p.eye(&cfg).y, cfg.crouch_eye_height);
+}
+
+#[test]
+fn crouching_under_a_low_ceiling_blocks_standing_back_up() {
+    // A ceiling below the standing height but above the crouch height.
+    let ceiling = (Vec3::new(-5.0, 1.4, -5.0), Vec3::new(5.0, 1.5, 5.0));
+    let w = world(&[floor(), ceiling]);
+    let mut p = Walker::new(Vec3::ZERO);
+    run(&w, &mut p, &idle(), 0.2);
+    assert!(p.grounded && !p.crouched());
+    run(
+        &w,
+        &mut p,
+        &WalkInput {
+            crouch: true,
+            ..idle()
+        },
+        0.2,
+    );
+    assert!(p.crouched(), "crouched on command");
+    // Letting go while the low ceiling is overhead: stays crouched.
+    run(&w, &mut p, &idle(), 0.3);
+    assert!(
+        p.crouched(),
+        "the low ceiling blocks standing: {}",
+        p.position
+    );
+}
+
+#[test]
+fn standing_back_up_works_once_the_ceiling_is_clear() {
+    let w = world(&[floor()]);
+    let mut p = Walker::new(Vec3::ZERO);
+    run(&w, &mut p, &idle(), 0.2);
+    run(
+        &w,
+        &mut p,
+        &WalkInput {
+            crouch: true,
+            ..idle()
+        },
+        0.2,
+    );
+    assert!(p.crouched());
+    run(&w, &mut p, &idle(), 0.2);
+    assert!(!p.crouched(), "stands back up with room overhead");
+}
+
+#[test]
+fn sprinting_increases_ground_speed_and_crouching_cancels_it() {
+    let w = world(&[floor()]);
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut walking = Walker::new(Vec3::ZERO);
+    run(&w, &mut walking, &forward(), 0.6);
+    let normal = -walking.position.z;
+
+    let mut sprinting = Walker::new(Vec3::ZERO);
+    run(
+        &w,
+        &mut sprinting,
+        &WalkInput {
+            sprint: true,
+            ..forward()
+        },
+        0.6,
+    );
+    let fast = -sprinting.position.z;
+    assert!(
+        fast > normal * 1.2,
+        "{fast} vs {normal}, speed {}",
+        cfg.speed
+    );
+
+    let mut crouch_sprinting = Walker::new(Vec3::ZERO);
+    run(
+        &w,
+        &mut crouch_sprinting,
+        &WalkInput {
+            sprint: true,
+            crouch: true,
+            ..forward()
+        },
+        0.6,
+    );
+    let crouched = -crouch_sprinting.position.z;
+    assert!(
+        (crouched - normal).abs() < 0.3,
+        "crouching cancels the sprint bonus: {crouched} vs {normal}"
+    );
+}
+
+#[test]
+fn footsteps_fire_while_grounded_and_scale_with_speed_but_never_while_airborne() {
+    let w = world(&[floor()]);
+    let cfg = WalkConfig::PROVISIONAL;
+
+    let mut p = Walker::new(Vec3::ZERO);
+    run(&w, &mut p, &idle(), 0.2);
+    assert!(p.footsteps().is_empty(), "no footsteps standing still");
+
+    let mut walking_count = 0usize;
+    for _ in 0..180 {
+        p.step(&w, &cfg, GRAVITY, &forward(), DT);
+        for e in p.footsteps() {
+            assert!(e.speed > 0.0, "{e:?}");
+        }
+        walking_count += p.footsteps().len();
+    }
+    assert!(walking_count > 0, "no footsteps while walking");
+
+    let mut sprinting_count = 0usize;
+    let mut s = Walker::new(Vec3::ZERO);
+    run(&w, &mut s, &idle(), 0.2);
+    let sprint_forward = WalkInput {
+        sprint: true,
+        ..forward()
+    };
+    for _ in 0..180 {
+        s.step(&w, &cfg, GRAVITY, &sprint_forward, DT);
+        sprinting_count += s.footsteps().len();
+    }
+    assert!(
+        sprinting_count > walking_count,
+        "sprinting steps more often: {sprinting_count} vs {walking_count}"
+    );
+
+    // A jump: no footsteps while airborne.
+    let mut j = Walker::new(Vec3::ZERO);
+    run(&w, &mut j, &idle(), 0.2);
+    j.step(
+        &w,
+        &cfg,
+        GRAVITY,
+        &WalkInput {
+            jump: true,
+            ..forward()
+        },
+        DT,
+    );
+    let mut was_airborne = false;
+    for _ in 0..40 {
+        j.step(&w, &cfg, GRAVITY, &forward(), DT);
+        if !j.grounded {
+            was_airborne = true;
+            assert!(j.footsteps().is_empty(), "footstep while airborne");
+        }
+    }
+    assert!(was_airborne, "never left the ground");
+}
+
+#[test]
+fn footsteps_report_the_ground_material() {
+    let (min, max) = floor();
+    let v = [
+        Vec3::new(min.x, max.y, min.z),
+        Vec3::new(max.x, max.y, min.z),
+        Vec3::new(max.x, max.y, max.z),
+        Vec3::new(min.x, max.y, max.z),
+    ];
+    let material = crate::query::PhysMaterialId(7);
+    let mesh = TriMesh::new(&v, &[0, 2, 1, 0, 3, 2]).unwrap();
+    let mut w = QueryWorld::new();
+    w.set_static(mesh, vec![material; 2]).unwrap();
+
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut p = Walker::new(Vec3::ZERO);
+    run(&w, &mut p, &idle(), 0.2);
+    let mut saw_one = false;
+    for _ in 0..180 {
+        p.step(&w, &cfg, GRAVITY, &forward(), DT);
+        for e in p.footsteps() {
+            assert_eq!(e.material, material);
+            saw_one = true;
+        }
+    }
+    assert!(saw_one, "no footsteps happened");
+}
+
+#[test]
+fn landing_from_a_fall_reports_the_fall_height_once() {
+    let platform = (Vec3::new(-5.0, 3.0, -5.0), Vec3::new(5.0, 3.1, 5.0));
+    let w = world(&[floor(), platform]);
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut p = Walker::new(Vec3::new(0.0, 3.1, 0.0));
+    run(&w, &mut p, &idle(), 0.2);
+    assert!(
+        p.grounded && (p.position.y - 3.1).abs() < 0.05,
+        "{}",
+        p.position
+    );
+    assert_eq!(p.landed_fall_height(), None, "not falling yet");
+
+    let mut reported = None;
+    for _ in 0..600 {
+        p.step(&w, &cfg, GRAVITY, &forward(), DT);
+        if let Some(h) = p.landed_fall_height() {
+            reported = Some(h);
+            break;
+        }
+    }
+    let h = reported.expect("never reported a landing");
+    assert!(h > 2.0 && h < 3.5, "{h}");
+    assert!(p.grounded);
+}
+
+#[test]
+fn crouch_sprint_and_footsteps_are_deterministic_across_runs_and_frame_splits() {
+    let w = world(&[floor()]);
+    let cfg = WalkConfig::PROVISIONAL;
+    let input = WalkInput {
+        wish: Vec2::new(0.3, 1.0),
+        yaw: 0.1,
+        jump: false,
+        crouch: true,
+        sprint: true,
+    };
+    let run_it = |dt: f32, frames: usize| {
+        let mut p = Walker::new(Vec3::ZERO);
+        let mut steps = 0usize;
+        for _ in 0..frames {
+            p.step(&w, &cfg, GRAVITY, &input, dt);
+            steps += p.footsteps().len();
+        }
+        (p.position.to_array().map(f32::to_bits), p.crouched(), steps)
+    };
+    let a = run_it(1.0 / 60.0, 180);
+    let b = run_it(1.0 / 60.0, 180);
+    assert_eq!(a, b);
+    let c = run_it(1.0 / 30.0, 90);
+    assert_eq!(a.0, c.0);
+    assert_eq!(a.1, c.1);
+    assert_eq!(a.2, c.2, "same total footsteps regardless of frame split");
 }

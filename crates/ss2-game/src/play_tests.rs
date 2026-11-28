@@ -165,6 +165,131 @@ fn respawn_puts_the_walker_back_at_the_start() {
 }
 
 #[test]
+fn crouching_lowers_the_eye() {
+    let mut s = session();
+    run(&mut s, &PlayInput::default(), 0.1);
+    let standing_eye = s.camera().position.y;
+    run(
+        &mut s,
+        &PlayInput {
+            crouch: true,
+            ..PlayInput::default()
+        },
+        0.3,
+    );
+    let crouched_eye = s.camera().position.y;
+    assert!(
+        crouched_eye < standing_eye - 0.5,
+        "{standing_eye} vs {crouched_eye}"
+    );
+}
+
+#[test]
+fn sprinting_speeds_up_walking_and_crouching_cancels_it() {
+    let mut walk = session();
+    run(&mut walk, &forward(), 0.6);
+    let normal = -walk.feet().z;
+
+    let mut sprint = session();
+    run(
+        &mut sprint,
+        &PlayInput {
+            sprint: true,
+            ..forward()
+        },
+        0.6,
+    );
+    let fast = -sprint.feet().z;
+    assert!(fast > normal * 1.2, "{fast} vs {normal}");
+
+    let mut crouch_sprint = session();
+    run(
+        &mut crouch_sprint,
+        &PlayInput {
+            sprint: true,
+            crouch: true,
+            ..forward()
+        },
+        0.6,
+    );
+    let crouched = -crouch_sprint.feet().z;
+    assert!(
+        (crouched - normal).abs() < 0.3,
+        "crouching cancels the sprint bonus: {crouched} vs {normal}"
+    );
+}
+
+#[test]
+fn footsteps_are_reported_while_walking_and_empty_while_flying() {
+    let mut s = session();
+    run(&mut s, &forward(), 0.1);
+    let mut total = 0usize;
+    for _ in 0..90 {
+        s.update(&forward(), DT);
+        total += s.footsteps().len();
+    }
+    assert!(total > 0, "no footsteps while walking");
+
+    s.update(
+        &PlayInput {
+            toggle_fly: true,
+            ..PlayInput::default()
+        },
+        DT,
+    );
+    assert!(s.footsteps().is_empty());
+    run(
+        &mut s,
+        &PlayInput {
+            movement: Vec3::new(0.0, 0.0, 1.0),
+            ..PlayInput::default()
+        },
+        0.3,
+    );
+    assert!(s.footsteps().is_empty(), "no footsteps while flying");
+}
+
+#[test]
+fn landing_from_a_fall_runs_the_fall_damage_hook() {
+    let mut s = session();
+    s.update(
+        &PlayInput {
+            toggle_fly: true,
+            ..PlayInput::default()
+        },
+        DT,
+    );
+    run(
+        &mut s,
+        &PlayInput {
+            movement: Vec3::new(0.0, 1.0, 0.0),
+            ..PlayInput::default()
+        },
+        0.5,
+    );
+    s.update(
+        &PlayInput {
+            toggle_fly: true,
+            ..PlayInput::default()
+        },
+        DT,
+    );
+    assert_eq!(s.mode(), Mode::Walk);
+    let mut saw_height = None;
+    for _ in 0..180 {
+        s.update(&PlayInput::default(), DT);
+        if let Some(h) = s.landed_fall_height() {
+            saw_height = Some(h);
+            break;
+        }
+    }
+    let h = saw_height.expect("never reported a landing");
+    assert!(h > 0.5, "{h}");
+    // No formula exists yet (`docs/re/puppet-damage.md`, T01-436): the hook never applies damage.
+    assert_eq!(s.last_fall_damage(), None);
+}
+
+#[test]
 fn bad_time_steps_change_nothing() {
     let mut s = session();
     let before = s.camera();
