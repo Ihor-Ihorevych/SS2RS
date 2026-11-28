@@ -5,8 +5,9 @@
 //! with all pixel data**. [`Texture::from_bytes`] reads it into a [`Texture`]: the metadata and the
 //! raw, still block-compressed pixels with their mip chain laid out for direct access
 //! ([`Texture::level`]); [`Texture::from_object`] does the same for a `CStaticTexture` stored
-//! inside another file (a world's baked lightmaps). Converting DXT blocks to RGBA or uploading them is the job of the
-//! transcoder (T02-013).
+//! inside another file (a world's baked lightmaps). Uploading the blocks to the GPU is the job of
+//! the transcoder (T02-013); for CPU-side texel access [`Texture::decode_level`] decodes any
+//! level, raw or DXT, to RGBA8 in software ([`RgbaImage`], T02-043).
 //!
 //! Format version 8 is the format of nearly every file. The 155 development-build textures of
 //! container versions 4 to 7 (125 of them the copy the game reads) store their pixels in the
@@ -21,6 +22,7 @@
 //! let tex = Texture::from_bytes(&bytes)?;
 //! println!("{} x {} {:?}, {} mip levels", tex.width, tex.height, tex.format, tex.mip_levels);
 //! let largest = tex.level(0, 0).unwrap();         // face 0, level 0: the largest
+//! let rgba = tex.decode_level(0)?;                 // the same level as RGBA8 bytes
 //! // or through the asset manager:  assets.register_loader(TexLoader)?;
 //! //                               let h = assets.load::<Texture>("Content/.../X.tex")?;
 //! ```
@@ -32,7 +34,10 @@ use ss2_assets::{AssetLoader, LoadContext};
 use ss2_core::{Error, Result};
 use ss2_meta::{Bytes, Container, MetaDeserialize, TypeSystem, Value};
 
+mod decode;
 mod legacy;
+
+pub use decode::{RgbaImage, decode_bc1_block, decode_bc2_block, decode_bc3_block, decode_pixels};
 
 const WHAT: &str = ".tex texture";
 /// `TexFlags` bit: the pixel data is a cube map (six faces, each with its mip chain).
