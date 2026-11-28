@@ -555,11 +555,9 @@ fn every_single_player_level_starts_at_its_chains_first_chapter() {
 /// straight below the start (raised 2 m, as the chapter's fall-down search does), within
 /// [`GROUND_REACH`], there is static collision.
 ///
-/// `SS2_LOAD_ALL=1` checks every single-player level (use a release build). Two starts have no
-/// static ground within reach in the retail data: `5_1_village` (53 m above the static collision)
-/// and `5_2_seasidetownapproaching` (none below at all). The start rule itself is satisfied there
-/// (the previous test); what the player stands on is presumably not a static model (a chapter can
-/// follow a parent entity, `mechanism-classes-world-info.md`), which this loader does not read.
+/// `SS2_LOAD_ALL=1` checks every single-player level (use a release build): all 42 starts have ground
+/// within reach. `5_1_village` and `5_2_seasidetownapproaching` stand on models embedded in the world
+/// (read since T07-043), 0 m below.
 #[test]
 fn the_worked_starts_stand_on_ground() {
     let dir = ss2_testkit::require_game_data!();
@@ -605,12 +603,7 @@ fn the_worked_starts_stand_on_ground() {
     }
     eprintln!("{checked} starts checked for ground (SS2_LOAD_ALL=1: every single-player level)");
     assert!(failures.is_empty(), "{failures:#?}");
-    let expected: &[&str] = if all {
-        &["5_1_village", "5_2_seasidetownapproaching"]
-    } else {
-        &[]
-    };
-    assert_eq!(no_ground, expected);
+    assert_eq!(no_ground, Vec::<&str>::new());
 }
 
 /// How far below a start the walker may fall to the ground, metres.
