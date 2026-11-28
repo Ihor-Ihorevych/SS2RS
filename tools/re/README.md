@@ -98,6 +98,8 @@ World lighting evidence (docs/re/wld-lighting.md):
 python -I tools/re/wld_lighting_verify.py "C:\path\to\Serious Sam 2" [N]    # lights, baked lightmaps, flares in all 59 worlds (about 20 minutes)
 python -I tools/re/wld_lightmap_uv_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-406: the lightmap UV map id is a per-world constant, never a mesh UV id (about 5 minutes)
 python -I tools/re/wld_lightmap_stream_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-407: which UV stream a lightmapped instance actually uses (min/max, [0,1] + non-overlap rasterized test, shared across surfaces, cross-checked against the surface's own material) over all 59 worlds (about 5 minutes); --texels [--out DIR] rasterizes a few instances' candidate stream into their lightmap's own texel grid and reports coverage of the lit texels
+python -I tools/re/wld_lightmap_colormap_verify.py "C:\path\to\Serious Sam 2"    # T01-414: checks the engine's second, parallel group of id'd per-draw stream slots (bmf.md member .13/.15, the colour-map twin of .12/.14) against every lit instance's own mesh, over all 59 worlds -- confirms it is always empty, so the oven modifier's UV id cannot resolve through it either (about 2 minutes)
+python -I tools/re/wld_lightmap_tiebreak_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-414: tests two deterministic tie-breaks for T01-407's "no candidate" / "several candidates" residual (13.4% of lit instances) -- lowest-slot-index among several, slot 0 as a last-resort fallback for none -- over all 59 worlds (about 2.5 minutes)
 ```
 
 Entity parameter evidence (docs/re/ep.md, docs/re/ep-schema.md):
