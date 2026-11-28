@@ -450,6 +450,51 @@ like the static one (amendment 2), with the smallest boundary change that lets i
   lightmap UVs (a part without them is drawn by the flat light, the same rule `upload`'s static path already
   applies per part).
 
+### Amendment 11: attachments on animated models (T04-046)
+
+An animated model's attachment children (`docs/re/mdl.md`, "Attachment children") cross the boundary and are drawn
+every frame on their bone's own animated palette, held rigidly (never themselves skinned):
+
+- `ss2_format_mdl::Model` gains `children: Vec<AttachmentChild>`, read from `CModelConfiguration.8`: a
+  `CDynamicContainer<CModelConfigChild>`, each entry an object reference resolved against the file's main
+  section (not an embedded struct, unlike `CMeshInstance`'s own list). A reference that is not an object of the
+  file, or whose object cannot be read as a `CModelConfigChild`, is left out of the list; it never fails the
+  model. `AttachmentChild { name: String, parent_bone: u32, rotation: Quat, translation: Vec3, model:
+  AttachedModel, hidden: bool }` (`.1` the slot's name, an `IDENT`, resolved against the model's identifier table
+  like a skeleton's bone names; `.2` the parent bone id of skeleton LOD 0; `.3` a `QuatVect` placement relative to
+  the bone; `.5` the hide flag) and `AttachedModel { External(String), None, Unreadable(String) }` (`.4.3`: an
+  external `.mdl` path, null, or a reference that could not be resolved — never observed in the retail data, but
+  the reader does not fail the model over it either). Measured on the retail install: 1,028 children in 251
+  models, 720 starting hidden, 215 filled with an external model (142 distinct paths, 8 not present in this
+  install), 813 empty, 0 unreadable.
+- `ss2_world::scene::SkinnedModelData` gains `attachments: Vec<Attachment>`: `Attachment { name: String, bone:
+  usize, offset: ss2_render_api::skinning::BoneTransform, model: Option<ModelData>, hidden: bool }`. Unlike
+  `SkinnedPart`, the held model is never itself skinned: it is the model's own `ModelData` (meshes, materials by
+  index into `LevelScene::materials` like any other), drawn as plain world batches. `bone` is the parent bone's
+  **index** in `SkinnedModelData::skeleton` (not its source id); a child whose parent bone is not in the skeleton
+  is left out with a skipped line. The loader (`ss2_world::load`) reads a filled slot's external `.mdl` and
+  builds it exactly like any other model (`Loader::model_parts`), but never animated (an attachment is drawn as
+  world batches, never a second skeleton) and without its own collision (a held model does not collide); it
+  cannot itself have attachments (nested attachments are not supported: the model is built with `animate = false`,
+  so its own children, if any, are never read into `attachments`). A slot that cannot be read or built is `None`
+  with a skipped line, not a load failure. `LevelScene::validate` checks every attachment's bone index, its
+  offset's finiteness, and (when filled) its held model's parts and material indices, the same way it checks
+  `LevelScene::models`.
+- Drawing (`ss2-app`'s `level_session`): `prepare_attachments` creates the held model's meshes once per
+  `SkinnedModelData` (shared by every placement of that model, like `upload_skinned`'s skinned meshes), skipping a
+  hidden or empty slot. Each frame, `pose_attachments` (called alongside `pose_skinned`) recomputes every visible,
+  filled attachment's placement with `ss2_render_api::skinning::attachment_transform(placement_transform,
+  placement_palette, bone, offset)` — the same function T04-006 built for exactly this — and resends the whole
+  static world (`Renderer::set_world` replaces the full draw list, so the static batches, which do not move, are
+  included unchanged alongside the attachments' freshly placed ones). A level with no attachments pays nothing
+  extra: `pose_attachments` returns immediately. A level with attachments pays one `set_world` call per frame (a
+  CPU-side instance-buffer rebuild, no mesh re-upload) instead of a handful of per-draw updates; a future task
+  that gives `WorldBatch` an incremental per-instance update (as `SkinnedDraw::palette` already has) could remove
+  this, but no retail level measured so far has enough attachments for it to matter.
+- **The player's view-model weapon** (the roadmap line's own "weapon held in a hand for the player's view model")
+  is not built here: there is no player character model, hand bone or weapon-selection state anywhere in
+  `ss2-world`/`ss2-app` yet for an attachment to be placed on. Split off to **T04-049** (`docs/roadmap/T04-renderer.md`).
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource

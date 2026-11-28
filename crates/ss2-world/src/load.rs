@@ -242,7 +242,9 @@ use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_ans::AnimSet;
 use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
-use ss2_format_mdl::{AnimSetSource, MeshSource, Model, SkeletonSource};
+use ss2_format_mdl::{
+    AnimSetSource, AttachedModel, AttachmentChild, MeshSource, Model, SkeletonSource,
+};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig, TextureRef};
 use ss2_format_skl::Skeleton;
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
@@ -251,11 +253,12 @@ use ss2_render_api::Transform;
 use ss2_render_api::scene_data::{
     AlphaMode, CubeFace, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
+use ss2_render_api::skinning::{BoneTransform, SkeletonData};
 use ss2_vfs::{Vfs, VfsPath};
 
 use crate::scene::{
-    BloomVolume, CollisionData, HazeVolume, Instance, LevelScene, LoadProgress, LoadStage,
-    ModelData, ModelPart, SkinnedInstance, SkinnedModelData, SkyData, SpawnPoint,
+    Attachment, BloomVolume, CollisionData, HazeVolume, Instance, LevelScene, LoadProgress,
+    LoadStage, ModelData, ModelPart, SkinnedInstance, SkinnedModelData, SkyData, SpawnPoint,
 };
 
 /// How to load a level.
@@ -1233,6 +1236,7 @@ impl Loader<'_> {
             ));
             return None;
         }
+        let attachments = self.attachments(name, &model.children, &skeleton);
         Some(SkinnedModelData {
             name: name.to_string(),
             skeleton,
@@ -1240,7 +1244,84 @@ impl Loader<'_> {
             animations,
             default_animation,
             collision: stat.collision.clone(),
+            attachments,
         })
+    }
+
+    /// `children`'s attachment slots (`docs/re/mdl.md`, "Attachment children"), each bound to its bone in
+    /// `skeleton` (RFC 0013 amendment 11, T04-046). A child whose parent bone is not in the skeleton is left out
+    /// with a skipped line; a filled slot's model is read and built like any other ([`Loader::attachment_model`]),
+    /// never itself animated.
+    fn attachments(
+        &mut self,
+        name: &str,
+        children: &[AttachmentChild],
+        skeleton: &SkeletonData,
+    ) -> Vec<Attachment> {
+        children
+            .iter()
+            .filter_map(|child| {
+                let Some(bone) = skeleton.index_of(child.parent_bone) else {
+                    self.skip(format!(
+                        "model `{name}`: attachment `{}`: parent bone {} is not in the skeleton (left out)",
+                        child.name, child.parent_bone
+                    ));
+                    return None;
+                };
+                let model = match &child.model {
+                    AttachedModel::External(raw) => self.attachment_model(raw, name),
+                    AttachedModel::None => None,
+                    AttachedModel::Unreadable(why) => {
+                        self.skip(format!(
+                            "model `{name}`: attachment `{}`: {why} (empty slot)",
+                            child.name
+                        ));
+                        None
+                    }
+                };
+                Some(Attachment {
+                    name: child.name.clone(),
+                    bone,
+                    offset: BoneTransform::new(child.rotation, child.translation),
+                    model,
+                    hidden: child.hidden,
+                })
+            })
+            .collect()
+    }
+
+    /// The model held in one attachment slot (`raw`, an external `.mdl` path): read and built like any other model,
+    /// but never animated (an attachment is drawn as plain world batches) and without its own collision (a held
+    /// model does not collide). `None` with a skipped line if it cannot be read or built.
+    fn attachment_model(&mut self, raw: &str, user: &str) -> Option<ModelData> {
+        let path = match VfsPath::new(raw) {
+            Ok(p) => p,
+            Err(e) => {
+                self.skip(format!("attachment `{raw}` (used by `{user}`): {e}"));
+                return None;
+            }
+        };
+        let bytes = match self.vfs.read(&path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.skip(format!("attachment `{raw}` (used by `{user}`): {e}"));
+                return None;
+            }
+        };
+        let model = match Model::from_bytes(&bytes) {
+            Ok(m) => m,
+            Err(e) => {
+                self.skip(format!("attachment `{raw}` (used by `{user}`): {e}"));
+                return None;
+            }
+        };
+        match self.model_parts(raw, &model, false, 0, false) {
+            Ok(built) => Some(built.model),
+            Err(e) => {
+                self.skip(format!("attachment `{raw}` (used by `{user}`): {e}"));
+                None
+            }
+        }
     }
 
     /// An external skeleton file (read once per load); `None` with a skipped line when it cannot

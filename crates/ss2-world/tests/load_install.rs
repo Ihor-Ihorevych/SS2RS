@@ -7,11 +7,12 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use ss2_core::math::{Quat, Vec3};
+use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_wld::World;
 use ss2_physics::geometry::Ray;
 use ss2_physics::query::{QueryFilter, SpatialQuery};
+use ss2_render_api::skinning::attachment_transform;
 use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{DirEntry, ReadSeek, Stat, Vfs, VfsPath};
 use ss2_world::collision::build_static;
@@ -1242,4 +1243,93 @@ fn animated_models_stay_within_their_own_culling_bounds() {
             }
         }
     }
+}
+
+/// Attachments (RFC 0013 amendment 11, T04-046): across every level, each animated model's attachment slot binds
+/// to a bone that is in its skeleton, and that bone's own motion carries the attachment with it — at two times
+/// where the bone's model-transform differs, the attachment keeps the same fixed, rigid offset from the bone's
+/// joint (same distance, and the offset turns exactly as the bone does), which only holds when the renderer's
+/// `attachment_transform(instance, palette, bone, offset)` is actually read from the placement's own animated
+/// palette (not, say, the bind pose). Also counts how many attachments are read and how many are filled, across
+/// the whole install.
+#[test]
+fn an_attachment_follows_its_bone_across_the_install() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let (mut attachments, mut filled, mut hidden, mut checked) = (0usize, 0usize, 0usize, 0usize);
+    for info in &levels {
+        let scene = match load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}) {
+            Ok(s) => s,
+            Err(e) => panic!("{}: {e}", info.id),
+        };
+        scene.validate().unwrap();
+        for model in &scene.skinned_models {
+            for a in &model.attachments {
+                attachments += 1;
+                hidden += usize::from(a.hidden);
+                filled += usize::from(a.model.is_some());
+                if model.animations.iter().all(|a| a.tracks.is_empty()) {
+                    continue; // nothing moves: no two times could differ
+                }
+                // Two times a third of a pass apart, over the model's longest animation.
+                let longest = model
+                    .animations
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, x), (_, y)| x.duration.partial_cmp(&y.duration).unwrap())
+                    .map(|(i, _)| i)
+                    .unwrap();
+                let duration = model.animations[longest].duration;
+                let (t0, t1) = (0.0, duration / 3.0);
+                let (p0, p1) = (model.palette(longest, t0), model.palette(longest, t1));
+                let offset =
+                    Mat4::from_rotation_translation(a.offset.rotation, a.offset.translation);
+                let bone0 = p0[a.bone];
+                let bone1 = p1[a.bone];
+                let at0 = attachment_transform(Mat4::IDENTITY, &p0, a.bone, offset).unwrap();
+                let at1 = attachment_transform(Mat4::IDENTITY, &p1, a.bone, offset).unwrap();
+                let joint0 = bone0.transform_point3(Vec3::ZERO);
+                let joint1 = bone1.transform_point3(Vec3::ZERO);
+                let rel0 = at0.transform_point3(Vec3::ZERO) - joint0;
+                let rel1 = at1.transform_point3(Vec3::ZERO) - joint1;
+                assert!(
+                    (rel0.length() - rel1.length()).abs() < 1e-3,
+                    "{} `{}` attachment `{}`: rigid offset changed length: {} vs {}",
+                    info.id,
+                    model.name,
+                    a.name,
+                    rel0.length(),
+                    rel1.length()
+                );
+                // The offset is exactly the bone's own rotation applied to the bone-space offset, at both times.
+                let expected0 = bone0.transform_vector3(a.offset.translation);
+                let expected1 = bone1.transform_vector3(a.offset.translation);
+                assert!(
+                    rel0.abs_diff_eq(expected0, 1e-3),
+                    "{} `{}` attachment `{}` at t0: {rel0} vs {expected0}",
+                    info.id,
+                    model.name,
+                    a.name
+                );
+                assert!(
+                    rel1.abs_diff_eq(expected1, 1e-3),
+                    "{} `{}` attachment `{}` at t1: {rel1} vs {expected1}",
+                    info.id,
+                    model.name,
+                    a.name
+                );
+                checked += 1;
+            }
+        }
+    }
+    eprintln!(
+        "{} levels: {attachments} attachments read ({hidden} hidden, {filled} filled), {checked} checked moving \
+         with their bone",
+        levels.len()
+    );
+    assert!(
+        attachments > 0,
+        "no level has an animated model with an attachment"
+    );
 }

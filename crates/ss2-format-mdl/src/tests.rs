@@ -832,4 +832,128 @@ fn every_model_skeleton_and_animation_set_reads() {
             "Content/SeriousSam2/Models/Enemies/Kleer/Animations/Kleer.ans".to_string()
         )]
     );
+    // mdl.md's test vector: three children (ids 34, 35, 36; parent bones 24, 27, 3), all with empty model slots.
+    assert_eq!(model.children.len(), 3);
+    assert_eq!(
+        model
+            .children
+            .iter()
+            .map(|c| c.parent_bone)
+            .collect::<Vec<_>>(),
+        [24, 27, 3]
+    );
+    assert!(
+        model
+            .children
+            .iter()
+            .all(|c| c.model == AttachedModel::None),
+        "{:?}",
+        model.children
+    );
+    for c in &model.children[..2] {
+        assert!(
+            c.translation.abs_diff_eq(Vec3::new(0.0, 0.0, -0.6), 1e-5),
+            "{:?}",
+            c.translation
+        );
+    }
+    let third = &model.children[2];
+    // mdl.md's prose rounds this to 4 decimals; it is `FRAC_1_SQRT_2`, a quarter turn about X.
+    let f = std::f32::consts::FRAC_1_SQRT_2;
+    assert!(
+        third
+            .rotation
+            .abs_diff_eq(Quat::from_xyzw(-f, 0.0, 0.0, f).normalize(), 1e-3),
+        "{:?}",
+        third.rotation
+    );
+    assert!(
+        third
+            .translation
+            // The spec's prose rounds to three decimals; the stored value differs by under 1e-3.
+            .abs_diff_eq(Vec3::new(0.0, -1.478, -1.162), 1e-3),
+        "{:?}",
+        third.translation
+    );
+}
+
+/// Every model's attachment children (`.8`, T04-046) against `mdl.md`'s census: 1,028 children in 251 models,
+/// most (720) starting hidden, 215 filled with an external model and 813 empty. Every filled one names a `.mdl`
+/// that exists in the install. Skips without `SS2_DATA_DIR`.
+#[test]
+fn every_models_attachment_children_match_the_spec() {
+    use ss2_vfs::{EntryKind, Vfs, VfsPath};
+    use std::collections::BTreeSet;
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let exists = |p: &str| VfsPath::new(p).is_ok_and(|p| vfs.stat(&p).is_ok());
+    let mut stack = vec![VfsPath::root()];
+    let mut models_with_children = 0usize;
+    let mut children = 0usize;
+    let (mut hidden, mut shown) = (0usize, 0usize);
+    let (mut external, mut none, mut unreadable) = (0usize, 0usize, 0usize);
+    let mut external_paths = BTreeSet::new();
+    while let Some(d) = stack.pop() {
+        for e in vfs.list(&d).unwrap() {
+            let path = d.join(&e.name).unwrap();
+            if e.kind == EntryKind::Dir {
+                stack.push(path);
+                continue;
+            }
+            if path.extension() != Some("mdl") {
+                continue;
+            }
+            let Ok(model) = Model::from_bytes(&vfs.read(&path).unwrap()) else {
+                continue; // `every_model_of_the_real_install_reads` reports those
+            };
+            if model.children.is_empty() {
+                continue;
+            }
+            models_with_children += 1;
+            children += model.children.len();
+            for c in &model.children {
+                *if c.hidden { &mut hidden } else { &mut shown } += 1;
+                match &c.model {
+                    AttachedModel::External(p) => {
+                        external += 1;
+                        external_paths.insert(p.clone());
+                    }
+                    AttachedModel::None => none += 1,
+                    AttachedModel::Unreadable(_) => unreadable += 1,
+                }
+                assert!(
+                    c.rotation.is_finite() && c.translation.is_finite(),
+                    "{}: attachment `{}` is not finite",
+                    path.as_str(),
+                    c.name
+                );
+            }
+        }
+    }
+    let missing: Vec<_> = external_paths.iter().filter(|p| !exists(p)).collect();
+    eprintln!(
+        "{models_with_children} models with children, {children} children ({hidden} hidden, {shown} shown); \
+         model slots: {external} external ({} distinct, {} missing {:?}), {none} empty, {unreadable} unreadable",
+        external_paths.len(),
+        missing.len(),
+        &missing[..missing.len().min(5)]
+    );
+    assert_eq!(
+        models_with_children, 251,
+        "mdl.md: 251 models have children"
+    );
+    assert_eq!(children, 1028, "mdl.md: 1,028 children");
+    assert_eq!(
+        (hidden, shown),
+        (720, 308),
+        "mdl.md: most slots start hidden"
+    );
+    assert_eq!((external, none), (215, 813), "mdl.md");
+    assert_eq!(
+        unreadable, 0,
+        "mdl.md's data never leaves a child unreadable"
+    );
+    // Measured on this install, like the other missing-reference counts of `every_model_of_the_real_install_reads`:
+    // a handful of attachment targets (cutscene and debris models) are not in this install; not asserted empty.
+    assert!(missing.len() <= 10, "{missing:?}");
 }

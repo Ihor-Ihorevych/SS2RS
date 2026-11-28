@@ -252,6 +252,25 @@ fn sample_keys<T: Copy>(keys: &[AnimKey<T>], time: f32, mix: impl Fn(T, T, f32) 
     Some(mix(a.value, b.value, u))
 }
 
+/// A named attachment slot on an animated model, optionally filled with another model held rigidly on one of its
+/// bones (RFC 0013 amendment 11, T04-046; `docs/re/mdl.md`, "Attachment children"). Unlike [`SkinnedPart`], the
+/// held model is never itself skinned: it is drawn as plain world batches, moved every frame by
+/// [`ss2_render_api::skinning::attachment_transform`] on the placement's own bone palette.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Attachment {
+    /// The slot's name, for messages (`ss2_format_mdl::AttachmentChild::name`).
+    pub name: String,
+    /// The index of the parent bone in this model's [`SkinnedModelData::skeleton`].
+    pub bone: usize,
+    /// The slot's placement relative to the bone.
+    pub offset: BoneTransform,
+    /// The model held in the slot, drawn as static world batches; `None`: an empty slot (the data's majority,
+    /// `mdl.md`).
+    pub model: Option<ModelData>,
+    /// Whether the slot starts hidden: a hidden attachment is not drawn (most do in the retail data, `mdl.md`).
+    pub hidden: bool,
+}
+
 /// An animated model that skinned instances place (RFC 0013 amendment 8): a skeleton, skinned parts and animations
 /// bound to the skeleton.
 #[derive(Clone, Debug, PartialEq)]
@@ -268,6 +287,8 @@ pub struct SkinnedModelData {
     pub default_animation: u32,
     /// What collides, in the bind pose; `None` means the model does not collide.
     pub collision: Option<CollisionData>,
+    /// This model's attachment slots (RFC 0013 amendment 11, T04-046), in `ss2_format_mdl::Model::children` order.
+    pub attachments: Vec<Attachment>,
 }
 
 impl SkinnedModelData {
@@ -777,6 +798,41 @@ impl LevelScene {
                     return bad(format!("{what} has broken collision"));
                 }
             }
+            for (j, a) in model.attachments.iter().enumerate() {
+                if a.bone >= bones {
+                    return bad(format!(
+                        "{what} attachment {j} ({}) names bone {} of {bones}",
+                        a.name, a.bone
+                    ));
+                }
+                if !a.offset.rotation.is_finite()
+                    || (a.offset.rotation.length_squared() - 1.0).abs() > 1e-3
+                    || !a.offset.translation.is_finite()
+                {
+                    return bad(format!(
+                        "{what} attachment {j} ({}) has a bad offset {:?}",
+                        a.name, a.offset
+                    ));
+                }
+                if let Some(held) = &a.model {
+                    for (k, part) in held.parts.iter().enumerate() {
+                        if let Err(e) = part.mesh.validate() {
+                            return bad(format!(
+                                "{what} attachment {j} ({}) model part {k}: {e}",
+                                a.name
+                            ));
+                        }
+                        if part.material as usize >= self.materials.len() {
+                            return bad(format!(
+                                "{what} attachment {j} ({}) model part {k} names material {} of {}",
+                                a.name,
+                                part.material,
+                                self.materials.len()
+                            ));
+                        }
+                    }
+                }
+            }
         }
         for (i, inst) in self.skinned_instances.iter().enumerate() {
             if inst.model as usize >= self.skinned_models.len() {
@@ -1107,7 +1163,42 @@ pub fn test_skinned_bar() -> SkinnedModelData {
         }],
         default_animation: 0,
         collision: Some(collision),
+        attachments: Vec::new(),
     }
+}
+
+/// [`test_skinned_bar`] with one attachment on its `Tip` bone, half a metre further up, holding a 0.2 m cube (for
+/// tests of [`Attachment`] and `attachment_transform`; RFC 0013 amendment 11, T04-046).
+pub fn test_skinned_bar_with_attachment() -> SkinnedModelData {
+    let mut bar = test_skinned_bar();
+    let (cube, indices) = unit_cube();
+    let vertices: Vec<MeshVertex> = cube
+        .iter()
+        .map(|v| MeshVertex {
+            position: (Vec3::from(v.position) * 0.2).to_array(),
+            normal: v.normal,
+            uv: v.uv,
+        })
+        .collect();
+    bar.attachments.push(Attachment {
+        name: "Muzzle".to_string(),
+        bone: 1, // "Tip"
+        offset: BoneTransform::new(Quat::IDENTITY, Vec3::new(0.0, 0.5, 0.0)),
+        model: Some(ModelData {
+            name: "test attachment cube".to_string(),
+            parts: vec![ModelPart {
+                mesh: MeshData {
+                    vertices,
+                    indices,
+                    lightmap_uvs: None,
+                },
+                material: 0,
+            }],
+            collision: None,
+        }),
+        hidden: false,
+    });
+    bar
 }
 
 /// [`LevelScene::test_room`]'s haze: the far (-Z) half of the room, fading in over the metre before its south face at

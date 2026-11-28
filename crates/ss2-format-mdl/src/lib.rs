@@ -30,12 +30,13 @@
 //! ```
 
 use ss2_assets::{AssetLoader, LoadContext};
+use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_ans::AnimSet;
 use ss2_format_bmf::{Aabb, MaterialRef, Mesh, Surface};
 use ss2_format_mtr::Material;
 use ss2_format_skl::Skeleton;
-use ss2_meta::{Container, Decoded, MetaDeserialize, ObjectRef};
+use ss2_meta::{Container, Decoded, FromValue, MetaDeserialize, ObjectRef, Value};
 
 const WHAT: &str = ".mdl model";
 
@@ -84,6 +85,43 @@ pub enum AnimSetSource {
     None,
 }
 
+/// What an [`AttachmentChild`] slot is filled with (`CModelConfigChild.4.3`, `docs/re/mdl.md`
+/// "Attachment children").
+#[derive(Clone, Debug, PartialEq)]
+pub enum AttachedModel {
+    /// An external `.mdl` file, the path as listed in the model's `RFIL` (215 of 1,028 children
+    /// in the retail data).
+    External(String),
+    /// The slot is empty (813 of 1,028 children, the data's majority).
+    None,
+    /// The slot names a model that could not be resolved: why. Never observed in the retail
+    /// data, but a reader must not fail the whole model over it (reader invariant 2).
+    Unreadable(String),
+}
+
+/// A named attachment slot on a bone, optionally filled with another model (flares, lights,
+/// weapon attachments): `CModelConfiguration.8` lists `CModelConfigChild` objects, 1,028 of them
+/// in 251 models (`docs/re/mdl.md`, "Attachment children").
+#[derive(Clone, Debug, PartialEq)]
+pub struct AttachmentChild {
+    /// The slot's name (`.1`, an `IDENT`): game code looks a slot up by this name
+    /// (`mdlFindChild`), not by position. Empty when the model's identifier table has no entry
+    /// there.
+    pub name: String,
+    /// The parent bone's id in the model's skeleton, LOD 0 (`.2`).
+    pub parent_bone: u32,
+    /// The slot's rotation relative to the parent bone (`.3`, a `QuatVect`).
+    pub rotation: Quat,
+    /// The slot's translation relative to the parent bone (`.3`).
+    pub translation: Vec3,
+    /// What fills the slot (`.4.3`).
+    pub model: AttachedModel,
+    /// Whether the slot starts hidden (`.5`): 0 shown (the class's own default), 1 hidden. Most
+    /// slots start hidden in the retail data (720 of 1,028) and are shown later by game code
+    /// (muzzle flashes, reveal effects); a reader should not draw a hidden child unconditionally.
+    pub hidden: bool,
+}
+
 /// A decoded `.mdl` file, reduced to its meshes, materials, skeleton and animation sets.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Model {
@@ -105,6 +143,9 @@ pub struct Model {
     /// The animation sets of the animation host, in host order (`CModelConfiguration.9` →
     /// `CAnimHost.1`); empty without a host.
     pub anim_sets: Vec<AnimSetSource>,
+    /// This model's attachment children (`.8`). A child whose own shape cannot be read is left
+    /// out; it never fails the model (`mdl.md`, "Attachment children").
+    pub children: Vec<AttachmentChild>,
 }
 
 #[derive(MetaDeserialize)]
@@ -143,6 +184,57 @@ struct RawAnimHost {
 struct RawSetInstance {
     #[meta(owner = "CAnimSetInstance", name = "1", default)]
     set: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+struct RawQuaternion {
+    #[meta(owner = "Quaternion4f", name = "1")]
+    x: f32,
+    #[meta(owner = "Quaternion4f", name = "2")]
+    y: f32,
+    #[meta(owner = "Quaternion4f", name = "3")]
+    z: f32,
+    #[meta(owner = "Quaternion4f", name = "4")]
+    w: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct RawVector3f {
+    #[meta(owner = "Vector3f", name = "1")]
+    x: f32,
+    #[meta(owner = "Vector3f", name = "2")]
+    y: f32,
+    #[meta(owner = "Vector3f", name = "3")]
+    z: f32,
+}
+
+#[derive(MetaDeserialize)]
+struct RawQuatVect {
+    #[meta(owner = "QuatVect", name = "1")]
+    rotation: RawQuaternion,
+    #[meta(owner = "QuatVect", name = "2")]
+    translation: RawVector3f,
+}
+
+#[derive(MetaDeserialize)]
+struct RawModelInstance {
+    #[meta(owner = "CModelInstance", name = "3", default)]
+    model: ObjectRef,
+}
+
+#[derive(MetaDeserialize)]
+#[meta(class = "CModelConfigChild")]
+struct RawChild {
+    #[meta(name = "1")]
+    slot: u32,
+    #[meta(name = "2")]
+    parent_bone: u32,
+    #[meta(name = "3")]
+    placement: RawQuatVect,
+    #[meta(name = "4")]
+    instance: RawModelInstance,
+    #[meta(name = "5", default)]
+    hidden: bool,
 }
 
 #[derive(MetaDeserialize)]
@@ -276,6 +368,7 @@ impl Model {
             },
         };
         let anim_sets = Self::anim_sets(container, decoded, raw.anim_host.0);
+        let children = Self::children(container, decoded, object);
 
         let b = &raw.bounds;
         Ok(Self {
@@ -288,7 +381,74 @@ impl Model {
             materials,
             skeleton,
             anim_sets,
+            children,
         })
+    }
+
+    /// This model's attachment children (`.8`, a `CDynamicContainer<CModelConfigChild>`: object
+    /// references, each resolved against the file's main section): a reference that is not an
+    /// object of the file, or whose object's own shape cannot be read, is left out of the list
+    /// rather than failing [`Model::from_object`] (the retail data never has one, but a reader
+    /// must not fail the model over it).
+    fn children(
+        container: &Container<'_>,
+        decoded: &Decoded,
+        object: &ss2_meta::Object,
+    ) -> Vec<AttachmentChild> {
+        let Some(s) = object.value.as_struct() else {
+            return Vec::new();
+        };
+        let Some(Value::List(items)) = decoded.types.member(s, CONFIGURATION, "8") else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let Value::Ref(Some(id)) = item else {
+                    return None;
+                };
+                let child_object = decoded.object(*id)?;
+                let raw = RawChild::from_value(&child_object.value, &decoded.types).ok()?;
+                let rotation = Quat::from_xyzw(
+                    raw.placement.rotation.x,
+                    raw.placement.rotation.y,
+                    raw.placement.rotation.z,
+                    raw.placement.rotation.w,
+                );
+                if !rotation.is_finite() || rotation.length_squared() < 1e-8 {
+                    // A malformed placement: skip this child like any other unreadable one,
+                    // rather than include a non-finite transform.
+                    return None;
+                }
+                let name = container.ident(raw.slot).unwrap_or_default().to_owned();
+                let model = match raw.instance.model.0 {
+                    None => AttachedModel::None,
+                    Some(id) if decoded.object(id).is_some() => AttachedModel::Unreadable(
+                        format!(
+                            "attachment `{name}`'s model is object {id}, an embedded model configuration (not read)"
+                        ),
+                    ),
+                    Some(id) => match external_path(container, id) {
+                        Some(path) => AttachedModel::External(path),
+                        None => AttachedModel::Unreadable(format!(
+                            "attachment `{name}`'s model is object {id}, neither an object of the file nor an external reference"
+                        )),
+                    },
+                };
+                Some(AttachmentChild {
+                    name,
+                    parent_bone: raw.parent_bone,
+                    rotation: rotation.normalize(),
+                    translation: Vec3::new(
+                        raw.placement.translation.x,
+                        raw.placement.translation.y,
+                        raw.placement.translation.z,
+                    ),
+                    model,
+                    hidden: raw.hidden,
+                })
+            })
+            .collect()
     }
 
     /// The animation sets of the host object `host` (none without one; a host that cannot be
