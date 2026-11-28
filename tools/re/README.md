@@ -311,6 +311,7 @@ Main loop and time evidence (docs/re/main-loop.md):
 
 ```
 python -I tools/re/mainloop_verify.py "C:\path\to\Serious Sam 2"    # the configuration scripts of the install and every line that sets a timing variable (a few seconds); the loop itself is specified from the binaries and has no script
+python -I tools/re/think_queue_verify.py "C:\path\to\Serious Sam 2" [N]    # T01-087: per-step entity (CEntityStepper) priorities and registration order, the stored CSMEntry layout, and the think-queue's due-time order and tie search, over every world (about 2 minutes); N = only the N smallest
 ```
 
 Save-game evidence (docs/re/save-game.md):
