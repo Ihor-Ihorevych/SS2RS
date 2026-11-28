@@ -175,6 +175,7 @@
   - [The hitscan shot](re/hitscan-shot.md)
   - [Projectile launch and charging](re/projectile-launch.md)
   - [Weapon view and rendering parameters](re/weapon-view.md)
+  - [Weapon state machine and timing](re/weapon-timing.md)
   - [Weapon pickups, tables and combo weapons](re/weapon-pickups.md)
   - [Mounted tools and throw descriptions](re/mounted-tools.md)
 - [Brain classes](re/brain-classes.md)

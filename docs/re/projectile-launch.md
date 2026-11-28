@@ -158,7 +158,7 @@ Not a weapon: the player puppet itself throws `ppp_pgppHandGrenade` (`HandGrenad
 
 Ranked by what blocks an implementer. New task IDs are appended to `docs/roadmap/T01-reverse-engineering.md`.
 
-1. **The weapon state machine around the shot** (the exact order of the shots owed after a long frame, the state changes of the held button, weapon switching while charging, whether a pending charge survives a weapon switch): `DoFiringsFromLastFireTime` and `OnStep` were read for the fire-power sources only. **T01-117.**
+1. **The weapon state machine around the shot**: **answered in `weapon-timing.md` (T01-117)** (`DoFiringsFromLastFireTime` and `OnStep` read in full: the exact shot-count arithmetic after a long frame, states and their durations, the firing cadence). Left open there: whether a pending charge survives a weapon switch (`PutDown` deletes the charging weapon's entity outright, so in the retail code it plainly does not — not cross-checked against the live oracle).
 2. **Whether a projectile that was given an "immediately hit" entity explodes at once** and what its `OnCreate` does with it (`projectile-classes.md` 5.1 open question 1). **T01-222.**
 3. **Which scripts launch projectiles and with which fire power** (the script native function; the 36+ files whose maxima no player weapon uses may be used there). **T01-223.**
 4. **Run-time checks on the original** of the numbers of this page (charge times, speeds, recoil periods, the zap gun's two powers): **T01-124.**
