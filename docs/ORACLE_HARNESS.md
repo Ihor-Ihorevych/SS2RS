@@ -139,6 +139,12 @@ Field names are free (they are yours), but these are the ones the first measurem
 | `player.pos.x/y/z` | the puppet's absolute position (world axes) | `f32` |
 | `player.vel.x/y/z` | the puppet's body velocity | `f32` |
 | `player.quat[0..3]` | the placement's orientation quaternion (component order unverified) | `f32` |
+| `player.weapon.right_index`, `player.weapon.left_index` | the player's current weapon in each hand (`WeaponIndex`, -1 = none); `right_index` reads an out-of-range constant until the first explicit weapon switch of a session (T01-433, "practical notes" below) | `i32` |
+| `player.inventory.owned_weapons`, `player.inventory.doubled_weapons` | the embedded inventory's owned/doubled-weapon bit sets (bit *n* = `WeaponIndex` *n*) | `u32` |
+| `player.ammo.<kind>` (12 fields, one per `AmmoIndex`) | the embedded inventory's per-kind ammunition count | `i32` |
+| `player.weapon.right.state`, `player.weapon.left.state` | the weapon **entity** in that hand's own state member (same 1-10 `WeaponState` enumeration `weapon-timing.md` describes) | `i32` |
+| `player.weapon.right.last_fire_raw`, `player.weapon.right.last_fire_s` | the weapon entity's own last-fire time (same 32.32 format as `sim.now_raw`; `_s` is the scaled seconds form) | `i64` |
+| `player.weapon.right.force_one_flag` | the weapon entity's "fire exactly one next" flag (`weapon-timing.md` section 5) | `i32` (boolean) |
 
 To build the map you need your own reverse-engineering notes: the simulation object's `Now` member, and the chain from the current world through the world-info and game-info entities and the player brain to the player puppet (`docs/re/players-session-classes.md`, `puppet-entity-classes.md`), and from the puppet through its mechanism and placement to the position. Object links inside the game are 32-bit **handles**, not pointers, which is what the `handle_table` and the `{"offset": ..., "handle": true}` steps of the map are for.
 
@@ -165,6 +171,23 @@ on every valid sample; position tracks the integral of velocity smoothly. Demo p
 independent measurements of the same run/stop/jump events without needing any synthetic input;
 ground speed, acceleration/deceleration, a jump apex and gravity were measured this way — see
 `docs/re/player-movement-constants.md` "Live-check, T01-432, 2026-11-28" for the numbers.
+
+**Update, 2026-11-28 (T01-433):** `player.weapon.*`, `player.inventory.*` and `player.ammo.*` are
+now mapped, reaching through one more handle hop off the puppet's own weapon-in-hand member to the
+current weapon **entity** (not just the puppet). One hop (which of the puppet's two weapon-hand
+member offsets is the one a non-dual-wielding player actually uses) could not be settled from the
+decompiled `SetCurrentWeapon` alone and needed a live probe (both candidate offsets' resolved
+objects were read and compared; only one had a live, advancing last-fire time and a valid
+`WeaponState`) — a case of the oracle resolving an ambiguity a static reading left open, not just
+confirming one. All three shipped demos (`Demo_0001`-`Demo_0003`, looped, 60 Hz, 120-180 s each)
+were captured; the fire period and ammunition cost per shot of the auto shotgun, double shotgun and
+rocket launcher matched `weapon-timing.md`'s table, and the minigun's ammunition cost (but not its
+full-speed period, never reached by these demos' tap-fire inputs) did too; the "fire exactly one
+next" flag's documented set/clear rule was directly observed holding on every shot in all three
+captures. Reload, put-down, the boring threshold and the catch-up burst were **not** reachable this
+run (no capture held a trigger continuously, fired the Colt, or left the weapon idle for 5 s) — see
+`docs/re/weapon-timing.md` "Live-check, T01-433, 2026-11-28" for the full numbers and a new
+follow-up task appended to `docs/roadmap/T01-reverse-engineering.md`.
 
 ### Steps for the first live check
 
