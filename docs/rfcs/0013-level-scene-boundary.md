@@ -255,7 +255,7 @@ draw the original's distance fog:
 - `ss2_render_api::Fog { colour: [f32; 3], near: f32, far: f32, strength: f32 }`: one linear fog for a frame. A
   fragment at view distance `d` is mixed towards `colour` by `strength * clamp((d - near) / (far - near), 0, 1)`
   (the original's screen fog is plain linear fog, `scale = 1/(far - near)`, `bias = -far * scale`).
-- `ss2_world::HazeVolume { min: Vec3, max: Vec3, rotation: Quat, colour: [f32; 4], fade_margin: f32, near: f32,
+- `ss2_world::scene::HazeVolume { min: Vec3, max: Vec3, rotation: Quat, colour: [f32; 4], fade_margin: f32, near: f32,
   far: f32 }` and `LevelScene::hazes: Vec<HazeVolume>` in the file's list order. The box is `min..max` in the
   volume's own frame, turned by `rotation` about the world origin (identity unless the haze is attached to a parent
   entity); `colour` is linear RGBA (the alpha is carried, its use is open); `fade_margin` is `.5` (at least 0.001),
