@@ -6,7 +6,7 @@
 //! controller is then replaced or retuned. The original also has a short air-control window after leaving the
 //! ground and a separate movement formula; neither is modelled here.
 //!
-//! The body is three spheres stacked along +Y (capsule casts are not available yet, T07-004b),
+//! The body is three spheres stacked along +Y (capsule casts exist since T07-004b; using them is T07-047),
 //! swept against the static world of a [`SpatialQuery`]. [`Walker::step`] is a pure function of
 //! (state, input, world, dt): it runs fixed substeps of [`SUBSTEP`] seconds and carries the
 //! remainder to the next call, so frame rate does not change the path. No clock, no hash maps.

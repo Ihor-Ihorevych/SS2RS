@@ -1,7 +1,8 @@
 //! The physics query contract (roadmap T07-004, `docs/rfcs/0007-physics-query-api.md`): how
 //! gameplay, the character controller, hit scanning and AI ask the world "what is there?".
 //!
-//! Three questions: [`SpatialQuery::raycast`] (a ray), [`SpatialQuery::shapecast`] (move a shape
+//! Four questions: [`SpatialQuery::raycast`] (a ray), [`SpatialQuery::raycast_all`] (everything
+//! along a ray), [`SpatialQuery::shapecast`] (move a shape
 //! along a line and find where it first touches something) and [`SpatialQuery::overlap`] (what does a
 //! shape at a place touch). Every answer is a [`Hit`] or an [`Overlap`] that says **where**, with
 //! what **normal**, on what **material** and which **collider** (an entity's body; `None` is the
@@ -9,15 +10,17 @@
 //! the static world, the moving colliders, or both.
 //!
 //! [`QueryWorld`] is the reference implementation: a static triangle mesh plus the moving colliders
-//! of this tick, rebuilt each tick ([`QueryWorld::set_dynamic`]). It does not support every
-//! shape against every other yet; what it cannot do it **refuses** with
-//! [`QueryError::Unsupported`] rather than answering wrongly (the matrix is in
-//! `docs/PHYSICS_QUERIES.md`, the gaps are task T07-004b).
+//! of this tick, rebuilt each tick ([`QueryWorld::set_dynamic`]). It answers every shape against
+//! every other, the static world included (T07-004b); a combination an implementation cannot
+//! answer correctly is **refused** with [`QueryError::Unsupported`] rather than answered wrongly
+//! (the matrix is in `docs/PHYSICS_QUERIES.md`).
 
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::geometry::{Aabb, Capsule, Ray, Sphere};
+use crate::geometry::{
+    Aabb, Capsule, Ray, Sphere, SweepHit, closest_on_segment, closest_points_segment_segment,
+};
 use crate::spatial::{Bvh, Layers, TriMesh};
 use ss2_core::math::Vec3;
 
@@ -138,6 +141,10 @@ pub struct Hit {
     /// The ray started inside, or the shape already overlapped the thing: `distance` is 0 and the
     /// normal is the way out.
     pub started_overlapping: bool,
+    /// The triangle of the static world that was hit: its index in the [`TriMesh`] given to
+    /// [`QueryWorld::set_static`] (for decals and per-triangle effects); `None` for a moving
+    /// collider.
+    pub triangle: Option<u32>,
 }
 
 /// One thing a shape overlaps.
@@ -173,6 +180,13 @@ impl std::error::Error for QueryError {}
 pub trait SpatialQuery {
     /// The nearest thing the ray meets within `max_distance`.
     fn raycast(&self, ray: &Ray, max_distance: f32, filter: &QueryFilter) -> Option<Hit>;
+
+    /// **Append** everything the ray meets within `max_distance` to `out`, nearest first (a
+    /// bullet that pierces): each triangle of the static world it crosses, and each moving
+    /// collider once, where the ray enters it (at 0 with `started_overlapping` if it starts
+    /// inside). Hits at the same distance are ordered the static world first, by triangle index,
+    /// then the moving colliders by id. A bad length appends nothing.
+    fn raycast_all(&self, ray: &Ray, max_distance: f32, filter: &QueryFilter, out: &mut Vec<Hit>);
 
     /// Move `shape` from `from` by `delta` and find the first thing it touches.
     fn shapecast(
@@ -288,10 +302,18 @@ impl QueryWorld {
         self.dynamics = colliders;
     }
 
-    fn has_static_triangles(&self) -> bool {
-        self.statics
-            .as_ref()
-            .is_some_and(|m| m.triangle_count() > 0)
+    /// The answer for moving collider `index`.
+    fn dynamic_hit(&self, cand: Candidate, index: usize) -> Hit {
+        let c = &self.dynamics[index];
+        Hit {
+            distance: cand.distance,
+            point: cand.point,
+            normal: cand.normal,
+            material: c.material,
+            collider: Some(c.id),
+            started_overlapping: cand.started_overlapping,
+            triangle: None,
+        }
     }
 
     fn ray_candidate(c: &DynamicCollider, ray: &Ray, limit: f32) -> Option<Candidate> {
@@ -310,6 +332,29 @@ impl QueryWorld {
             point: hit.point,
             normal: hit.normal,
             started_overlapping: hit.inside,
+        })
+    }
+
+    /// A point moving from `from` by `delta` against a solid capsule `k`: where it stops (the
+    /// travel, the point, the normal) or that it starts inside (with the way out).
+    fn point_against_capsule(k: &Capsule, from: Vec3, delta: Vec3) -> Option<Candidate> {
+        let near = closest_on_segment(k.a, k.b, from);
+        if (from - near).length_squared() < k.radius * k.radius {
+            return Some(Candidate {
+                distance: 0.0,
+                point: from,
+                normal: (from - near).try_normalize().unwrap_or(Vec3::Y),
+                started_overlapping: true,
+            });
+        }
+        let len = delta.length();
+        let ray = Ray::new(from, delta).filter(|_| len > 1e-12)?;
+        let hit = k.raycast(&ray, len)?;
+        Some(Candidate {
+            distance: hit.t,
+            point: hit.point,
+            normal: hit.normal,
+            started_overlapping: false,
         })
     }
 
@@ -333,32 +378,12 @@ impl QueryWorld {
                 half_height,
                 radius: other,
             } => {
-                let capsule = capsule_at(c.position, half_height, other);
-                if capsule.signed_distance(from) < radius {
-                    let nearest = capsule.a + {
-                        let ab = capsule.b - capsule.a;
-                        let len2 = ab.length_squared();
-                        if len2 <= 1e-12 {
-                            Vec3::ZERO
-                        } else {
-                            ab * ((from - capsule.a).dot(ab) / len2).clamp(0.0, 1.0)
-                        }
-                    };
-                    let normal = (from - nearest).try_normalize().unwrap_or(Vec3::Y);
-                    return Some(Candidate {
-                        distance: 0.0,
-                        point: from - normal * radius,
-                        normal,
-                        started_overlapping: true,
-                    });
-                }
-                let ray = Ray::new(from, delta).filter(|_| len > 1e-12)?;
-                let hit = Capsule::new(capsule.a, capsule.b, other + radius).raycast(&ray, len)?;
+                // The sphere's centre against the capsule grown by the sphere's radius.
+                let grown = capsule_at(c.position, half_height, other + radius);
+                let hit = Self::point_against_capsule(&grown, from, delta)?;
                 return Some(Candidate {
-                    distance: hit.t,
                     point: hit.point - hit.normal * radius,
-                    normal: hit.normal,
-                    started_overlapping: false,
+                    ..hit
                 });
             }
         }?;
@@ -370,17 +395,94 @@ impl QueryWorld {
         })
     }
 
+    /// A moving upright capsule against one collider. Both shapes stand along Y, so each pair has
+    /// a closed form: against a sphere or a capsule the capsule's centre is a point against one
+    /// capsule grown by both (its straight part the sum of both), and against a box it is a
+    /// sphere of the capsule's radius against the box made taller by the capsule's straight part.
+    fn capsule_cast_candidate(
+        c: &DynamicCollider,
+        from: Vec3,
+        half_height: f32,
+        radius: f32,
+        delta: Vec3,
+    ) -> Option<Candidate> {
+        match c.shape {
+            Shape::Sphere { radius: other } => {
+                let grown = capsule_at(c.position, half_height, radius + other);
+                let hit = Self::point_against_capsule(&grown, from, delta)?;
+                Some(Candidate {
+                    point: c.position + hit.normal * other,
+                    ..hit
+                })
+            }
+            Shape::Capsule {
+                half_height: other_half,
+                radius: other,
+            } => {
+                let grown = capsule_at(c.position, half_height + other_half, radius + other);
+                let hit = Self::point_against_capsule(&grown, from, delta)?;
+                let mine = capsule_at(hit.point, half_height, radius);
+                let theirs = capsule_at(c.position, other_half, other);
+                let (_, on_theirs) =
+                    closest_points_segment_segment(mine.a, mine.b, theirs.a, theirs.b);
+                Some(Candidate {
+                    point: on_theirs + hit.normal * other,
+                    ..hit
+                })
+            }
+            Shape::Box { half_extents } => {
+                let target = Aabb::from_center_half(c.position, half_extents);
+                let taller = Aabb::from_center_half(
+                    c.position,
+                    half_extents + Vec3::new(0.0, half_height, 0.0),
+                );
+                let swept = Sphere::new(from, radius).sweep_aabb(delta, &taller)?;
+                Some(Candidate {
+                    distance: swept.t * delta.length(),
+                    point: target.closest_point(swept.position - swept.normal * radius),
+                    normal: swept.normal,
+                    started_overlapping: swept.overlapping_at_start,
+                })
+            }
+        }
+    }
+
+    /// A moving box against one collider. Against a sphere or a capsule the roles turn round: the
+    /// collider's sphere (or the sphere at the end of its straight part, against a box made taller
+    /// by that part) moves the other way against the box, which meets at the same moment with the
+    /// opposite normal.
     fn box_cast_candidate(
         c: &DynamicCollider,
         from: Vec3,
         half: Vec3,
         delta: Vec3,
     ) -> Option<Candidate> {
-        let Shape::Box { half_extents } = c.shape else {
-            return None;
+        let mine = Aabb::from_center_half(from, half);
+        let swept = match c.shape {
+            Shape::Box { half_extents } => {
+                mine.sweep_aabb(delta, &Aabb::from_center_half(c.position, half_extents))?
+            }
+            Shape::Sphere { radius } => {
+                let back = Sphere::new(c.position, radius).sweep_aabb(-delta, &mine)?;
+                SweepHit {
+                    position: from + delta * back.t,
+                    normal: -back.normal,
+                    ..back
+                }
+            }
+            Shape::Capsule {
+                half_height,
+                radius,
+            } => {
+                let taller = Aabb::from_center_half(from, half + Vec3::new(0.0, half_height, 0.0));
+                let back = Sphere::new(c.position, radius).sweep_aabb(-delta, &taller)?;
+                SweepHit {
+                    position: from + delta * back.t,
+                    normal: -back.normal,
+                    ..back
+                }
+            }
         };
-        let swept = Aabb::from_center_half(from, half)
-            .sweep_aabb(delta, &Aabb::from_center_half(c.position, half_extents))?;
         Some(Candidate {
             distance: swept.t * delta.length(),
             point: swept.position,
@@ -466,6 +568,7 @@ impl SpatialQuery for QueryWorld {
                 material: self.materials[h.triangle as usize],
                 collider: None,
                 started_overlapping: false,
+                triangle: Some(h.triangle),
             });
         }
         if filter.dynamics {
@@ -489,18 +592,50 @@ impl SpatialQuery for QueryWorld {
             if let Some((cand, index)) = found
                 && best.is_none_or(|b| cand.distance < b.distance)
             {
-                let c = &self.dynamics[index];
-                best = Some(Hit {
-                    distance: cand.distance,
-                    point: cand.point,
-                    normal: cand.normal,
-                    material: c.material,
-                    collider: Some(c.id),
-                    started_overlapping: cand.started_overlapping,
-                });
+                best = Some(self.dynamic_hit(cand, index));
             }
         }
         best
+    }
+
+    fn raycast_all(&self, ray: &Ray, max_distance: f32, filter: &QueryFilter, out: &mut Vec<Hit>) {
+        if !max_distance.is_finite() || max_distance < 0.0 {
+            return;
+        }
+        let start = out.len();
+        if filter.statics
+            && let Some(mesh) = &self.statics
+        {
+            let mut hits = Vec::new();
+            mesh.raycast_all(ray, max_distance, filter.mask, &mut hits);
+            out.extend(hits.into_iter().map(|h| Hit {
+                distance: h.t,
+                point: h.point,
+                normal: h.normal,
+                material: self.materials[h.triangle as usize],
+                collider: None,
+                started_overlapping: false,
+                triangle: Some(h.triangle),
+            }));
+        }
+        if filter.dynamics {
+            self.tree
+                .query_ray(ray, max_distance, filter.mask, 0.0, &mut |index, _| {
+                    let c = &self.dynamics[*index as usize];
+                    if filter.exclude != Some(c.id)
+                        && let Some(cand) = Self::ray_candidate(c, ray, max_distance)
+                    {
+                        out.push(self.dynamic_hit(cand, *index as usize));
+                    }
+                    // Never claim a hit, so the tree keeps offering everything the ray reaches.
+                    None
+                });
+        }
+        out[start..].sort_by(|a, b| {
+            a.distance
+                .total_cmp(&b.distance)
+                .then_with(|| (a.collider, a.triangle).cmp(&(b.collider, b.triangle)))
+        });
     }
 
     fn shapecast(
@@ -516,56 +651,64 @@ impl SpatialQuery for QueryWorld {
                 "a position or a movement is not finite",
             ));
         }
-        let (radius, half) = match *shape {
-            Shape::Sphere { radius } => (radius, Vec3::splat(radius)),
-            Shape::Box { half_extents } => {
-                if filter.statics && self.has_static_triangles() {
-                    return Err(QueryError::Unsupported(
-                        "a box cast against the static world (T07-004b)",
-                    ));
-                }
-                if filter.dynamics
-                    && self.dynamics.iter().any(|c| {
-                        filter.mask.intersects(c.layers) && !matches!(c.shape, Shape::Box { .. })
-                    })
-                {
-                    return Err(QueryError::Unsupported(
-                        "a box cast against a sphere or capsule collider (T07-004b)",
-                    ));
-                }
-                (0.0, half_extents)
-            }
-            Shape::Capsule { .. } => {
-                return Err(QueryError::Unsupported("capsule casts (T07-004b)"));
-            }
-        };
         let len = delta.length();
         let mut best: Option<Hit> = None;
         if filter.statics
-            && let (Some(mesh), Shape::Sphere { .. }) = (&self.statics, shape)
-            && let Some((swept, triangle)) = mesh.sweep_sphere(from, radius, delta, filter.mask)
+            && let Some(mesh) = &self.statics
         {
-            best = Some(Hit {
-                distance: swept.t * len,
-                point: swept.position - swept.normal * radius,
-                normal: swept.normal,
-                material: self.materials[triangle as usize],
-                collider: None,
-                started_overlapping: swept.overlapping_at_start,
-            });
+            let mask = filter.mask;
+            // The sweep, the triangle and the contact point on it.
+            let swept = match *shape {
+                Shape::Sphere { radius } => mesh
+                    .sweep_sphere(from, radius, delta, mask)
+                    .map(|(s, i)| (s, i, s.position - s.normal * radius)),
+                Shape::Capsule {
+                    half_height,
+                    radius,
+                } => {
+                    let body = capsule_at(from, half_height, radius);
+                    mesh.sweep_capsule(body.a, body.b, radius, delta, mask)
+                        .map(|(s, i)| {
+                            let shift = s.position - from;
+                            let (_, contact) = mesh
+                                .triangle(i)
+                                .closest_points_segment(body.a + shift, body.b + shift);
+                            (s, i, contact)
+                        })
+                }
+                Shape::Box { half_extents } => mesh
+                    .sweep_aabb(from, half_extents, delta, mask)
+                    .map(|(s, i)| (s, i, s.position)),
+            };
+            if let Some((s, triangle, point)) = swept {
+                best = Some(Hit {
+                    distance: s.t * len,
+                    point,
+                    normal: s.normal,
+                    material: self.materials[triangle as usize],
+                    collider: None,
+                    started_overlapping: s.overlapping_at_start,
+                    triangle: Some(triangle),
+                });
+            }
         }
         if filter.dynamics {
-            let region = Aabb::from_center_half(from, half)
-                .union(&Aabb::from_center_half(from + delta, half));
+            let region = shape.bounds_at(from).union(&shape.bounds_at(from + delta));
             let mut nearest: Option<(Candidate, usize)> = None;
             self.tree.query_aabb(&region, filter.mask, &mut |index| {
                 let c = &self.dynamics[*index as usize];
                 if filter.exclude == Some(c.id) {
                     return;
                 }
-                let cand = match shape {
-                    Shape::Sphere { .. } => Self::sphere_cast_candidate(c, from, radius, delta),
-                    _ => Self::box_cast_candidate(c, from, half, delta),
+                let cand = match *shape {
+                    Shape::Sphere { radius } => Self::sphere_cast_candidate(c, from, radius, delta),
+                    Shape::Capsule {
+                        half_height,
+                        radius,
+                    } => Self::capsule_cast_candidate(c, from, half_height, radius, delta),
+                    Shape::Box { half_extents } => {
+                        Self::box_cast_candidate(c, from, half_extents, delta)
+                    }
                 };
                 if let Some(cand) = cand
                     && nearest.as_ref().is_none_or(|(n, i)| {
@@ -579,15 +722,7 @@ impl SpatialQuery for QueryWorld {
             if let Some((cand, index)) = nearest
                 && best.is_none_or(|b| cand.distance < b.distance)
             {
-                let c = &self.dynamics[index];
-                best = Some(Hit {
-                    distance: cand.distance,
-                    point: cand.point,
-                    normal: cand.normal,
-                    material: c.material,
-                    collider: Some(c.id),
-                    started_overlapping: cand.started_overlapping,
-                });
+                best = Some(self.dynamic_hit(cand, index));
             }
         }
         Ok(best)
@@ -604,17 +739,27 @@ impl SpatialQuery for QueryWorld {
         if !at.is_finite() {
             return Err(QueryError::BadInput("a position is not finite"));
         }
-        if filter.statics && self.has_static_triangles() {
-            let Shape::Sphere { radius } = *shape else {
-                return Err(QueryError::Unsupported(
-                    "a box or capsule overlap with the static world (T07-004b)",
-                ));
-            };
+        if filter.statics
+            && let Some(mesh) = &self.statics
+        {
             let mut materials = BTreeSet::new();
-            if let Some(mesh) = &self.statics {
-                mesh.query_sphere(at, radius, filter.mask, &mut |triangle| {
-                    materials.insert(self.materials[triangle as usize]);
-                });
+            let mut add = |triangle: u32| {
+                materials.insert(self.materials[triangle as usize]);
+            };
+            match *shape {
+                Shape::Sphere { radius } => mesh.query_sphere(at, radius, filter.mask, &mut add),
+                Shape::Capsule {
+                    half_height,
+                    radius,
+                } => {
+                    let body = capsule_at(at, half_height, radius);
+                    mesh.query_capsule(body.a, body.b, radius, filter.mask, &mut add);
+                }
+                Shape::Box { half_extents } => mesh.query_box(
+                    &Aabb::from_center_half(at, half_extents),
+                    filter.mask,
+                    &mut add,
+                ),
             }
             out.extend(materials.into_iter().map(|material| Overlap {
                 collider: None,
@@ -1201,62 +1346,9 @@ mod tests {
     }
 
     #[test]
-    fn what_is_not_supported_is_refused_and_bad_input_is_named() {
+    fn bad_input_is_named() {
         let w = floor_world();
         let f = QueryFilter::default();
-        assert!(matches!(
-            w.shapecast(
-                &Shape::Capsule {
-                    half_height: 1.0,
-                    radius: 0.5
-                },
-                Vec3::Y,
-                Vec3::NEG_Y,
-                &f
-            ),
-            Err(QueryError::Unsupported(_))
-        ));
-        assert!(
-            matches!(
-                w.shapecast(
-                    &Shape::Box {
-                        half_extents: Vec3::ONE
-                    },
-                    Vec3::Y * 3.0,
-                    Vec3::NEG_Y,
-                    &f
-                ),
-                Err(QueryError::Unsupported(_))
-            ),
-            "a box against the static world"
-        );
-        let mut out = Vec::new();
-        assert!(matches!(
-            w.overlap(
-                &Shape::Box {
-                    half_extents: Vec3::ONE
-                },
-                Vec3::ZERO,
-                &f,
-                &mut out
-            ),
-            Err(QueryError::Unsupported(_))
-        ));
-        // The same box is fine when only moving colliders are asked about.
-        assert!(
-            w.overlap(
-                &Shape::Box {
-                    half_extents: Vec3::ONE
-                },
-                Vec3::ZERO,
-                &QueryFilter {
-                    statics: false,
-                    ..f
-                },
-                &mut out
-            )
-            .is_ok()
-        );
         assert!(matches!(
             w.shapecast(
                 &Shape::Sphere { radius: 0.5 },
@@ -1270,15 +1362,42 @@ mod tests {
             w.shapecast(&Shape::Sphere { radius: -1.0 }, Vec3::ZERO, Vec3::X, &f),
             Err(QueryError::BadInput(_))
         ));
+        assert!(matches!(
+            w.shapecast(
+                &Shape::Capsule {
+                    half_height: f32::INFINITY,
+                    radius: 0.5
+                },
+                Vec3::ZERO,
+                Vec3::X,
+                &f
+            ),
+            Err(QueryError::BadInput(_))
+        ));
+        let mut out = Vec::new();
+        assert!(matches!(
+            w.overlap(
+                &Shape::Box {
+                    half_extents: Vec3::new(1.0, -1.0, 1.0)
+                },
+                Vec3::ZERO,
+                &f,
+                &mut out
+            ),
+            Err(QueryError::BadInput(_))
+        ));
         assert!(
             w.raycast(&down(Vec3::new(0.0, 5.0, 0.0)), f32::NAN, &f)
                 .is_none(),
             "a bad length is no hit"
         );
+        let mut all = Vec::new();
+        w.raycast_all(&down(Vec3::new(0.0, 5.0, 0.0)), -1.0, &f, &mut all);
+        assert!(all.is_empty(), "nor is it for raycast_all");
     }
 
     #[test]
-    fn casts_honour_the_excluded_collider_and_refuse_boxes_against_round_colliders() {
+    fn casts_honour_the_excluded_collider_and_boxes_meet_round_colliders() {
         let mut w = QueryWorld::new();
         w.set_dynamic(vec![
             collider(
@@ -1318,26 +1437,18 @@ mod tests {
             Some(ColliderId(2)),
             "the next one along"
         );
-        // A box cast is supported against box colliders only; a sphere collider on the mask makes it refuse.
+        // A box cast meets the box first, then (with the box excluded) the sphere.
         let boxed = Shape::Box {
             half_extents: Vec3::splat(0.5),
         };
-        assert!(matches!(
-            w.shapecast(&boxed, Vec3::ZERO, go, &f),
-            Err(QueryError::Unsupported(_))
-        ));
-        let only_boxes = QueryFilter {
-            mask: Layers::bit(1),
-            ..f
-        };
-        assert_eq!(
-            w.shapecast(&boxed, Vec3::ZERO, go, &only_boxes)
-                .unwrap()
-                .unwrap()
-                .collider,
-            Some(ColliderId(1)),
-            "the sphere is on another layer, so nothing unsupported is in play"
-        );
+        let first = w.shapecast(&boxed, Vec3::ZERO, go, &f).unwrap().unwrap();
+        assert_eq!(first.collider, Some(ColliderId(1)));
+        assert!((first.distance - 8.5).abs() < 1e-4, "{first:?}");
+        let past = w.shapecast(&boxed, Vec3::ZERO, go, &skip).unwrap().unwrap();
+        assert_eq!(past.collider, Some(ColliderId(2)));
+        assert!((past.distance - 18.5).abs() < 1e-4, "{past:?}");
+        assert_eq!(past.normal, Vec3::NEG_X);
+        assert_eq!(past.triangle, None, "a moving collider has no triangle");
     }
 
     #[test]
@@ -1404,5 +1515,537 @@ mod tests {
         let w = floor_world();
         assert!(can_stand_on(&w, Vec3::new(0.0, 1.0, 0.0)));
         assert!(!can_stand_on(&w, Vec3::new(0.0, 5.0, 0.0)));
+    }
+
+    // ---- T07-004b: capsules, boxes against the static world, raycast_all, triangles ----------
+
+    const CAPSULE: Shape = Shape::Capsule {
+        half_height: 0.5,
+        radius: 0.3,
+    };
+
+    #[test]
+    fn a_capsule_cast_lands_on_the_floor_with_the_triangle_and_its_material() {
+        let w = floor_world();
+        for (x, z) in [(-3.0, 3.0), (3.0, -3.0)] {
+            let hit = w
+                .shapecast(
+                    &CAPSULE,
+                    Vec3::new(x, 4.0, z),
+                    Vec3::new(0.0, -10.0, 0.0),
+                    &QueryFilter::default(),
+                )
+                .unwrap()
+                .unwrap();
+            assert!((hit.distance - 3.2).abs() < 1e-4, "{hit:?}");
+            assert!((hit.normal - Vec3::Y).length() < 1e-5);
+            assert!(
+                (hit.point - Vec3::new(x, 0.0, z)).length() < 1e-4,
+                "the contact is on the floor under the capsule: {hit:?}"
+            );
+            assert_eq!(hit.collider, None);
+            let triangle = hit.triangle.expect("the static world names its triangle");
+            assert_eq!(hit.material, [GRASS, METAL][triangle as usize]);
+            assert!(!hit.started_overlapping);
+        }
+        // Sunk into the floor: at once, with the way out.
+        let sunk = w
+            .shapecast(
+                &CAPSULE,
+                Vec3::new(1.0, 0.7, -1.0),
+                Vec3::X,
+                &QueryFilter::default(),
+            )
+            .unwrap()
+            .unwrap();
+        assert!(sunk.started_overlapping && sunk.distance == 0.0);
+        assert!((sunk.normal - Vec3::Y).length() < 1e-5);
+        // Standing on the floor and walking is not a hit (the controller relies on this for spheres).
+        assert!(
+            w.shapecast(
+                &CAPSULE,
+                Vec3::new(1.0, 0.8, -1.0),
+                Vec3::new(2.0, 0.0, 0.0),
+                &QueryFilter::default()
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn rays_and_casts_on_the_static_world_carry_the_triangle_and_moving_colliders_none() {
+        let mut w = floor_world();
+        w.set_dynamic(vec![collider(
+            1,
+            Shape::Sphere { radius: 0.5 },
+            Vec3::new(3.0, 1.0, 0.0),
+            Layers::ALL,
+        )]);
+        let f = QueryFilter::default();
+        let floor = w
+            .raycast(&down(Vec3::new(-3.0, 2.0, 3.0)), 10.0, &f)
+            .unwrap();
+        assert_eq!(
+            floor.material,
+            [GRASS, METAL][floor.triangle.unwrap() as usize]
+        );
+        let ball = w
+            .raycast(&down(Vec3::new(3.0, 5.0, 0.0)), 10.0, &f)
+            .unwrap();
+        assert_eq!((ball.collider, ball.triangle), (Some(ColliderId(1)), None));
+        let sphere_cast = w
+            .shapecast(
+                &Shape::Sphere { radius: 0.2 },
+                Vec3::new(-3.0, 2.0, 3.0),
+                Vec3::NEG_Y * 5.0,
+                &f,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(sphere_cast.triangle, floor.triangle);
+        let box_cast = w
+            .shapecast(
+                &Shape::Box {
+                    half_extents: Vec3::splat(0.2),
+                },
+                Vec3::new(-3.0, 2.0, 3.0),
+                Vec3::NEG_Y * 5.0,
+                &f,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(box_cast.triangle, floor.triangle);
+        assert!((box_cast.distance - 1.8).abs() < 1e-4, "{box_cast:?}");
+        assert!(
+            (box_cast.point - Vec3::new(-3.0, 0.2, 3.0)).length() < 1e-5,
+            "a box cast gives its centre"
+        );
+    }
+
+    #[test]
+    fn a_capsule_cast_meets_each_kind_of_moving_collider_where_it_should() {
+        let mut w = QueryWorld::new();
+        w.set_dynamic(vec![
+            collider(
+                1,
+                Shape::Sphere { radius: 1.0 },
+                Vec3::new(10.0, 0.0, 0.0),
+                Layers::ALL,
+            ),
+            collider(
+                2,
+                Shape::Capsule {
+                    half_height: 1.0,
+                    radius: 0.5,
+                },
+                Vec3::new(20.0, 0.0, 0.0),
+                Layers::ALL,
+            ),
+            collider(
+                3,
+                Shape::Box {
+                    half_extents: Vec3::splat(1.0),
+                },
+                Vec3::new(30.0, 0.0, 0.0),
+                Layers::ALL,
+            ),
+        ]);
+        let mine = Shape::Capsule {
+            half_height: 0.5,
+            radius: 0.5,
+        };
+        let go = Vec3::new(40.0, 0.0, 0.0);
+        // Cast past the colliders already checked by excluding them from the world.
+        let cast = |exclude: &[u64]| {
+            let mut world = QueryWorld::new();
+            world.set_dynamic(
+                w.dynamics
+                    .iter()
+                    .filter(|c| !exclude.contains(&c.id.0))
+                    .copied()
+                    .collect(),
+            );
+            world
+                .shapecast(&mine, Vec3::ZERO, go, &QueryFilter::default())
+                .unwrap()
+                .unwrap()
+        };
+        let sphere = cast(&[]);
+        assert_eq!(sphere.collider, Some(ColliderId(1)));
+        assert!((sphere.distance - 8.5).abs() < 1e-4, "{sphere:?}");
+        assert!((sphere.point - Vec3::new(9.0, 0.0, 0.0)).length() < 1e-4);
+        assert!((sphere.normal - Vec3::NEG_X).length() < 1e-5);
+        let capsule = cast(&[1]);
+        assert_eq!(capsule.collider, Some(ColliderId(2)));
+        assert!((capsule.distance - 19.0).abs() < 1e-4, "{capsule:?}");
+        assert!((capsule.point.x - 19.5).abs() < 1e-4, "{capsule:?}");
+        let boxed = cast(&[1, 2]);
+        assert_eq!(boxed.collider, Some(ColliderId(3)));
+        assert!((boxed.distance - 28.5).abs() < 1e-4, "{boxed:?}");
+        assert!((boxed.point.x - 29.0).abs() < 1e-4, "{boxed:?}");
+        assert_eq!(boxed.normal, Vec3::NEG_X);
+        // Falling end first onto an upright capsule: the straight parts add up.
+        let mut below = QueryWorld::new();
+        below.set_dynamic(vec![collider(
+            9,
+            Shape::Capsule {
+                half_height: 1.0,
+                radius: 0.5,
+            },
+            Vec3::ZERO,
+            Layers::ALL,
+        )]);
+        let hit = below
+            .shapecast(
+                &mine,
+                Vec3::new(0.0, 10.0, 0.0),
+                Vec3::NEG_Y * 20.0,
+                &QueryFilter::default(),
+            )
+            .unwrap()
+            .unwrap();
+        assert!((hit.distance - 7.5).abs() < 1e-4, "{hit:?}");
+        assert!(
+            (hit.point - Vec3::new(0.0, 1.5, 0.0)).length() < 1e-4,
+            "{hit:?}"
+        );
+    }
+
+    /// The reference distance from the upright capsule at `at` to a collider: the collider's
+    /// signed distance is convex along the capsule's axis, so a ternary search finds its least.
+    fn capsule_gap(c: &DynamicCollider, at: Vec3, half_height: f32, radius: f32) -> f32 {
+        let point = |s: f32| at + Vec3::new(0.0, half_height * (2.0 * s - 1.0), 0.0);
+        let f = |s: f32| sdf(c, point(s));
+        let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
+        for _ in 0..50 {
+            let third = (hi - lo) / 3.0;
+            if f(lo + third) < f(hi - third) {
+                hi -= third;
+            } else {
+                lo += third;
+            }
+        }
+        f((lo + hi) * 0.5).min(f(0.0)).min(f(1.0)) - radius
+    }
+
+    #[test]
+    fn capsule_casts_against_moving_colliders_match_sampled_distance() {
+        let mut rng = Lcg(13);
+        let (w, colliders) = random_world(&mut rng, 60);
+        let (mut hits, mut misses) = (0, 0);
+        for _ in 0..600 {
+            let (half_height, radius) = (rng.range(0.0, 1.0), rng.range(0.1, 0.6));
+            let shape = Shape::Capsule {
+                half_height,
+                radius,
+            };
+            let from = rng.vec(14.0);
+            let delta = rng.vec(12.0);
+            let len = delta.length();
+            // Only the colliders near the path can matter (every shape here is under 3 across).
+            let path = Aabb::from_center_half(from, Vec3::ZERO)
+                .union(&Aabb::from_center_half(from + delta, Vec3::ZERO))
+                .expanded(6.0);
+            let near: Vec<&DynamicCollider> = colliders
+                .iter()
+                .filter(|c| path.contains_point(c.position))
+                .collect();
+            let gap = |p: Vec3| {
+                near.iter()
+                    .map(|c| capsule_gap(c, p, half_height, radius))
+                    .fold(f32::MAX, f32::min)
+            };
+            match w
+                .shapecast(&shape, from, delta, &QueryFilter::default())
+                .unwrap()
+            {
+                Some(h) if !h.started_overlapping => {
+                    hits += 1;
+                    let at = from + delta * (h.distance / len);
+                    assert!(gap(at).abs() < 4e-3, "touching at the hit: {}", gap(at));
+                    for i in 0..32 {
+                        assert!(
+                            gap(from + delta * (h.distance / len * i as f32 / 32.0)) > -4e-3,
+                            "overlapping before the hit"
+                        );
+                    }
+                    assert!(h.normal.dot(delta) <= 1e-3 && (h.normal.length() - 1.0).abs() < 1e-3);
+                    let c = colliders.iter().find(|c| Some(c.id) == h.collider).unwrap();
+                    assert!(
+                        sdf(c, h.point).abs() < 4e-3,
+                        "the contact is on the collider"
+                    );
+                }
+                Some(h) => {
+                    hits += 1;
+                    assert!(h.distance == 0.0 && gap(from) < 1e-3);
+                }
+                None => {
+                    misses += 1;
+                    for i in 0..=128 {
+                        assert!(
+                            gap(from + delta * (i as f32 / 128.0)) > -4e-3,
+                            "a miss, yet overlapping"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(hits > 100 && misses > 100, "hits {hits}, misses {misses}");
+    }
+
+    /// The reference distance from the box at `at` to a collider.
+    fn box_gap(c: &DynamicCollider, at: Vec3, half: Vec3) -> f32 {
+        let mine = Aabb::from_center_half(at, half);
+        match c.shape {
+            Shape::Sphere { radius } => mine.signed_distance(c.position) - radius,
+            Shape::Capsule {
+                half_height,
+                radius,
+            } => {
+                let point =
+                    |s: f32| c.position + Vec3::new(0.0, half_height * (2.0 * s - 1.0), 0.0);
+                let f = |s: f32| mine.signed_distance(point(s));
+                let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
+                for _ in 0..50 {
+                    let third = (hi - lo) / 3.0;
+                    if f(lo + third) < f(hi - third) {
+                        hi -= third;
+                    } else {
+                        lo += third;
+                    }
+                }
+                f((lo + hi) * 0.5).min(f(0.0)).min(f(1.0)) - radius
+            }
+            Shape::Box { half_extents } => {
+                // Two boxes: the gap along the axis that separates them most.
+                let d = (at - c.position).abs() - half - half_extents;
+                if d.cmpgt(Vec3::ZERO).any() {
+                    d.max(Vec3::ZERO).length()
+                } else {
+                    d.max_element()
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn box_casts_against_moving_colliders_match_sampled_distance() {
+        let mut rng = Lcg(17);
+        let (w, colliders) = random_world(&mut rng, 60);
+        let (mut hits, mut misses) = (0, 0);
+        for _ in 0..600 {
+            let half = Vec3::new(
+                rng.range(0.1, 0.8),
+                rng.range(0.1, 0.8),
+                rng.range(0.1, 0.8),
+            );
+            let shape = Shape::Box { half_extents: half };
+            let from = rng.vec(14.0);
+            let delta = rng.vec(12.0);
+            let len = delta.length();
+            // Only the colliders near the path can matter (every shape here is under 3 across).
+            let path = Aabb::from_center_half(from, Vec3::ZERO)
+                .union(&Aabb::from_center_half(from + delta, Vec3::ZERO))
+                .expanded(6.0);
+            let near: Vec<&DynamicCollider> = colliders
+                .iter()
+                .filter(|c| path.contains_point(c.position))
+                .collect();
+            let gap = |p: Vec3| {
+                near.iter()
+                    .map(|c| box_gap(c, p, half))
+                    .fold(f32::MAX, f32::min)
+            };
+            match w
+                .shapecast(&shape, from, delta, &QueryFilter::default())
+                .unwrap()
+            {
+                Some(h) if !h.started_overlapping => {
+                    hits += 1;
+                    let at = from + delta * (h.distance / len);
+                    assert!(gap(at).abs() < 4e-3, "touching at the hit: {}", gap(at));
+                    for i in 0..32 {
+                        assert!(
+                            gap(from + delta * (h.distance / len * i as f32 / 32.0)) > -4e-3,
+                            "overlapping before the hit"
+                        );
+                    }
+                    assert!(h.normal.dot(delta) <= 1e-3 && (h.normal.length() - 1.0).abs() < 1e-3);
+                }
+                Some(h) => {
+                    hits += 1;
+                    assert!(h.distance == 0.0 && gap(from) < 1e-3);
+                }
+                None => {
+                    misses += 1;
+                    for i in 0..=128 {
+                        assert!(
+                            gap(from + delta * (i as f32 / 128.0)) > -4e-3,
+                            "a miss, yet overlapping"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(hits > 100 && misses > 100, "hits {hits}, misses {misses}");
+    }
+
+    #[test]
+    fn boxes_and_capsules_overlap_the_static_world_by_material() {
+        let w = floor_world();
+        let f = QueryFilter::default();
+        let materials = |shape: Shape, at: Vec3| {
+            let mut out = Vec::new();
+            w.overlap(&shape, at, &f, &mut out).unwrap();
+            out.iter()
+                .map(|o| {
+                    assert_eq!(o.collider, None);
+                    o.material
+                })
+                .collect::<Vec<_>>()
+        };
+        let cube = Shape::Box {
+            half_extents: Vec3::splat(0.5),
+        };
+        assert_eq!(
+            materials(cube, Vec3::new(0.0, 0.4, 0.0)),
+            [GRASS, METAL],
+            "on the seam"
+        );
+        assert_eq!(
+            materials(cube, Vec3::new(-3.0, 0.4, 3.0)).len(),
+            1,
+            "one half"
+        );
+        assert_eq!(
+            materials(cube, Vec3::new(-3.0, 0.5, 3.0)).len(),
+            1,
+            "touching counts"
+        );
+        assert!(
+            materials(cube, Vec3::new(-3.0, 0.6, 3.0)).is_empty(),
+            "above"
+        );
+        assert!(
+            materials(cube, Vec3::new(9.0, 0.0, 0.0)).is_empty(),
+            "off the floor"
+        );
+        assert_eq!(materials(CAPSULE, Vec3::new(0.0, 0.7, 0.0)), [GRASS, METAL]);
+        assert_eq!(materials(CAPSULE, Vec3::new(3.0, 0.7, -3.0)).len(), 1);
+        assert!(materials(CAPSULE, Vec3::new(3.0, 0.9, -3.0)).is_empty());
+        // Lying on its side is not something a `Shape` capsule can do (it stands along Y), but a
+        // tall one through the floor still counts.
+        assert_eq!(
+            materials(
+                Shape::Capsule {
+                    half_height: 5.0,
+                    radius: 0.1
+                },
+                Vec3::new(-3.0, 0.0, 3.0)
+            )
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn raycast_all_pierces_everything_in_order() {
+        let mut w = floor_world();
+        w.set_dynamic(vec![
+            collider(
+                7,
+                Shape::Sphere { radius: 1.0 },
+                Vec3::new(1.0, 2.0, -1.0),
+                Layers::ALL,
+            ),
+            collider(
+                9,
+                Shape::Box {
+                    half_extents: Vec3::splat(0.5),
+                },
+                Vec3::new(1.0, 6.0, -1.0),
+                Layers::ALL,
+            ),
+            // Its top is level with the floor: a tie, and the static world goes first.
+            collider(
+                3,
+                Shape::Box {
+                    half_extents: Vec3::splat(0.5),
+                },
+                Vec3::new(1.0, -0.5, -1.0),
+                Layers::ALL,
+            ),
+        ]);
+        let ray = down(Vec3::new(1.0, 10.0, -1.0));
+        let mut all = Vec::new();
+        w.raycast_all(&ray, 100.0, &QueryFilter::default(), &mut all);
+        let order: Vec<(Option<u64>, f32)> = all
+            .iter()
+            .map(|h| (h.collider.map(|c| c.0), h.distance))
+            .collect();
+        assert_eq!(order.len(), 4, "{all:?}");
+        assert_eq!(
+            order.iter().map(|o| o.0).collect::<Vec<_>>(),
+            [Some(9), Some(7), None, Some(3)]
+        );
+        for (got, want) in order.iter().map(|o| o.1).zip([3.5, 7.0, 10.0, 10.0]) {
+            assert!((got - want).abs() < 1e-4, "{all:?}");
+        }
+        assert!(all[2].triangle.is_some());
+        assert_eq!(
+            w.raycast(&ray, 100.0, &QueryFilter::default()),
+            all.first().copied(),
+            "the first is what raycast gives"
+        );
+        // Filters apply, and a short ray stops early.
+        let mut some = Vec::new();
+        let skip = QueryFilter {
+            exclude: Some(ColliderId(9)),
+            statics: false,
+            ..QueryFilter::default()
+        };
+        w.raycast_all(&ray, 8.0, &skip, &mut some);
+        assert_eq!(
+            some.iter().map(|h| h.collider).collect::<Vec<_>>(),
+            [Some(ColliderId(7))]
+        );
+        // A ray starting inside a collider meets it at 0.
+        let mut inside = Vec::new();
+        w.raycast_all(
+            &down(Vec3::new(1.0, 2.0, -1.0)),
+            100.0,
+            &QueryFilter::default(),
+            &mut inside,
+        );
+        assert!(inside[0].started_overlapping && inside[0].distance == 0.0);
+        assert_eq!(inside[0].collider, Some(ColliderId(7)));
+    }
+
+    #[test]
+    fn capsule_and_box_casts_give_the_lower_id_on_a_tie_whatever_the_input_order() {
+        let same = |id| collider(id, Shape::Sphere { radius: 1.0 }, Vec3::ZERO, Layers::ALL);
+        for order in [[5, 2], [2, 5]] {
+            let mut w = QueryWorld::new();
+            w.set_dynamic(order.iter().map(|id| same(*id)).collect());
+            for shape in [
+                CAPSULE,
+                Shape::Box {
+                    half_extents: Vec3::splat(0.5),
+                },
+            ] {
+                let hit = w
+                    .shapecast(
+                        &shape,
+                        Vec3::new(-10.0, 0.0, 0.0),
+                        Vec3::new(20.0, 0.0, 0.0),
+                        &QueryFilter::default(),
+                    )
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(hit.collider, Some(ColliderId(2)), "{shape:?} {order:?}");
+            }
+        }
     }
 }
