@@ -4,6 +4,9 @@
 //! "New Game" opens the level picker; a picked level loads on a worker thread behind a progress bar and is then
 //! played (T03-037): the walker or the free-fly camera of [`PlaySession`], the mouse captured, Esc for the pause
 //! menu, "Quit to Menu" drops the level.
+//!
+//! Without a usable install the window first shows the data-location wizard (T10-019b, [`WizardScene`]); the menu
+//! follows once a folder is chosen.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,15 +23,17 @@ use ss2_platform_api::{
     LifecycleEvent, MouseButton, PlatformEvent, PlatformPaths,
 };
 use ss2_render::Renderer;
+use ss2_ui::data_wizard::WizardInput;
 use ss2_ui::level_select::{LevelPicker, PickerCommand};
 use ss2_ui::{Canvas, DrawList, Menu, MenuCommand, UiInput, Vec2, theme};
 use ss2_world::scene::LevelScene;
 
-use crate::input::{nav_for_button, nav_for_key};
+use crate::input::{WizardKeys, nav_for_button, nav_for_key};
 use crate::level_session::{SKY, upload};
 use crate::play::{Levels, Loading, draw_hud};
 use crate::play_input::PlayControls;
 use crate::state::{AppState, Effects, Scene};
+use crate::wizard_scene::{Outcome, WizardScene};
 use crate::{profiling, screenshot};
 
 /// What the game scene is doing.
@@ -71,8 +76,11 @@ struct App {
     levels: Arc<Levels>,
     phase: Option<Phase>,
     controls: PlayControls,
-    /// `--level NAME`: load this level at the first frame.
+    /// `--level NAME`: load this level at the first frame (after the wizard, when it shows).
     start_level: Option<String>,
+    /// The first-run wizard, shown before everything else while it is here.
+    wizard: Option<WizardScene>,
+    wizard_keys: WizardKeys,
 }
 
 /// The settings for this run: the saved file (or the platform defaults when there is none), then
@@ -105,6 +113,8 @@ pub(crate) struct RunOptions<'a> {
     pub levels: Levels,
     /// `--level NAME`: go straight into this level.
     pub start_level: Option<String>,
+    /// The first-run wizard to show first (no usable install was found).
+    pub wizard: Option<WizardScene>,
 }
 
 /// Run the interactive app.
@@ -128,6 +138,7 @@ pub(crate) fn run(options: RunOptions<'_>) -> Result<(), String> {
         options.levels,
     );
     app.start_level = options.start_level;
+    app.wizard = options.wizard;
     ss2_platform::window::run(&config, &mut app).map_err(|e| e.to_string())?;
     match app.failure {
         Some(message) => Err(message),
@@ -163,6 +174,8 @@ impl App {
             phase: None,
             controls: PlayControls::default(),
             start_level: None,
+            wizard: None,
+            wizard_keys: WizardKeys::default(),
         }
     }
 
@@ -234,6 +247,10 @@ impl App {
     }
 
     fn dispatch(&mut self, input: UiInput) {
+        if let Some(wizard) = &mut self.wizard {
+            wizard.handle(WizardInput::Ui(input));
+            return;
+        }
         match self.state.scene {
             Scene::Playing => match &mut self.phase {
                 Some(Phase::Picking(picker)) => match picker.handle(input) {
@@ -334,6 +351,42 @@ impl App {
         }
     }
 
+    /// Keyboard input while the wizard shows: F12 still takes a screenshot, keys and text go to the wizard.
+    fn wizard_input(&mut self, input: &InputEvent) {
+        if let InputEvent::Key {
+            key: KeyCode::F12,
+            pressed: true,
+            repeat,
+        } = input
+        {
+            self.key_pressed(KeyCode::F12, *repeat);
+            return;
+        }
+        if let Some(wizard) = &mut self.wizard {
+            let typing = wizard.typing();
+            if let Some(input) = self.wizard_keys.map(input, typing) {
+                wizard.handle(input);
+            }
+        }
+    }
+
+    /// Collect the wizard's finished work: when a folder is ready its levels replace the ones offered so far.
+    fn poll_wizard(&mut self) {
+        let Some(wizard) = &mut self.wizard else {
+            return;
+        };
+        match wizard.poll() {
+            Outcome::Continue => {}
+            Outcome::Ready(levels) => {
+                self.levels = Arc::new(levels);
+                self.wizard = None;
+                self.state.scene = Scene::Menu;
+                self.menu.open_main();
+            }
+            Outcome::Quit => self.exit = true,
+        }
+    }
+
     /// Advance the game scene by `dt` seconds.
     fn advance(&mut self, dt: f32) {
         match &mut self.phase {
@@ -364,6 +417,12 @@ impl App {
         // The fog where the camera is (RFC 0013 amendment 4); none outside a level.
         let mut fog = None;
         let clear = match (self.state.scene, &mut self.phase) {
+            _ if self.wizard.is_some() => {
+                if let Some(wizard) = &self.wizard {
+                    wizard.draw_into(&mut self.draw_list);
+                }
+                theme::BACKGROUND
+            }
             (Scene::Menu, _) => {
                 self.menu.draw_into(&mut self.draw_list);
                 theme::BACKGROUND
@@ -448,6 +507,12 @@ impl App {
 
 impl AppHandler for App {
     fn event(&mut self, event: PlatformEvent) -> AppControl {
+        if let PlatformEvent::Input(input @ (InputEvent::Key { .. } | InputEvent::Text(_))) = &event
+            && self.wizard.is_some()
+        {
+            self.wizard_input(input);
+            return self.control();
+        }
         if let PlatformEvent::Input(input) = &event
             && self.is_playing()
         {
@@ -509,7 +574,10 @@ impl AppHandler for App {
     }
 
     fn frame(&mut self, frame: &FrameInfo) -> AppControl {
-        if let Some(id) = self.start_level.take() {
+        self.poll_wizard();
+        if self.wizard.is_none()
+            && let Some(id) = self.start_level.take()
+        {
             self.start_loading(&id);
         }
         let dt = frame.delta.as_secs_f32();

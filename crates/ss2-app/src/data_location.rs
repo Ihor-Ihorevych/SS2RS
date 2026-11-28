@@ -1,17 +1,17 @@
 //! The app's half of the first-run wizard (roadmap T10-019, `docs/FIRST_RUN.md`): it answers the commands of
 //! [`ss2_ui::data_wizard::DataWizard`] with `ss2_vfs` (discovery, the install check, the remembered choice).
 //!
-//! **Not connected to the window yet.** `main` does not call it, because the window is being moved onto the platform layer (T03-033) and
-//! the placeholder app uses no game data; the hook for T10-019b is [`startup`] (is the wizard needed?) followed by [`Host::run`] for every
-//! command the wizard gives. Everything here works without a window, which is how it is tested.
+//! `main` asks [`startup`] whether the wizard is needed (T10-019b); the window's wizard scene (`crate::wizard_scene`) then has every
+//! command answered by [`Host::answer`] on a worker thread and applies the [`Answer`] on the main thread. [`Host::run`] does both at
+//! once, which is how the whole loop is tested without a window.
 
 use std::path::{Path, PathBuf};
 
 use ss2_ui::data_wizard::{DataWizard, WizardCandidate, WizardCommand, WizardReport};
 use ss2_vfs::{
     Discovery, Environment, LoadedChoice, RememberedChoice, Startup, ValidationSummary,
-    WizardReason, check_install, choice_file, discover, load_choice, resolve_startup, save_choice,
-    summarize,
+    WizardReason, check_install, choice_file, discover, forget_choice, load_choice,
+    resolve_startup, save_choice, summarize,
 };
 
 /// Where the remembered choice lives: next to `settings.toml`, in the config folder.
@@ -22,6 +22,15 @@ pub fn store_path(config_dir: &Path) -> PathBuf {
 /// Decide at start-up whether the game data folder is known and still good (see [`ss2_vfs::resolve_startup`]). `explicit` is `--data`.
 pub fn startup(env: &dyn Environment, explicit: Option<&Path>, store: &Path) -> Startup {
     resolve_startup(env, explicit, store)
+}
+
+/// Forget the remembered choice (`--forget-data`), so that the wizard is shown unless `--data` or `SS2_DATA_DIR` names a folder.
+/// No file is not an error.
+///
+/// # Errors
+/// The message when the file exists and cannot be removed.
+pub fn forget(store: &Path) -> Result<(), String> {
+    forget_choice(store).map_err(|e| e.to_string())
 }
 
 /// The wizard to show for a start-up that needs it, with the reason as its message.
@@ -92,34 +101,79 @@ impl<'a> Host<'a> {
         }
     }
 
-    /// Do what `command` asks and hand the answer to `wizard`. Searching and checking read the disk and take as long as that takes
-    /// (the check opens every archive: about a quarter of a second for the retail install), so the window should show the wizard's
-    /// "searching" or "checking" screen once before calling this.
+    /// Do what `command` asks and hand the answer to `wizard`: [`Host::answer`] then [`Answer::apply`]. Searching and checking read the
+    /// disk and take as long as that takes (the check opens every archive: about a quarter of a second for the retail install), so a
+    /// window calls [`Host::answer`] on a worker thread instead and keeps drawing the wizard's "searching" or "checking" screen.
+    #[cfg(test)]
     pub fn run(&self, wizard: &mut DataWizard, command: WizardCommand) -> Step {
+        self.answer(command).apply(wizard)
+    }
+
+    /// Do the work `command` asks for (searching, checking, saving the choice) without touching the wizard, so that it can run on
+    /// another thread.
+    pub fn answer(&self, command: WizardCommand) -> Answer {
         match command {
             WizardCommand::Search => {
                 let found = discover(self.env, self.remembered().as_deref());
-                wizard.set_candidates(wizard_candidates(&found));
-                Step::Continue
+                Answer::Candidates(wizard_candidates(&found))
             }
             WizardCommand::Validate(dir) => {
-                let summary = summarize(&check_install(&dir));
-                wizard.set_report(wizard_report(&summary));
-                Step::Continue
+                Answer::Report(wizard_report(&summarize(&check_install(&dir))))
             }
             WizardCommand::Accept(dir) => {
                 let choice = RememberedChoice {
                     dir: dir.clone(),
                     validated_at: self.now,
                 };
-                if let Err(e) = save_choice(&self.store, &choice) {
+                let save_error = save_choice(&self.store, &choice)
+                    .err()
+                    .map(|e| e.to_string());
+                Answer::Chosen { dir, save_error }
+            }
+            WizardCommand::Quit => Answer::Quit,
+        }
+    }
+}
+
+/// The result of [`Host::answer`], to be handed to the wizard with [`Answer::apply`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Answer {
+    /// What the search found.
+    Candidates(Vec<WizardCandidate>),
+    /// The result of checking a folder.
+    Report(WizardReport),
+    /// The player chose this folder; `save_error` says why it could not be remembered, if it could not.
+    Chosen {
+        /// The folder.
+        dir: PathBuf,
+        /// Why saving the choice failed.
+        save_error: Option<String>,
+    },
+    /// Leave the application.
+    Quit,
+}
+
+impl Answer {
+    /// Hand the answer to `wizard` and say what the app does next.
+    pub fn apply(self, wizard: &mut DataWizard) -> Step {
+        match self {
+            Answer::Candidates(found) => {
+                wizard.set_candidates(found);
+                Step::Continue
+            }
+            Answer::Report(report) => {
+                wizard.set_report(report);
+                Step::Continue
+            }
+            Answer::Chosen { dir, save_error } => {
+                if let Some(e) = save_error {
                     wizard.set_notice(format!(
                         "Your choice could not be saved ({e}); you will be asked again next time"
                     ));
                 }
                 Step::Chosen(dir)
             }
-            WizardCommand::Quit => Step::Quit,
+            Answer::Quit => Step::Quit,
         }
     }
 }
