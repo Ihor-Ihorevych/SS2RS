@@ -11,13 +11,14 @@
 
 use std::sync::Arc;
 
-use ss2_core::math::{Vec2, Vec3};
+use ss2_core::math::{Quat, Vec2, Vec3};
 use ss2_physics::controller::{WalkConfig, WalkInput, Walker};
 use ss2_physics::query::QueryWorld;
-use ss2_render_api::Camera;
+use ss2_render_api::{Camera, Projection};
 use ss2_world::scene::LevelScene;
 
 use crate::freefly::{FreeFlyCamera, FreeFlyConfig, FreeFlyInput};
+use crate::player_view::{PlayerView, PlayerViewInput, main_view_fov_y};
 
 /// How far below the level's lowest point a walker may fall before it is put back at the start, metres.
 pub const FALL_LIMIT: f32 = 100.0;
@@ -56,6 +57,9 @@ pub struct PlaySession {
     mode: Mode,
     floor_limit: f32,
     respawns: u32,
+    /// The camera's sway/damping and the weapon's walk-bob state (T09-008), updated from the
+    /// walker's own movement each tick.
+    view: PlayerView,
 }
 
 impl PlaySession {
@@ -74,6 +78,7 @@ impl PlaySession {
             mode: Mode::Walk,
             floor_limit,
             respawns: 0,
+            view: PlayerView::new(),
         };
         session.respawn();
         session
@@ -104,6 +109,16 @@ impl PlaySession {
                     slow: false,
                 };
                 self.camera.update(dt, &fly);
+                // No walking, so no walk bob or lean (T09-008); the view-damping spring just
+                // relaxes towards rest (no vertical-velocity kicks while flying).
+                self.view.update(
+                    &PlayerViewInput {
+                        wish: Vec2::ZERO,
+                        sprinting: false,
+                        vertical_velocity: 0.0,
+                    },
+                    dt,
+                );
             }
             Mode::Walk => {
                 // The look only (a step of 0 moves nothing), then walk along the new heading.
@@ -125,6 +140,17 @@ impl PlaySession {
                     self.respawn();
                 }
                 self.camera.set_position(self.walker.eye(&self.walk));
+                // The weapon's walk bob/lean and the view's landing-dip damping (T09-008), driven
+                // by this tick's wish vector and the walker's own vertical velocity. No sprint key
+                // exists yet (T09-007's own scope), so `sprinting` stays `false`.
+                self.view.update(
+                    &PlayerViewInput {
+                        wish: walk.wish,
+                        sprinting: false,
+                        vertical_velocity: self.walker.velocity.y,
+                    },
+                    dt,
+                );
             }
         }
     }
@@ -138,6 +164,7 @@ impl PlaySession {
         self.camera.set_position(eye);
         let (sin, cos) = start.yaw.sin_cos();
         self.camera.look_at(eye + Vec3::new(-sin, 0.0, -cos));
+        self.view = PlayerView::new();
     }
 
     /// Move the walker's feet (or, flying, the camera's eyes) to `feet` at once.
@@ -150,9 +177,33 @@ impl PlaySession {
             .set_position(feet + Vec3::Y * self.walk.eye_height);
     }
 
-    /// The camera to render from.
+    /// The camera to render from, with no field-of-view override and none of this frame's
+    /// sway/bob/damping (T09-008's [`PlaySession::rendered_camera`] applies those).
     pub fn camera(&self) -> Camera {
         self.camera.camera()
+    }
+
+    /// The camera to actually render from: [`PlaySession::camera`], with the main view's field of
+    /// view at `aspect` (width / height, `docs/re/weapon-view.md` section summary point 5,
+    /// [`main_view_fov_y`]) and this frame's view-damping offset and strafe-lean roll
+    /// ([`PlayerView::camera_damping_offset`], [`PlayerView::camera_roll`]).
+    pub fn rendered_camera(&self, aspect: f32) -> Camera {
+        let mut camera = self.camera();
+        if let Projection::Perspective { near, .. } = camera.projection {
+            camera.projection = Projection::Perspective {
+                fov_y: main_view_fov_y(aspect),
+                near,
+            };
+        }
+        camera.position += camera.up() * self.view.camera_damping_offset();
+        camera.rotation *= Quat::from_rotation_z(-self.view.camera_roll());
+        camera
+    }
+
+    /// This frame's camera sway/damping and weapon walk-bob state (T09-008), for the app to apply
+    /// to the viewmodel's own placement.
+    pub fn view(&self) -> PlayerView {
+        self.view
     }
 
     /// Walking or flying.
