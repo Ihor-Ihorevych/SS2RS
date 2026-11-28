@@ -97,7 +97,7 @@ Eligibility and the LOD selected for a particular draw are separate.
 | `.10` | element path of the **bone weights** (present in 333 surfaces, absent otherwise) |
 | `.11` | element path of the **bone indices** (present exactly when `.10` is) |
 | `.12` | 8 words: for each UV slot the UV map id (for example 3, 4, 5, 6, or 2); 0 for unused slots. In a lit world instance, slot 0 is, in the large majority of cases, the mesh's **lightmap unwrap channel** -- entirely inside [0, 1], non-overlapping, and usually not one of the ids the surface's own material uses (`wld-lighting.md`, "Baked lightmaps", T01-407); this is a data-driven finding, not a documented field role |
-| `.13` | Eight color-map identifiers, one per `.15` slot. All are 0 in these meshes, which have zero color streams (`.5`) |
+| `.13` | Eight color-map identifiers, one per `.15` slot. All are 0 in these meshes, which have zero color streams (`.5`). In the compiled engine's per-draw vertex-stream table this array feeds the generic UV-channel lookup's own **second** id'd group, structurally parallel to `.12`/`.14` (`wld-lighting.md`, "Baked lightmaps", T01-408/T01-414); confirmed empty on every one of 18,641 resolved lit world instances as well, not just this spec's own 76-file sample |
 | `.14` | 8 element paths: the **UV streams** (slot order as in `.12`); unused slots have buffer 255 |
 | `.15` | 8 element paths: always all absent |
 | `.16` | reference: the surface's **material** (a `CShaderPreset`), or null (88 surfaces), see below |
