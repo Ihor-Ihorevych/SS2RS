@@ -71,8 +71,9 @@ fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
     // Sampled for every fragment (uniform control flow); used only when the material is lightmapped.
     let baked = textureSample(lightmap_texture, lightmap_sampler, f.lightmap_uv).rgb;
     let light = select(vec3<f32>(shade), baked, material.params.z > 0.5);
-    // Linear distance fog; the sky (unlit) is never fogged.
-    let d = distance(f.world, camera.eye.xyz);
+    // Linear fog in view depth (along the camera's forward axis, which `light_dir` holds); the sky (unlit) is never
+    // fogged.
+    let d = dot(f.world - camera.eye.xyz, camera.light_dir.xyz);
     let span = max(camera.fog_range.y - camera.fog_range.x, 1e-4);
     let fog = camera.fog_colour.a * clamp((d - camera.fog_range.x) / span, 0.0, 1.0);
     let amount = select(fog, 0.0, material.params.y > 0.5);
