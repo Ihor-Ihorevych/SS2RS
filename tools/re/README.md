@@ -242,6 +242,12 @@ python -I tools/re/wld_nav_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # nav
 python -I tools/re/wld_entity_schema.py "C:\path\to\Serious Sam 2" --markdown docs/re/wld-navigation-schema.md --match "NavMesh|PathFinding|PathMarker|Formation|Beacon|MarkersMoving|CMC[A-Z]|Nav[A-Z]|SMoveCharacter|Locator|SpawnMarker|Tactic" --title "..."    # the class reference
 ```
 
+World navigation leftovers (docs/re/wld-navigation-leftovers.md):
+
+```
+python -I tools/re/wld_nav_leftovers_verify.py "C:\path\to\Serious Sam 2" [LIMIT]    # CNMNode.2/.9/.10/.11, CNMLink.3, CNavigationGrid.4's length, the tactics without a mover (about 15 minutes)
+```
+
 Level logic evidence (docs/re/level-logic.md, level-logic-api.md):
 
 ```
