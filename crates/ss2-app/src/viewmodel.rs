@@ -20,16 +20,22 @@
 //! bindings (`docs/re/weapon-pickups.md` open question 1, T01-114, left open). There is no inventory, no ammo and
 //! no firing: every weapon is always "held", whether or not a player could ever carry it.
 //!
-//! **Split off** (follow-up roadmap task): walk bob, the strafe lean, view damping and the charge/recoil
-//! displacement (`docs/re/weapon-view.md` section 3 points 2 to 4). The spec gives simple formulas for all four,
-//! but every one of them is driven by the player's own runtime movement state (the relative-move vector, the
-//! sprint factor, a damped vertical-velocity spring) that `ss2-app`'s walk/fly controller does not expose in a
-//! reusable form yet; wiring that up is player-movement game logic, not this task's model-loading and placement
-//! wiring. Also split off: a real inventory, weapon switching and firing (`docs/re/weapon-pickups.md`,
-//! `docs/re/hitscan-shot.md`) — the gap T04-030 and T04-046 already found in `ss2-world`/`ss2-app`.
+//! **Walk bob, strafe lean and view damping (T09-008)** are applied here from
+//! [`ss2_game::play::PlaySession::view`] (a [`ss2_game::player_view::PlayerView`], itself driven from the
+//! walker's own movement each tick, `docs/re/weapon-view.md` section 3 points 2 and 3): [`pose`] takes it and
+//! adds [`ss2_game::player_view::PlayerView::weapon_offset`] (scaled by this weapon's own `bwrp_fBobbingMul`,
+//! [`WeaponView::bobbing_mul`]) to the static placement, in the weapon's own local frame.
+//!
+//! **Still split off** (needs a firing/charging state that does not exist yet, T09-005): the charge/recoil
+//! displacement (`docs/re/weapon-view.md` section 3 point 4, section 2) — its formula is reproduced and tested
+//! in [`ss2_game::player_view::charge_recoil_offset`], but nothing calls it, since there is no weapon state
+//! machine to drive it from. Also still split off: a real inventory, weapon switching and firing
+//! (`docs/re/weapon-pickups.md`, `docs/re/hitscan-shot.md`) — the gap T04-030 and T04-046 already found in
+//! `ss2-world`/`ss2-app`.
 
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_format_ep::{EntityParams, ParamObject, ParamValue};
+use ss2_game::player_view::PlayerView;
 use ss2_platform_api::KeyCode;
 use ss2_render::{Renderer, SkinnedDraw, SkinnedMeshHandle, TextureHandle, ViewModel};
 use ss2_render_api::Aabb;
@@ -119,8 +125,9 @@ fn vec3_member(value: &ParamValue) -> Option<Vec3> {
 }
 
 /// The weapon-view numbers this module draws with (`docs/re/weapon-view.md` section 3 point 1 and section 4):
-/// the static placement (position, and the heading/pitch angle in degrees — the file's own bank is always 0) and
-/// the field of view at 4:3 and near plane [`ViewModel`] needs.
+/// the static placement (position, and the heading/pitch angle in degrees — the file's own bank is always 0),
+/// the bobbing multiplier (T09-008: `ss2_game::player_view::PlayerView::weapon_offset`'s own `bobbing_mul`
+/// argument) and the field of view at 4:3 and near plane [`ViewModel`] needs.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct WeaponView {
     position: Vec3,
@@ -129,17 +136,23 @@ struct WeaponView {
     /// not pinned down by that wording, so this reads them in that order as a plain, documented assumption).
     heading_pitch_deg: (f32, f32),
     fov_x_at_4_3: f32,
+    /// `bwrp_fBobbingMul` (`docs/re/weapon-view.md` section 1): this weapon's own walk-bob scale, T09-008.
+    bobbing_mul: f32,
     near: f32,
 }
 
 impl WeaponView {
-    /// The placement matrix in the viewmodel pass's own camera space (`ss2_render::viewmodel` module docs): no
-    /// bob, lean, damping or charge displacement (split off, this module's docs).
-    fn transform(&self) -> Mat4 {
+    /// The placement matrix in the viewmodel pass's own camera space (`ss2_render::viewmodel` module docs):
+    /// the static placement, then `offset` (T09-008: [`ss2_game::player_view::PlayerView::weapon_offset`], the
+    /// walk bob and the view-damping spring's own share of the weapon's height) in the weapon's own local frame
+    /// — the rightmost, most local factor, exactly the order `docs/re/weapon-view.md` section 3 reads from
+    /// `GetWeaponAbsPlacement`. Charge/recoil displacement is not applied here (split off, module docs: no
+    /// firing/charging state exists yet).
+    fn transform(&self, offset: Vec3) -> Mat4 {
         let (heading, pitch) = self.heading_pitch_deg;
         let rotation =
             Quat::from_rotation_y(heading.to_radians()) * Quat::from_rotation_x(pitch.to_radians());
-        Mat4::from_rotation_translation(rotation, self.position)
+        Mat4::from_rotation_translation(rotation, self.position) * Mat4::from_translation(offset)
     }
 }
 
@@ -172,6 +185,10 @@ fn read_weapon_view(vfs: &dyn Vfs, index: u16) -> Result<(String, WeaponView), S
         .and_then(ParamValue::as_f64)
         .ok_or_else(|| format!("{}: no field of view", rendering_path.as_str()))?
         as f32;
+    let bobbing_mul = nth_member(&rendering.root, "SBaseWeaponRenderingParams", 3)
+        .and_then(ParamValue::as_f64)
+        .ok_or_else(|| format!("{}: no bobbing multiplier", rendering_path.as_str()))?
+        as f32;
     let near = nth_member(&rendering.root, "SBaseWeaponRenderingParams", 7)
         .and_then(ParamValue::as_f64)
         .ok_or_else(|| format!("{}: no near plane", rendering_path.as_str()))?
@@ -182,6 +199,7 @@ fn read_weapon_view(vfs: &dyn Vfs, index: u16) -> Result<(String, WeaponView), S
             position,
             heading_pitch_deg: (angle.x, angle.y),
             fov_x_at_4_3,
+            bobbing_mul,
             near,
         },
     ))
@@ -280,11 +298,14 @@ pub(crate) fn load_weapon_viewmodel(
     })
 }
 
-/// `upload`'s draws at `time` seconds, posed with its idle animation player, and its [`ViewModel`] numbers, for
-/// [`Renderer::set_viewmodel`].
-pub(crate) fn pose(upload: &WeaponViewModel, time: f32) -> ViewModel {
+/// `upload`'s draws at `time` seconds, posed with its idle animation player, placed at the static placement plus
+/// `view`'s walk-bob/damping offset (T09-008: [`ss2_game::player_view::PlayerView::weapon_offset`], scaled by
+/// this weapon's own `bwrp_fBobbingMul`), and its [`ViewModel`] numbers, for [`Renderer::set_viewmodel`].
+pub(crate) fn pose(upload: &WeaponViewModel, time: f32, view: &PlayerView) -> ViewModel {
     let palette = upload.skinned.palette_of(&upload.player, time);
-    let transform = upload.view.transform();
+    let transform = upload
+        .view
+        .transform(view.weapon_offset(upload.view.bobbing_mul));
     let bounds = upload
         .skinned
         .culling_bounds()
@@ -455,6 +476,7 @@ mod tests {
         assert!((view.position.z - -0.5).abs() < 1e-5);
         assert_eq!(view.heading_pitch_deg, (6.0, -4.0));
         assert!((view.fov_x_at_4_3 - 0.8262).abs() < 1e-5);
+        assert!((view.bobbing_mul - 1.0).abs() < 1e-5);
         assert!((view.near - 0.1).abs() < 1e-5);
         // A weapon with no files at all does not read.
         assert!(read_weapon_view(&vfs, 14).is_err());
@@ -505,7 +527,8 @@ mod tests {
         };
         let upload = load_weapon_viewmodel(&mut renderer, &vfs, DEFAULT_WEAPON)
             .expect("the default weapon's view-model loads from the real install");
-        let vm = pose(&upload, 0.0);
+        let view = PlayerView::new();
+        let vm = pose(&upload, 0.0, &view);
         assert!(!vm.draws.is_empty(), "at least one draw per model part");
         assert!(vm.fov_x_at_4_3.is_finite() && vm.fov_x_at_4_3 > 0.0);
         assert!(vm.near.is_finite() && vm.near > 0.0);
@@ -513,7 +536,7 @@ mod tests {
             .set_viewmodel(Some(vm))
             .expect("the renderer accepts the posed view-model");
         // Posing again later (a later frame) still works and still draws something.
-        let vm_later = pose(&upload, 1.5);
+        let vm_later = pose(&upload, 1.5, &view);
         assert!(!vm_later.draws.is_empty());
     }
 }

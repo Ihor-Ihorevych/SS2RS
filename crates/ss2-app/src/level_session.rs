@@ -561,7 +561,7 @@ pub(crate) fn take_level_screenshot(
         game.vfs(),
         crate::viewmodel::DEFAULT_WEAPON,
     )
-    .map(|upload| crate::viewmodel::pose(&upload, 0.0));
+    .map(|upload| crate::viewmodel::pose(&upload, 0.0, &ss2_game::player_view::PlayerView::new()));
     renderer.set_viewmodel(vm).map_err(|e| e.to_string())?;
     let image = renderer
         .render_world_to_image(&camera, None, SKY)

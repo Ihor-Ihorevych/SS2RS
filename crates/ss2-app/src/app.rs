@@ -548,10 +548,11 @@ impl App {
                         });
                         playing.viewmodel_loaded_for = Some((playing.weapon, generation));
                     }
+                    let view = playing.session.view();
                     let vm = playing
                         .viewmodel
                         .as_ref()
-                        .map(|u| viewmodel::pose(u, playing.animation_time as f32));
+                        .map(|u| viewmodel::pose(u, playing.animation_time as f32, &view));
                     if let Err(e) = renderer.set_viewmodel(vm) {
                         tracing::warn!(error = %e, "viewmodel weapon not drawn");
                     }
@@ -561,7 +562,17 @@ impl App {
                     &playing.name,
                     playing.session.mode() == Mode::Fly,
                 );
-                let camera = playing.session.camera();
+                // T09-008: the main view's own field of view (`docs/re/weapon-view.md` section
+                // summary point 5) needs the window's aspect ratio, widened and clamped there.
+                let aspect = self
+                    .window
+                    .as_ref()
+                    .map(|w| {
+                        let (w, h) = w.size();
+                        w as f32 / (h.max(1) as f32)
+                    })
+                    .unwrap_or(4.0 / 3.0);
+                let camera = playing.session.rendered_camera(aspect);
                 fog = playing.session.scene().fog_at(camera.position);
                 blooms = playing.session.scene().blooms_at(camera.position);
                 world = Some(camera);
