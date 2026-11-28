@@ -2,8 +2,8 @@
 //!
 //! The batch walks a folder (of an install or on disk) in sorted order, converts every `.tex`
 //! (PNG) or `.bmf` (glTF) it finds, mirrors the tree under the output folder, and records every
-//! file in a manifest: exported, unsupported (a known gap, for example the old development
-//! textures) or failed, with the reason. One bad file never stops the run.
+//! file in a manifest: exported, unsupported (a known gap, for example an embedded texture) or
+//! failed, with the reason. One bad file never stops the run.
 
 use std::collections::BTreeMap;
 use std::path::Path;

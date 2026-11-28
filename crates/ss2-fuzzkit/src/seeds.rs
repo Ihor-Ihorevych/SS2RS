@@ -66,13 +66,36 @@ pub fn meta_container() -> Vec<Seed> {
 }
 
 /// The seeds of `format_tex`: the four hand-made textures of `testdata/asset-export` (24 bit, 32 bit, DXT1 with a mip
-/// chain, DXT1 cube map).
+/// chain, DXT1 cube map), and one legacy texture (container version 4 to 7, `tex-legacy.md`) of each class layout: 5 raw
+/// (version 4 member names, and version 6 with a palette), 6 with the length-prefixed zlib stream, 7 raw with a whole
+/// mip chain, 9 zlib (a DXT1 cube map) and 9 raw.
 pub fn format_tex() -> Vec<Seed> {
+    use builders::tex_legacy::{Legacy, zlib};
+    let px = |n: usize| (0..n).map(|i| (i * 13 % 251) as u8).collect::<Vec<u8>>();
+    let mut v4 = Legacy::layout5(4, 2, 1, &px(32));
+    v4.version = 4;
+    let mut palette = Legacy::layout5(2, 2, 0, &px(12));
+    palette.palette = vec![0x0011_2233, 0x4455_6677];
+    // 8 x 4 BGRA: 128 + 32 + 8 + 4 bytes for the four levels.
+    let chain = Legacy::with_format(7, 8, 4, 1, &px(172));
+    let mut cube = Legacy::with_format(9, 4, 4, 7, &zlib(&px(6 * 24)));
+    cube.flags = 0x23;
+    let mut raw9 = Legacy::with_format(9, 4, 4, 2, &px(48));
+    raw9.flags = 0x01;
     vec![
         seed("bgr_8x4", TEX_BGR.to_vec()),
         seed("bgra_4x4", TEX_BGRA.to_vec()),
         seed("dxt1_4x4", TEX_DXT1.to_vec()),
         seed("cube_4x4", TEX_CUBE.to_vec()),
+        seed("legacy5_v4_bgra", v4.build()),
+        seed("legacy5_palette", palette.build()),
+        seed(
+            "legacy6_dxt5",
+            Legacy::with_format(6, 4, 4, 9, &Legacy::layout6_blob(&px(48))).build(),
+        ),
+        seed("legacy7_bgra_chain", chain.build()),
+        seed("legacy9_cube", cube.build()),
+        seed("legacy9_raw", raw9.build()),
     ]
 }
 

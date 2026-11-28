@@ -1,5 +1,6 @@
 //! A writer for synthetic **CTSEMETA** (format 8) files, for parser tests that must run without
-//! game data.
+//! game data. [`MetaBuilder::format_version`] writes the old frame of versions 4 to 7
+//! (`docs/re/ctsemeta-leftovers.md`) instead.
 //!
 //! Written from the clean-room specs only: `docs/re/ctsemeta-container.md` (file frame),
 //! `docs/re/ctsemeta-types.md` (type table) and `docs/re/ctsemeta-objects.md` (object values).
@@ -30,7 +31,7 @@ use std::io;
 pub const MAGIC: &[u8; 8] = b"CTSEMETA";
 /// The byte-order marker after the magic.
 pub const BYTE_ORDER_MARKER: u32 = 0x1234_ABCD;
-/// The only format version specified (`ctsemeta-container.md`).
+/// The format version written by default (`ctsemeta-container.md`).
 pub const FORMAT_VERSION: u32 = 8;
 /// The version string of the gold build, used when none is set.
 pub const DEFAULT_VERSION: &str = "$Version: Serious Sam 2; 2.062.00:57284; 2005-Gold-RC5$";
@@ -160,7 +161,7 @@ impl TypeBlock {
         self.id
     }
 
-    fn write(&self, out: &mut Vec<u8>) -> io::Result<()> {
+    fn write(&self, out: &mut Vec<u8>, format_version: u32) -> io::Result<()> {
         out.extend_from_slice(b"DTTY");
         put_u32(out, self.id);
         put_str(out, &self.name)?;
@@ -177,7 +178,12 @@ impl TypeBlock {
                 put_u32(out, parent.unwrap_or(NULL_ID));
                 out.extend_from_slice(b"STMB");
                 put_len(out, members.len())?;
-                for (name, type_id) in members {
+                for (i, (name, type_id)) in members.iter().enumerate() {
+                    if format_version == 4 {
+                        // Version 4 writes a member number first (`ctsemeta-leftovers.md`); a
+                        // reader drops it, so the builder numbers the members 1, 2, 3, ...
+                        put_len(out, i + 1)?;
+                    }
                     put_str(out, name)?;
                     put_u32(out, *type_id);
                 }
@@ -310,6 +316,7 @@ struct ExternalObject {
 /// Builds one CTSEMETA file. See the module docs.
 #[derive(Clone, Debug)]
 pub struct MetaBuilder {
+    format_version: u32,
     version: String,
     info0: u32,
     files: Vec<(String, u32)>,
@@ -333,6 +340,7 @@ impl MetaBuilder {
     /// An empty, valid file: gold-build version string, no tables, no objects.
     pub fn new() -> Self {
         Self {
+            format_version: FORMAT_VERSION,
             version: DEFAULT_VERSION.to_owned(),
             info0: 1,
             files: Vec::new(),
@@ -350,6 +358,14 @@ impl MetaBuilder {
     /// Set the `$Version: ...$` string (a loader must accept any).
     pub fn version(&mut self, version: &str) -> &mut Self {
         self.version = version.to_owned();
+        self
+    }
+
+    /// Set the container format version (8 by default). Versions 4 to 7 write the old frame of
+    /// `ctsemeta-leftovers.md`: a four-word `INFO` (no `INFO[0]`) and, in version 4 only, a member
+    /// number (1, 2, ... in member order) in front of every struct member. Nothing else changes.
+    pub fn format_version(&mut self, version: u32) -> &mut Self {
+        self.format_version = version;
         self
     }
 
@@ -495,14 +511,16 @@ impl MetaBuilder {
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
         put_u32(&mut out, BYTE_ORDER_MARKER);
-        put_u32(&mut out, FORMAT_VERSION);
+        put_u32(&mut out, self.format_version);
         put_str(&mut out, &self.version)?;
 
         let type_count = self.external_types.len() + types.len();
         let object_count = self.external_objects.len() + self.objects.len();
         out.extend_from_slice(b"INFO");
+        if self.format_version >= FORMAT_VERSION {
+            put_u32(&mut out, self.info0);
+        }
         for word in [
-            self.info0,
             self.files.len() as u32,
             self.identifiers.len() as u32,
             u32::try_from(type_count).map_err(|_| invalid("too many types"))?,
@@ -537,7 +555,7 @@ impl MetaBuilder {
         put_len(&mut out, types.len())?;
         for entry in &self.table {
             match entry {
-                TableEntry::Type(t) => t.write(&mut out)?,
+                TableEntry::Type(t) => t.write(&mut out, self.format_version)?,
                 TableEntry::Dims(dims) => {
                     out.extend_from_slice(b"ADIM");
                     put_len(&mut out, dims.len())?;
@@ -1215,6 +1233,51 @@ mod tests {
             err(&m).contains("object id 2 is used twice"),
             "OBTY and EXOB share ids"
         );
+    }
+
+    #[test]
+    fn old_format_versions_write_the_old_frame() {
+        let file = |version: u32| {
+            let mut m = MetaBuilder::new();
+            m.format_version(version).version("v");
+            m.type_block(TypeBlock::primitive(0, "SLONG", 4, 4));
+            m.type_block(TypeBlock::class(
+                1,
+                "CPair",
+                2,
+                5,
+                None,
+                &[("a", 0), ("b", 0)],
+            ));
+            m.object(0, 1, ObjectBytes::new().i32(1).i32(2).finish());
+            m.build().unwrap()
+        };
+        let v8 = file(8);
+        for version in 4..=7 {
+            let old = file(version);
+            assert_eq!(old[12..16], version.to_le_bytes());
+            // `INFO` and the version string start at the same place; the old INFO has one word
+            // less: counts RFIL 0, IDNT 1, types 2, objects 1.
+            let info = 16 + 4 + 1;
+            assert_eq!(&old[info..info + 4], b"INFO");
+            let words: Vec<u32> = old[info + 4..info + 20]
+                .chunks(4)
+                .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+                .collect();
+            assert_eq!(words, [0, 1, 2, 1]);
+            let extra = if version == 4 { 8 } else { 0 }; // two member numbers
+            assert_eq!(old.len() + 4, v8.len() + extra, "version {version}");
+        }
+        let v4 = file(4);
+        let stmb = v4.windows(4).position(|w| w == b"STMB").unwrap();
+        // count 2, then number 1, name "a", type 0, number 2, name "b", type 0.
+        let words = |at: usize| u32::from_le_bytes(v4[at..at + 4].try_into().unwrap());
+        assert_eq!(
+            (words(stmb + 4), words(stmb + 8), words(stmb + 12)),
+            (2, 1, 1)
+        );
+        assert_eq!(v4[stmb + 16], b'a');
+        assert_eq!((words(stmb + 17), words(stmb + 21)), (0, 2));
     }
 
     #[test]
