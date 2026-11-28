@@ -6,7 +6,8 @@
 //!
 //! 1. `intensity = clamp(fade * strength * BLOOM_BIAS, 0, 2)`; below [`MIN_INTENSITY`] or on a frame smaller than
 //!    32x32 nothing is done.
-//! 2. Quarter-size steps (`ceil(side / 4)`) until both sides are at most 128: each step is a 4x4 box filter drawn
+//! 2. Each side rounded up to a power of two and clamped to 128..=2048, then quarter-size steps until both sides
+//!    are at most 128 (T01-425): each step is a 4x4 box filter drawn
 //!    twice at two blur taps and averaged. The taps are 1.5 source texels times `blur`, shared between the two by
 //!    `balance` (equal at 1), alternating horizontal and vertical from step to step.
 //! 3. One pass: the high-pass (`k = min(high_pass * sqrt(intensity), 1)`; what is brighter than `1 - k` survives,
@@ -27,6 +28,8 @@ pub const BLOOM_BIAS: f32 = 1.0;
 pub const MIN_INTENSITY: f32 = 0.01;
 /// The largest side of the smallest step.
 const SMALLEST: u32 = 128;
+/// The largest side of the canvas the steps start from.
+const LARGEST: u32 = 2048;
 /// The fixed colour ramp, at `ramp` 0, 1 and 2 (`docs/re/environment.md`; the component order is not confirmed).
 const RAMP: [[f32; 3]; 3] = [[0.66, 0.10, 0.05], [0.24, 0.21, 0.10], [0.16, 0.15, 0.14]];
 const STEP_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -45,10 +48,12 @@ pub fn ramp_colour(ramp: f32) -> [f32; 3] {
     c.map(|v| v / top)
 }
 
-/// The step sizes from a `(w, h)` frame: quartered (rounding up) until both sides are at most 128; at least one.
+/// The step sizes from a `(w, h)` frame (T01-425): each side rounded up to a power of two and clamped to
+/// 128..=2048, then quartered (rounding up) until both sides are at most 128; at least one step.
 pub fn step_sizes((w, h): (u32, u32)) -> Vec<(u32, u32)> {
+    let canvas = |side: u32| side.max(1).next_power_of_two().clamp(SMALLEST, LARGEST);
     let mut out = Vec::new();
-    let (mut w, mut h) = (w.max(1), h.max(1));
+    let (mut w, mut h) = (canvas(w), canvas(h));
     loop {
         w = w.div_ceil(4);
         h = h.div_ceil(4);
@@ -432,10 +437,15 @@ mod tests {
 
     #[test]
     fn steps_quarter_until_both_sides_are_at_most_128() {
-        assert_eq!(step_sizes((1920, 1080)), [(480, 270), (120, 68)]);
-        assert_eq!(step_sizes((3840, 2160)), [(960, 540), (240, 135), (60, 34)]);
-        assert_eq!(step_sizes((64, 64)), [(16, 16)]);
-        assert_eq!(step_sizes((0, 0)), [(1, 1)]);
+        // 1920x1080 -> 2048x2048 -> 512, 128.
+        assert_eq!(step_sizes((1920, 1080)), [(512, 512), (128, 128)]);
+        // 3840 -> 4096 clamped to 2048; 2160 -> 4096 -> 2048.
+        assert_eq!(step_sizes((3840, 2160)), [(512, 512), (128, 128)]);
+        // 1280x720 -> 2048x1024 -> 512x256 -> 128x64.
+        assert_eq!(step_sizes((1280, 720)), [(512, 256), (128, 64)]);
+        // Small frames start from the 128 canvas.
+        assert_eq!(step_sizes((64, 64)), [(32, 32)]);
+        assert_eq!(step_sizes((0, 0)), [(32, 32)]);
     }
 
     #[test]
