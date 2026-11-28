@@ -361,6 +361,8 @@ impl App {
         profiling::frame();
         profiling::profile_scope!("redraw");
         let mut world = None;
+        // The fog where the camera is (RFC 0013 amendment 4); none outside a level.
+        let mut fog = None;
         let clear = match (self.state.scene, &mut self.phase) {
             (Scene::Menu, _) => {
                 self.menu.draw_into(&mut self.draw_list);
@@ -396,7 +398,9 @@ impl App {
                     &playing.name,
                     playing.session.mode() == Mode::Fly,
                 );
-                world = Some(playing.session.camera());
+                let camera = playing.session.camera();
+                fog = playing.session.scene().fog_at(camera.position);
+                world = Some(camera);
                 SKY
             }
             (Scene::Playing, None) => {
@@ -404,6 +408,11 @@ impl App {
                 theme::BACKGROUND
             }
         };
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Err(e) = renderer.set_fog(fog)
+        {
+            tracing::warn!(error = %e, "fog refused");
+        }
         let rendered = {
             profiling::profile_scope!("render");
             self.renderer.as_mut().map(|renderer| match &world {
