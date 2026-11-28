@@ -15,7 +15,7 @@ replication-aware (guide: T08-032). Mark which fields are predicted on the local
 ## Player
 - [ ] **T09-006** · Player entity: spawn/respawn, health/armor, inventory & ammo caps, powerups, scoring/stats · `L` · `P0` · Deps: T01-027
 - [ ] **T09-007** · Player movement integration: input → controller (T07-005), crouch/sprint/jump, fall damage, footstep events · `M` · `P0`
-- [ ] **T09-008** · Player view: camera, FOV, head bob/sway, viewmodel animation hookup (T01-042) · `M` · `P0`
+- [~] **T09-008** [INPRG @Ihor-Ihorevych/agent · branch `T09-008-player-view-camera-fov` · 2026-11-28] · Player view: camera, FOV, head bob/sway, viewmodel animation hookup (T01-042) · `M` · `P0`
 - [ ] **T09-009** · Player models/skins & character select (`Models/Player/*` incl. `.nfo` display names) · `M` · `P2`
 - [ ] **T09-011** · Netricsa (in-game info device): data, entries, unlock logic (UI in T10-008) · `M` · `P2`
 - [ ] **T09-012** · Co-op player rules in game layer: revive/respawn, shared pickups, ping/markers, ghosts (with T08-023) · `L` · `P1`
