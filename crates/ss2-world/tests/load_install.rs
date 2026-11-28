@@ -16,7 +16,7 @@ use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{DirEntry, ReadSeek, Stat, Vfs, VfsPath};
 use ss2_world::collision::build_static;
 use ss2_world::load::{LightmapReport, LoadOptions, load_level, load_level_with_report};
-use ss2_world::scene::{CubeFace, LevelScene, LoadStage};
+use ss2_world::scene::{CubeFace, LevelScene, LoadStage, PlayMode, is_idle_or_default};
 
 fn level<'a>(levels: &'a [LevelInfo], id: &str) -> &'a LevelInfo {
     levels
@@ -1109,5 +1109,76 @@ fn animated_placements_pose_with_finite_bounded_palettes() {
             scene.skinned_models.len()
         );
         assert!(moved > 0, "{id}: nothing moves");
+    }
+}
+
+/// T04-048: no placement loops an action (module docs, "Animated models"): a placement's player loops only when
+/// its chosen animation reads as a resting loop ([`is_idle_or_default`]); an action instead holds its first frame
+/// ([`PlayMode::Once`]) until the game gives it a real start.
+#[test]
+fn dm_dockingbay_holds_actions_instead_of_looping_them() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    let info = level(&levels, "dm_dockingbay");
+    let scene = load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+    scene.validate().unwrap();
+    assert!(!scene.skinned_instances.is_empty());
+    let mut held = 0;
+    for inst in &scene.skinned_instances {
+        let model = &scene.skinned_models[inst.model as usize];
+        let name = &model.animations[inst.animation.animation as usize].name;
+        let loops = inst.animation.mode == PlayMode::Loop;
+        if !is_idle_or_default(name) {
+            assert!(
+                !loops,
+                "`{}` loops its action `{name}` instead of holding it",
+                model.name
+            );
+            held += 1;
+        }
+    }
+    eprintln!(
+        "dm_dockingbay: {held} of {} placements hold an action's first frame instead of looping it",
+        scene.skinned_instances.len()
+    );
+}
+
+/// T04-048: the box the renderer culls a model's draws with ([`ss2_world::scene::SkinnedModelData::culling_bounds`])
+/// stays big enough for the player's own data: every posed vertex of `dm_dockingbay` and `6_3_snow_base`'s animated
+/// models, across every animation at 24 points over its duration, lands inside its own model's culling bounds. A
+/// model whose motion needs more room than this would have a draw vanish early; none here does.
+#[test]
+fn animated_models_stay_within_their_own_culling_bounds() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    for id in ["dm_dockingbay", "6_3_snow_base"] {
+        let info = level(&levels, id);
+        let scene = load_level(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        scene.validate().unwrap();
+        for model in &scene.skinned_models {
+            let bounds = model
+                .culling_bounds()
+                .expect("an animated model has vertices");
+            for (a, animation) in model.animations.iter().enumerate() {
+                for step in 0..24 {
+                    let t = animation.duration * step as f32 / 24.0;
+                    let palette = model.palette(a, t);
+                    for part in &model.parts {
+                        for i in 0..part.mesh.vertices.len() {
+                            let p = part.mesh.skinned_position(i, &palette).unwrap();
+                            assert!(
+                                p.cmpge(bounds.min).all() && p.cmple(bounds.max).all(),
+                                "{id} `{}` animation `{}` t {t} vertex {i} at {p} escapes its \
+                                 culling bounds {bounds:?}",
+                                model.name,
+                                animation.name
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }

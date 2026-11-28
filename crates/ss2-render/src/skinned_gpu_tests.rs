@@ -5,11 +5,11 @@
 use std::f32::consts::FRAC_PI_2;
 
 use ss2_core::math::{Mat4, Quat, Vec3};
-use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{MeshData, MeshVertex};
 use ss2_render_api::skinning::{
     BoneTransform, SkeletonBone, SkeletonData, SkinnedMeshData, SkinnedVertex,
 };
+use ss2_render_api::{Aabb, Camera};
 use ss2_ui::Color;
 
 use crate::gpu::gpu_test_guard;
@@ -105,6 +105,8 @@ fn draw(mesh: SkinnedMeshHandle, palette: Vec<Mat4>) -> SkinnedDraw {
         alpha_cutoff: None,
         transform: Mat4::from_translation(Vec3::new(0.0, 0.0, DEPTH)),
         palette,
+        // Generous: these tests are not about culling (T04-048), so the bar must never be culled by it.
+        bounds: Aabb::new(Vec3::splat(-10.0), Vec3::splat(10.0)),
     }
 }
 

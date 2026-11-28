@@ -7,8 +7,8 @@ use std::sync::Arc;
 use ss2_core::math::{Mat4, Quat, Vec3};
 use ss2_physics::controller::WalkConfig;
 use ss2_render::{Renderer, SkinnedDraw, SkyBatch, TextureHandle, WorldBatch};
-use ss2_render_api::Camera;
 use ss2_render_api::scene_data::{AlphaMode, MaterialData, TextureData};
+use ss2_render_api::{Aabb, Camera};
 use ss2_ui::Color;
 use ss2_vfs::levels::{LevelInfo, discover_levels};
 use ss2_vfs::{SystemEnvironment, Vfs};
@@ -235,9 +235,19 @@ pub(crate) fn upload(renderer: &mut Renderer, scene: &LevelScene) -> Result<Uplo
     Ok(report)
 }
 
+/// The box [`SkinnedDraw::bounds`] culls a model's draws with, in its own space (T04-048):
+/// [`ss2_world::scene::SkinnedModelData::culling_bounds`], or a point at the origin for a model with no vertices
+/// (nothing to draw, so nothing to wrongly cull either).
+fn culling_bounds(model: &ss2_world::scene::SkinnedModelData) -> Aabb {
+    model
+        .culling_bounds()
+        .unwrap_or_else(|| Aabb::new(Vec3::ZERO, Vec3::ZERO))
+}
+
 /// Put the animated placements on the GPU (RFC 0013 amendment 8): one skinned mesh per part of each animated model,
 /// and one skinned draw per part of each placement, in placement order, then part order (the order [`pose_skinned`]
-/// relies on), posed by its model's default animation at time 0.
+/// relies on), each posed by its own placement's player ([`ss2_world::scene::SkinnedInstance::animation`]) at time
+/// 0 (RFC 0013 amendment 9, T04-048).
 fn upload_skinned(
     renderer: &mut Renderer,
     scene: &LevelScene,
@@ -254,15 +264,13 @@ fn upload_skinned(
             .map_err(|e| format!("animated model {}: {e}", model.name))?;
         meshes.push(handles);
     }
-    let palettes: Vec<Vec<Mat4>> = scene
-        .skinned_models
-        .iter()
-        .map(|m| m.default_palette(0.0))
-        .collect();
+    let bounds: Vec<Aabb> = scene.skinned_models.iter().map(culling_bounds).collect();
     let mut draws = Vec::new();
     for inst in &scene.skinned_instances {
         let m = inst.model as usize;
-        for (part, mesh) in scene.skinned_models[m].parts.iter().zip(&meshes[m]) {
+        let model = &scene.skinned_models[m];
+        let palette = model.palette_of(&inst.animation, 0.0);
+        for (part, mesh) in model.parts.iter().zip(&meshes[m]) {
             let material = scene.materials[part.material as usize];
             draws.push(SkinnedDraw {
                 mesh: *mesh,
@@ -270,7 +278,8 @@ fn upload_skinned(
                 tint: material.base_color,
                 alpha_cutoff: alpha_cutoff(&material),
                 transform: inst.transform.matrix(),
-                palette: palettes[m].clone(),
+                palette: palette.clone(),
+                bounds: bounds[m],
             });
         }
     }
@@ -279,10 +288,12 @@ fn upload_skinned(
     renderer.set_skinned(draws).map_err(|e| e.to_string())
 }
 
-/// Pose every animated placement `time` seconds into its model's default animation (T04-044): each model's palette is
-/// computed once and given to the skinned draws of all its placements with `Renderer::set_bone_palette`. Every
-/// placement of a model shows the same moment. Returns how many draws were posed; none if the renderer's skinned
-/// draws are not the ones [`upload`] made for `scene`.
+/// Pose every animated placement `time` seconds into its own player ([`ss2_world::scene::SkinnedInstance::animation`],
+/// RFC 0013 amendment 9, T04-048): each placement's palette is computed from its own player and given to its draws
+/// with `Renderer::set_bone_palette`, so two placements of the same model started at different times (or one held
+/// at its first frame, [`ss2_world::scene::AnimationPlayer::held`]) show different moments — unlike before T04-048,
+/// when every placement of a model shared the model's one default-animation clock. Returns how many draws were
+/// posed; none if the renderer's skinned draws are not the ones [`upload`] made for `scene`.
 ///
 /// # Errors
 /// When the renderer refuses a palette (the scene was validated, so this means a GPU-side mismatch).
@@ -299,17 +310,13 @@ pub(crate) fn pose_skinned(
     if expected == 0 || renderer.skinned_count() != expected {
         return Ok(0);
     }
-    let palettes: Vec<Vec<Mat4>> = scene
-        .skinned_models
-        .iter()
-        .map(|m| m.default_palette(time))
-        .collect();
     let mut draw = 0;
     for inst in &scene.skinned_instances {
-        let m = inst.model as usize;
-        for _ in &scene.skinned_models[m].parts {
+        let model = &scene.skinned_models[inst.model as usize];
+        let palette = model.palette_of(&inst.animation, time);
+        for _ in &model.parts {
             renderer
-                .set_bone_palette(draw, &palettes[m])
+                .set_bone_palette(draw, &palette)
                 .map_err(|e| e.to_string())?;
             draw += 1;
         }
