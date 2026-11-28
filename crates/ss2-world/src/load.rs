@@ -4,12 +4,18 @@
 //! [`load_level`] reads the world (`ss2-format-wld`), then each distinct model once (`.mdl`, and
 //! the external `.bmf` mesh of the few models that have one), the materials their surfaces name
 //! (embedded presets or external `.mtr` files) and finally each distinct texture once (`.tex`).
+//! A model **embedded in the world** (`wld-geometry.md`: a static model may name a
+//! `CModelConfiguration` stored in the world instead of an external `.mdl`, 109 placements of 82
+//! models in 24 retail worlds; the object has the shape of `mdl.md`) is read by the world reader
+//! ([`ss2_format_wld::EmbeddedModel`]) and built exactly like an external one, collision and
+//! lightmap included; its [`ModelData::name`] is the world's path and the object id
+//! (`<world>#<id>`).
 //! Only the world itself can fail the load: anything else that cannot be read is left out or
 //! replaced and recorded as one line in [`LevelScene::skipped`]:
 //!
-//! - a model that is missing, broken, has no mesh or no level of detail for the PC, or is
-//!   embedded in the world (`wld-geometry.md` leaves the 109 embedded models unanalysed): its
-//!   placements are dropped;
+//! - a model that is missing, broken, has no mesh or no level of detail for the PC: its
+//!   placements are dropped (of the embedded models, the 9 whose `CMesh` has neither a render
+//!   nor a collision mesh are refused by `ss2-format-bmf` and get such a line);
 //! - a material that cannot be read: [`MaterialData::FALLBACK`] (a surface without material
 //!   gets it too, without a line);
 //! - a texture that cannot be read or converted (a cube map, a block texture whose largest kept
@@ -84,6 +90,27 @@
 //! size that is not positive or a height that is not finite is replaced (no turn, 64, 0) with a
 //! skipped line.
 //!
+//! ## Haze
+//!
+//! Each haze entity of the world (`environment.md`, "Haze", read by [`ss2_format_wld::Haze`])
+//! becomes one [`HazeVolume`] of [`LevelScene::hazes`], in the world's entity-list order
+//! (T07-042; RFC 0013 amendment 4). The numbers come from the property record (reader invariant
+//! 1): the box is the record's size (`.2`, `.3`, `.4`) centred on the haze renderable's world
+//! placement, which is how the renderable stores it (its `Box3f` is the size centred on its
+//! origin in all 65 retail hazes). The spec measures the camera "in the box's own local, rotated
+//! frame" (T01-070), so the volume keeps the renderable's world **rotation** (13 retail hazes are
+//! turned, 11 of them without a parent; the world placement of an attached haze already includes
+//! its parent's, `wld-geometry.md`), normalised, with the box's corners expressed in that turned
+//! frame: `min = R⁻¹·t − size/2`, `max = R⁻¹·t + size/2`. A rotation that cannot be normalised is
+//! replaced by none with a skipped line. The colour is the stored `0xAARRGGBB`: red, green and blue
+//! taken as sRGB and made linear like the sky's tint, the alpha byte carried as it is (`/ 255`; the
+//! engine reads it, what for is open). `fade_margin` is `.5` raised to
+//! [`HazeVolume::MIN_FADE_MARGIN`], `near` is `.6` as stored (it may be negative) and `far` is the
+//! engine's clamp `max(.6, 0.01, .7)` (reader invariant 8). `.10` is not carried (its role is not
+//! established). A haze whose size is not positive or whose numbers are not finite is left out
+//! with a skipped line. A haze attached to a moving parent is placed where the world file has it;
+//! following the parent is the game's job.
+//!
 //! ## Coordinates
 //!
 //! The game's data is already in the engine's convention (right-handed, Y up, -Z forward), so
@@ -131,7 +158,7 @@ use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
 use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
-use ss2_format_wld::{Marker, ModelRef, Sky, SkyFace, World};
+use ss2_format_wld::{Haze, Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
 use ss2_render_api::scene_data::{
     AlphaMode, CubeFace, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
@@ -139,8 +166,8 @@ use ss2_render_api::scene_data::{
 use ss2_vfs::{Vfs, VfsPath};
 
 use crate::scene::{
-    CollisionData, Instance, LevelScene, LoadProgress, LoadStage, ModelData, ModelPart, SkyData,
-    SpawnPoint,
+    CollisionData, HazeVolume, Instance, LevelScene, LoadProgress, LoadStage, ModelData, ModelPart,
+    SkyData, SpawnPoint,
 };
 
 /// How to load a level.
@@ -176,8 +203,8 @@ pub struct LightmapReport {
     pub unlit_no_uvs: usize,
     /// Lit placements left unlit because their lightmap could not be read or converted.
     pub unlit_texture: usize,
-    /// Lit placements that are not in the scene at all (their model is missing, broken or
-    /// embedded, or the placement is unusable).
+    /// Lit placements that are not in the scene at all (their model is missing or broken, or
+    /// the placement is unusable).
     pub dropped: usize,
     /// Distinct loaded models that some lit placement uses.
     pub lit_models: usize,
@@ -225,7 +252,34 @@ pub fn load_level_with_report(
     report(progress, LoadStage::World, 0, 1);
     let world = World::from_bytes(&vfs.read(wld)?)?;
     report(progress, LoadStage::World, 1, 1);
+    Ok(scene_of_world(vfs, wld, &world, options, progress))
+}
 
+/// Where a model comes from: one key per distinct model of a load.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ModelKey {
+    /// An external `.mdl` file.
+    File(VfsPath),
+    /// A `CModelConfiguration` stored in the world (its object id).
+    Embedded(u32),
+}
+
+/// The rest of [`load_level_with_report`], once the world is read.
+fn scene_of_world(
+    vfs: &dyn Vfs,
+    wld: &VfsPath,
+    world: &World,
+    options: &LoadOptions,
+    progress: &mut dyn FnMut(LoadProgress),
+) -> (LevelScene, LightmapReport) {
+    let report = |progress: &mut dyn FnMut(LoadProgress), stage, done: usize, total: usize| {
+        let n = |x: usize| u32::try_from(x).unwrap_or(u32::MAX);
+        progress(LoadProgress {
+            stage,
+            done: n(done),
+            total: n(total),
+        });
+    };
     let mut loader = Loader {
         vfs,
         skipped: Vec::new(),
@@ -237,15 +291,15 @@ pub fn load_level_with_report(
         report: LightmapReport::default(),
     };
 
-    // The distinct external models in order of first use, with how many placements use each,
-    // whether any of them has a hull and how many of them are lit.
-    let mut model_order: Vec<VfsPath> = Vec::new();
-    let mut model_use: BTreeMap<VfsPath, (usize, bool, usize)> = BTreeMap::new();
-    let mut placement_model: Vec<Option<VfsPath>> = Vec::with_capacity(world.static_models.len());
+    // The distinct models in order of first use, with how many placements use each, whether any
+    // of them has a hull and how many of them are lit.
+    let mut model_order: Vec<ModelKey> = Vec::new();
+    let mut model_use: BTreeMap<ModelKey, (usize, bool, usize)> = BTreeMap::new();
+    let mut placement_model: Vec<Option<ModelKey>> = Vec::with_capacity(world.static_models.len());
     for m in &world.static_models {
         let path = match &m.model {
             ModelRef::External(raw) => match VfsPath::new(raw) {
-                Ok(p) => Some(p),
+                Ok(p) => Some(ModelKey::File(p)),
                 Err(e) => {
                     loader.skip(format!(
                         "static model {} ({}): model path `{raw}`: {e}",
@@ -254,13 +308,7 @@ pub fn load_level_with_report(
                     None
                 }
             },
-            ModelRef::Embedded(id) => {
-                loader.skip(format!(
-                    "static model {} ({}): embedded model (object {id}) is not read",
-                    m.serial, m.name
-                ));
-                None
-            }
+            ModelRef::Embedded(id) => Some(ModelKey::Embedded(*id)),
         };
         if let Some(p) = &path {
             let entry = model_use.entry(p.clone()).or_insert_with(|| {
@@ -275,18 +323,32 @@ pub fn load_level_with_report(
     }
 
     let mut models: Vec<ModelData> = Vec::new();
-    let mut model_index: BTreeMap<VfsPath, u32> = BTreeMap::new();
+    let mut model_index: BTreeMap<ModelKey, u32> = BTreeMap::new();
     report(progress, LoadStage::Models, 0, model_order.len());
-    for (i, path) in model_order.iter().enumerate() {
-        let (uses, collide, lit) = model_use[path];
-        match loader.model(path, collide, lit) {
+    for (i, key) in model_order.iter().enumerate() {
+        let (uses, collide, lit) = model_use[key];
+        let (label, built) = match key {
+            ModelKey::File(path) => (
+                format!("`{}`", path.as_str()),
+                loader.model(path, collide, lit),
+            ),
+            ModelKey::Embedded(id) => {
+                let name = format!("{}#{id}", wld.as_str());
+                let built = match world.embedded_model(*id).map(|e| &e.model) {
+                    Some(Ok(model)) => loader.model_parts(&name, model, collide, lit),
+                    Some(Err(why)) => Err(why.clone()),
+                    None => Err("the world did not read it".to_string()),
+                };
+                (format!("`{name}` (embedded model {id})"), built)
+            }
+        };
+        match built {
             Ok(model) => {
-                model_index.insert(path.clone(), index_u32(models.len()));
+                model_index.insert(key.clone(), index_u32(models.len()));
                 models.push(model);
             }
             Err(why) => loader.skip(format!(
-                "model `{}`: {why} ({uses} placement{} left out)",
-                path.as_str(),
+                "model {label}: {why} ({uses} placement{} left out)",
                 if uses == 1 { "" } else { "s" }
             )),
         }
@@ -414,7 +476,13 @@ pub fn load_level_with_report(
         }
     });
 
-    let spawns = start_markers(&world)
+    let hazes = world
+        .hazes
+        .iter()
+        .filter_map(|h| haze_volume(h, &mut loader.skipped))
+        .collect();
+
+    let spawns = start_markers(world)
         .into_iter()
         .filter_map(|marker| loader.spawn(marker))
         .collect();
@@ -425,8 +493,7 @@ pub fn load_level_with_report(
         .unwrap_or_default()
         .to_string();
     let scene = LevelScene {
-        // The hazes are read by T07-042.
-        hazes: Vec::new(),
+        hazes,
         name,
         gravity: if world.gravity.is_finite() {
             world.gravity
@@ -446,7 +513,54 @@ pub fn load_level_with_report(
         sky,
     };
     debug_assert!(scene.validate().is_ok(), "{:?}", scene.validate());
-    Ok((scene, loader.report))
+    (scene, loader.report)
+}
+
+/// The scene's haze volume of one haze entity (module docs, "Haze"); `None` with a line in
+/// `skipped` when its numbers cannot be used.
+fn haze_volume(h: &Haze, skipped: &mut Vec<String>) -> Option<HazeVolume> {
+    let length = h.rotation.length();
+    let rotation = if length.is_finite() && length > 1e-6 {
+        h.rotation / length
+    } else {
+        skipped.push(format!(
+            "haze {} ({}): rotation {:?} cannot be normalised, not turned",
+            h.serial, h.name, h.rotation
+        ));
+        Quat::IDENTITY
+    };
+    if !(h.size.is_finite() && h.size.min_element() > 0.0) || !h.translation.is_finite() {
+        skipped.push(format!(
+            "haze {} ({}): unusable box, size {} at {}",
+            h.serial, h.name, h.size, h.translation
+        ));
+        return None;
+    }
+    let centre = rotation.inverse() * h.translation;
+    let channel = |shift: u32| ((h.color >> shift) & 0xFF) as f32 / 255.0;
+    let volume = HazeVolume {
+        min: centre - h.size / 2.0,
+        max: centre + h.size / 2.0,
+        rotation,
+        colour: [
+            sky::srgb_to_linear(channel(16)),
+            sky::srgb_to_linear(channel(8)),
+            sky::srgb_to_linear(channel(0)),
+            channel(24),
+        ],
+        fade_margin: h.fade.max(HazeVolume::MIN_FADE_MARGIN),
+        near: h.near,
+        far: h.near.max(0.01).max(h.far),
+    };
+    if [h.fade, h.near, h.far].iter().all(|v| v.is_finite()) {
+        Some(volume)
+    } else {
+        skipped.push(format!(
+            "haze {} ({}): fade {}, near {}, far {} are not all finite",
+            h.serial, h.name, h.fade, h.near, h.far
+        ));
+        None
+    }
 }
 
 /// The placement of the sky cube (`environment.md`, T01-409): the entity's rotation normalised
@@ -562,9 +676,21 @@ impl Loader<'_> {
     ) -> std::result::Result<ModelData, String> {
         let bytes = self.vfs.read(path).map_err(|e| e.to_string())?;
         let model = Model::from_bytes(&bytes).map_err(|e| e.to_string())?;
+        self.model_parts(path.as_str(), &model, collide, lit)
+    }
+
+    /// Build a read model (from a `.mdl` file or embedded in the world); `name` names it in
+    /// [`ModelData::name`] and in messages.
+    fn model_parts(
+        &mut self,
+        name: &str,
+        model: &Model,
+        collide: bool,
+        lit: usize,
+    ) -> std::result::Result<ModelData, String> {
         match model.mesh() {
             MeshSource::Embedded(mesh) => {
-                self.build(path, mesh, collide, lit, &|id| model.material(id))
+                self.build(name, mesh, collide, lit, &|id| model.material(id))
             }
             MeshSource::External(raw) => {
                 let bmf = VfsPath::new(raw).map_err(|e| format!("mesh path `{raw}`: {e}"))?;
@@ -586,7 +712,7 @@ impl Loader<'_> {
                         .ok()
                         .map(|i| &materials[i])
                 };
-                self.build(path, &mesh, collide, lit, &lookup)
+                self.build(name, &mesh, collide, lit, &lookup)
             }
             MeshSource::None => Err("the model has no mesh".to_string()),
         }
@@ -596,7 +722,7 @@ impl Loader<'_> {
     /// With `lit` placements, the parts get lightmap UVs if the mesh has one candidate stream.
     fn build<'m>(
         &mut self,
-        path: &VfsPath,
+        name: &str,
         mesh: &Mesh,
         collide: bool,
         lit: usize,
@@ -608,7 +734,7 @@ impl Loader<'_> {
             .find(|l| l.is_for_pc())
             .ok_or("no level of detail is for the PC")?;
         let lightmap_stream = if lit > 0 {
-            self.lightmap_stream(path, lod, lit)
+            self.lightmap_stream(name, lod, lit)
         } else {
             None
         };
@@ -618,7 +744,7 @@ impl Loader<'_> {
             let material = match &surface.material {
                 MaterialRef::None => None,
                 MaterialRef::Embedded(id) => embedded(*id).cloned(),
-                MaterialRef::External(raw) => self.mtr(raw, path),
+                MaterialRef::External(raw) => self.mtr(raw, name),
             };
             let (material, uv_map) = self.material(material.as_ref());
             let i = *part_of.entry(material).or_insert_with(|| {
@@ -635,10 +761,7 @@ impl Loader<'_> {
             match part.mesh.validate() {
                 Ok(()) if !part.mesh.indices.is_empty() => kept.push(part),
                 Ok(()) => {}
-                Err(e) => self.skip(format!(
-                    "model `{}`: a part is left out: {e}",
-                    path.as_str()
-                )),
+                Err(e) => self.skip(format!("model `{name}`: a part is left out: {e}")),
             }
         }
         if kept.is_empty() {
@@ -665,8 +788,7 @@ impl Loader<'_> {
                 Some(c)
             } else {
                 self.skip(format!(
-                    "model `{}`: collision has non-finite positions, it does not collide",
-                    path.as_str()
+                    "model `{name}`: collision has non-finite positions, it does not collide"
                 ));
                 None
             }
@@ -674,7 +796,7 @@ impl Loader<'_> {
             None
         };
         Ok(ModelData {
-            name: path.as_str().to_string(),
+            name: name.to_string(),
             parts: kept,
             collision,
         })
@@ -682,25 +804,23 @@ impl Loader<'_> {
 
     /// The lightmap stream of `lod` by the spec's rule (`lightmap::choose`); `None` with a
     /// skipped line when there is no single candidate. Counts the case.
-    fn lightmap_stream(&mut self, path: &VfsPath, lod: &Lod, lit: usize) -> Option<usize> {
+    fn lightmap_stream(&mut self, name: &str, lod: &Lod, lit: usize) -> Option<usize> {
         let placements = if lit == 1 { "placement" } else { "placements" };
         match lightmap::choose(&lod.surfaces) {
             lightmap::StreamChoice::One(k) => Some(k),
             lightmap::StreamChoice::None => {
                 self.report.no_candidate += 1;
                 self.skip(format!(
-                    "model `{}`: no UV stream lies in [0, 1] without overlap, so no lightmap UVs \
-                     ({lit} lit {placements} drawn unlit)",
-                    path.as_str()
+                    "model `{name}`: no UV stream lies in [0, 1] without overlap, so no lightmap UVs \
+                     ({lit} lit {placements} drawn unlit)"
                 ));
                 None
             }
             lightmap::StreamChoice::Several(ks) => {
                 self.report.several_candidates += 1;
                 self.skip(format!(
-                    "model `{}`: {} UV streams (positions {ks:?}) lie in [0, 1] without overlap, \
+                    "model `{name}`: {} UV streams (positions {ks:?}) lie in [0, 1] without overlap, \
                      so no lightmap UVs ({lit} lit {placements} drawn unlit)",
-                    path.as_str(),
                     ks.len()
                 ));
                 None
@@ -709,14 +829,11 @@ impl Loader<'_> {
     }
 
     /// The preset of an external `.mtr` file (read once per load).
-    fn mtr(&mut self, raw: &str, user: &VfsPath) -> Option<Material> {
+    fn mtr(&mut self, raw: &str, user: &str) -> Option<Material> {
         let path = match VfsPath::new(raw) {
             Ok(p) => p,
             Err(e) => {
-                self.skip(format!(
-                    "material `{raw}` (used by `{}`): {e}",
-                    user.as_str()
-                ));
+                self.skip(format!("material `{raw}` (used by `{user}`): {e}"));
                 return None;
             }
         };
@@ -738,9 +855,8 @@ impl Loader<'_> {
             Ok(m) => Some(m),
             Err(e) => {
                 self.skip(format!(
-                    "material `{}` (used by `{}`): {e} (drawn with the grey material)",
-                    path.as_str(),
-                    user.as_str()
+                    "material `{}` (used by `{user}`): {e} (drawn with the grey material)",
+                    path.as_str()
                 ));
                 None
             }

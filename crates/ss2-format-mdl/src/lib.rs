@@ -141,16 +141,39 @@ impl Model {
         }
         let decoded = container.decode_objects()?;
         let config_id = Self::configuration(&decoded)?;
-        let raw: RawConfiguration = decoded.typed(config_id)?;
+        Self::from_object(&container, &decoded, config_id)
+    }
+
+    /// Read the `CModelConfiguration` object `id` of an already decoded container: the same
+    /// object shape as a `.mdl` file's, wherever it is stored. A world embeds 109 of them in
+    /// place of an external `.mdl` (`wld-geometry.md`, "Embedded models"). External references
+    /// (an external `.bmf` mesh, external materials) resolve through `container`'s file table,
+    /// and [`MaterialRef::Embedded`] ids are object ids of `container`. `CResource.1` is not
+    /// checked: that rule picks the main configuration of a `.mdl` file ([`Model::from_bytes`]).
+    ///
+    /// # Errors
+    /// [`Error::NotFound`] if there is no object `id`; [`Error::Invalid`] if it is not a
+    /// `CModelConfiguration` or breaks a rule of [`Model::from_bytes`].
+    pub fn from_object(container: &Container<'_>, decoded: &Decoded, id: u32) -> Result<Self> {
+        let object = decoded
+            .object(id)
+            .ok_or_else(|| Error::NotFound(format!("object {id}")))?;
+        let class = decoded.types.type_name(object.type_id).unwrap_or("?");
+        if class != CONFIGURATION {
+            return Err(bad(format!(
+                "object {id} is a `{class}`, not a {CONFIGURATION}"
+            )));
+        }
+        let raw: RawConfiguration = decoded.typed(id)?;
 
         let mut meshes = Vec::with_capacity(raw.instances.len());
         for instance in &raw.instances {
             meshes.push(match instance.mesh.0 {
                 None => MeshSource::None,
                 Some(id) if decoded.object(id).is_some() => {
-                    MeshSource::Embedded(Mesh::from_object(&container, &decoded, id)?)
+                    MeshSource::Embedded(Mesh::from_object(container, decoded, id)?)
                 }
-                Some(id) => MeshSource::External(external_path(&container, id).ok_or_else(
+                Some(id) => MeshSource::External(external_path(container, id).ok_or_else(
                     || {
                         bad(format!(
                             "a mesh instance refers to object {id}, which is neither an object of the file nor an external reference"
@@ -177,7 +200,7 @@ impl Model {
         ids.dedup();
         let materials = ids
             .into_iter()
-            .map(|id| Material::from_preset(&container, &decoded, id))
+            .map(|id| Material::from_preset(container, decoded, id))
             .collect::<Result<Vec<_>>>()?;
 
         let b = &raw.bounds;

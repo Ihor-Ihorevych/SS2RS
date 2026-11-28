@@ -138,7 +138,8 @@ pub struct HazeVolume {
     pub min: Vec3,
     /// The box's high corner in the volume's own frame.
     pub max: Vec3,
-    /// How the volume's frame is turned about the world origin (identity unless the haze hangs on a parent).
+    /// How the volume's frame is turned about the world origin: the haze renderable's world rotation (identity for
+    /// most hazes; 13 of the 65 retail hazes are turned, 2 of them through a parent).
     pub rotation: Quat,
     /// Linear RGBA; the alpha is carried, its use is open.
     pub colour: [f32; 4],

@@ -238,7 +238,7 @@ pub(crate) fn tint(color: u32) -> [f32; 4] {
     [channel(16), channel(8), channel(0), 1.0]
 }
 
-fn srgb_to_linear(c: f32) -> f32 {
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
         c / 12.92
     } else {
