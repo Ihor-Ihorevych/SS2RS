@@ -73,6 +73,12 @@ impl GameData {
         &self.levels
     }
 
+    /// The mounted install, to read files that are not part of any level (T04-049: a weapon's `.ep`/`.mdl`
+    /// files, read directly rather than through a `.wld` placement).
+    pub(crate) fn vfs(&self) -> &dyn Vfs {
+        self.vfs.as_ref()
+    }
+
     /// The level whose id (its folder name) or world file name is `name`, ignoring case and a `.wld` ending.
     pub(crate) fn find(&self, name: &str) -> Option<&LevelInfo> {
         let name = name.trim().to_ascii_lowercase();
@@ -172,7 +178,7 @@ pub(crate) struct WorldUpload {
 }
 
 /// How a material's alpha is drawn: blending is drawn as a cutout until the renderer sorts transparent surfaces.
-fn alpha_cutoff(material: &MaterialData) -> Option<f32> {
+pub(crate) fn alpha_cutoff(material: &MaterialData) -> Option<f32> {
     match material.alpha {
         AlphaMode::Opaque => None,
         AlphaMode::Mask { cutoff } => Some(cutoff),
@@ -549,6 +555,14 @@ pub(crate) fn take_level_screenshot(
     renderer.set_fog(fog).map_err(|e| e.to_string())?;
     let blooms = scene.blooms_at(camera.position);
     renderer.set_blooms(&blooms).map_err(|e| e.to_string())?;
+    // T04-049: the player's view-model weapon, the same fixed default the interactive app starts a level with.
+    let vm = crate::viewmodel::load_weapon_viewmodel(
+        &mut renderer,
+        game.vfs(),
+        crate::viewmodel::DEFAULT_WEAPON,
+    )
+    .map(|upload| crate::viewmodel::pose(&upload, 0.0));
+    renderer.set_viewmodel(vm).map_err(|e| e.to_string())?;
     let image = renderer
         .render_world_to_image(&camera, None, SKY)
         .map_err(|e| e.to_string())?;

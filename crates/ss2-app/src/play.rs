@@ -9,6 +9,7 @@ use ss2_physics::query::QueryWorld;
 use ss2_ui::level_select::PickerEntry;
 use ss2_ui::loading::{LoadingTracker, StageId};
 use ss2_ui::{CANVAS_H, CANVAS_W, Color, DrawList, Quad, Rect, TextAlign, TextRun, Vec2, theme};
+use ss2_vfs::Vfs;
 use ss2_world::collision::build_static;
 use ss2_world::scene::{LevelScene, LoadProgress, LoadStage};
 
@@ -73,6 +74,12 @@ impl Levels {
             total: 1,
         });
         Ok((scene, physics))
+    }
+
+    /// The mounted install, when there is game data (T04-049: the player's view-model weapon reads its `.ep`
+    /// and `.mdl` files straight from it, outside any level).
+    pub(crate) fn vfs(&self) -> Option<&dyn Vfs> {
+        self.game.as_ref().map(GameData::vfs)
     }
 
     /// The display name of `id`.
