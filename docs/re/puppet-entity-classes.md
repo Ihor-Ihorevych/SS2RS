@@ -108,7 +108,7 @@ The placed record of a puppet. 29 of the 40 members have the same name as an ent
 
 ## Open questions
 
-1. **The rest of `OnReceiveDamage`, `OnHullTouched` and `ApplyDamageImpact`** (kick damage, falling damage, material damage, the use of the co-op multiplier, score and kill credit): T01-140.
+1. ~~**The rest of `OnReceiveDamage`, `OnHullTouched` and `ApplyDamageImpact`** (kick damage, falling damage, material damage, the use of the co-op multiplier, score and kill credit): T01-140.~~ **Answered by [`puppet-damage.md`](puppet-damage.md)** (T01-140): the armour-absorption formula, the order of operations, where the co-op and enemy-vs-enemy multipliers enter, the world-kicker and material-damage rules, and that no fall-height damage formula was found in this build (itself an open question there).
 2. **The movement step** `LerpToDesiredVelocityAndLook` of each model and the feelers, flocking and steering radius rules (numbers per environment record): T01-141 (legged), T01-142 (vehicles).
 3. **Attacks**: the generic shooting chain (`PrepareForCGS` to `OnCGSFinished`), the melee and run-over blast application (`OnAnimEventMeleeDamage`), projectile spawning and the throw/launch maths (`LaunchTool`): **specified in [`puppet-attacks.md`](puppet-attacks.md)** (T01-143; its open questions T01-260 to T01-264).
 4. **Tools, carrying and rides**: the tool state machine (`CTA_`), `HandleObjectCarrying`, `TakeObject`/`ThrowObject`, the seat and ride rules (`ProcessRideRiderRelations`, `FindBestSeat`, `AutoFixingRideState`): **specified in [`puppet-tools.md`](puppet-tools.md) and [`puppet-carry-rides.md`](puppet-carry-rides.md)** (T01-144; their open questions T01-320 to T01-322; with T01-128 and T01-114).
