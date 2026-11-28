@@ -289,6 +289,73 @@ fn the_same_inputs_give_the_same_trace_and_frame_splits_do_not_matter() {
     );
 }
 
+/// A floor, a 0.1 m slab at chest height whose edge faces the walker at z = -3, and a low
+/// ceiling that leaves no room to step up onto the slab.
+fn chest_ledge() -> QueryWorld {
+    let ledge = (Vec3::new(-5.0, 1.33, -6.0), Vec3::new(5.0, 1.43, -3.0));
+    let ceiling = (Vec3::new(-50.0, 2.5, -50.0), Vec3::new(50.0, 3.0, 50.0));
+    world(&[floor(), ledge, ceiling])
+}
+
+#[test]
+fn a_thin_ledge_at_chest_height_stops_the_walker() {
+    // The ledge sits between where the old stacked spheres (at 0.4, 1.05 and 1.7 m) were widest,
+    // so they reached under it by about 0.1 m; the capsule's straight side stops at its radius.
+    let w = chest_ledge();
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut p = Walker::new(Vec3::ZERO);
+    let trace = run(&w, &mut p, &forward(), 3.0);
+    for pos in &trace {
+        assert!(pos.z > -3.0 + cfg.radius - 0.02, "under the ledge: {pos}");
+    }
+    let last = trace.last().unwrap();
+    assert!(last.z < -3.0 + cfg.radius + 0.05, "stopped short: {last}");
+    assert!(p.grounded && p.position.y.abs() < 0.02, "{}", p.position);
+}
+
+#[test]
+fn a_floor_the_walker_sinks_into_does_not_hide_a_wall() {
+    // Standing 5 cm into the floor and walking along it: one capsule cast reports only the floor
+    // (at 0, moved along, so ignored); the walker must step out of it and still see the wall.
+    let wall = (Vec3::new(-5.0, 0.0, -3.2), Vec3::new(5.0, 3.0, -3.0));
+    let w = world(&[floor(), wall]);
+    let cfg = WalkConfig::PROVISIONAL;
+    let mut p = Walker::new(Vec3::new(0.0, -0.05, -2.55));
+    p.grounded = true;
+    p.velocity = Vec3::new(0.0, 0.0, -cfg.speed);
+    let trace = run(&w, &mut p, &forward(), 1.0);
+    for pos in trace {
+        assert!(pos.z > -3.0 + cfg.radius - 0.02, "through the wall: {pos}");
+    }
+    assert!(p.grounded && p.position.y.abs() < 0.02, "{}", p.position);
+}
+
+#[test]
+fn the_capsule_walker_is_deterministic_across_runs_and_frame_splits() {
+    let w = chest_ledge();
+    let cfg = WalkConfig::PROVISIONAL;
+    let input = WalkInput {
+        wish: Vec2::new(0.3, 1.0),
+        yaw: 0.2,
+        jump: true,
+    };
+    let bits = |v: Vec3| v.to_array().map(f32::to_bits);
+    let a = run(&w, &mut Walker::new(Vec3::new(0.0, 0.5, 0.0)), &input, 3.0);
+    let b = run(&w, &mut Walker::new(Vec3::new(0.0, 0.5, 0.0)), &input, 3.0);
+    assert_eq!(
+        a.iter().copied().map(bits).collect::<Vec<_>>(),
+        b.iter().copied().map(bits).collect::<Vec<_>>()
+    );
+    // The same 3 s as 360 frames of 1/120 s and as 90 frames of 1/30 s.
+    for (frames, dt) in [(360, 1.0 / 120.0), (90, 1.0 / 30.0)] {
+        let mut c = Walker::new(Vec3::new(0.0, 0.5, 0.0));
+        for _ in 0..frames {
+            c.step(&w, &cfg, GRAVITY, &input, dt);
+        }
+        assert_eq!(bits(c.position), bits(*a.last().unwrap()), "dt {dt}");
+    }
+}
+
 #[test]
 fn bad_time_steps_do_nothing_and_a_long_frame_is_clamped() {
     let w = world(&[floor()]);

@@ -615,6 +615,16 @@ impl Triangle {
         } else {
             -normal
         };
+        // Distance to the plane is linear, so over the whole sweep it is smallest at a corner of
+        // the swept segment: if all four stay further than the radius on one side, nothing
+        // touches (the common case of a capsule walking above a floor). A tenth of a millimetre
+        // is kept against rounding.
+        let plane = |p: Vec3| (p - self.a).dot(normal);
+        let ends = [a, b, a + delta, b + delta].map(plane);
+        let clear = radius + 1e-4;
+        if ends.iter().all(|&d| d > clear) || ends.iter().all(|&d| d < -clear) {
+            return None;
+        }
         let middle = (a + b) * 0.5;
         let (on_segment, on_triangle) = self.closest_points_segment(a, b);
         if (on_segment - on_triangle).length_squared() < radius * radius {
@@ -1134,7 +1144,15 @@ impl TriMesh {
             return None;
         }
         let reach = (b - a).abs() * 0.5 + Vec3::splat(radius);
+        // The tree widens the path by the largest reach in every direction, far wider than an
+        // upright capsule is; a box around the whole sweep (with a millimetre to spare against
+        // rounding) skips the triangles it cannot reach before the exact test.
+        let start = Aabb::new(a.min(b), a.max(b)).expanded(radius + 1e-3);
+        let swept = start.union(&Aabb::new(start.min + delta, start.max + delta));
         self.first_touch((a + b) * 0.5, reach, delta, mask, |t| {
+            if !t.aabb().overlaps(&swept) {
+                return None;
+            }
             t.sweep_capsule(a, b, radius, delta)
         })
     }
