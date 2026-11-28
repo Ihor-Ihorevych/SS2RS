@@ -303,6 +303,36 @@ renderer can draw the original's bloom:
   pass tinting by the fixed three-colour ramp at `ramp`; an additive composite of `colour` (RGB times `fade`, at
   most 1; alpha not faded) onto the frame.
 
+### Amendment 7: skinned meshes (T04-006)
+
+Animated models cross the boundary as plain data in a new module, `ss2_render_api::skinning`; it names no file format,
+like `scene_data`. All additions:
+
+- `SkinnedVertex { position, normal, uv, joints: [u16; 4], weights: [f32; 4] }` (56 bytes, `Pod`) and
+  `SkinnedMeshData { vertices, indices, inverse_bind: Vec<Mat4> }`: a joint indexes `inverse_bind` (1 to
+  `MAX_BONES` = 256 bones); weights are not negative and are normalised by their sum when drawn; all zero leaves the
+  vertex at its bind position. `validate()`, `bounds()` and `skinned_position(i, palette)` (the CPU reference of the
+  shader).
+- A **palette** is one bone-to-model matrix per entry of `inverse_bind`; a vertex moves by
+  `Σ wᵢ · palette[jᵢ] · inverse_bind[jᵢ]`, so the bind pose leaves the mesh where it was authored.
+- `SkeletonData::new(Vec<SkeletonBone { id, parent: Option<u32>, rest: BoneTransform, inverse_bind }>)` (parents
+  before children, ids unique), `BoneTransform { rotation, translation }`, `rest_pose()`, `inverse_binds()`,
+  `index_of(id)`, `pose_from_tracks(translations, rotations)` (rest pose with each `(bone id, value)` track value
+  replacing that bone's part; ids that are no bone are skipped, `docs/re/ans.md` rule 3) and
+  `model_transforms(&local) -> Vec<Mat4>` (`model(bone) = model(parent) · local(bone)`). `skin_matrices(palette,
+  inverse_bind)` and `attachment_transform(instance, palette, bone, offset)` (a model held by a bone).
+- The format readers stay independent of the renderer: the caller copies a `.skl` LOD's bones into `SkeletonData` and
+  zips an `.ans` animation's track ids with a sampled `Pose` into `pose_from_tracks` (the module documentation shows the
+  three lines). The adapter for levels belongs in `ss2-world` (T04-044).
+- `ss2_render::Renderer` gains `create_skinned_mesh(&SkinnedMeshData) -> SkinnedMeshHandle`,
+  `set_skinned(Vec<SkinnedDraw { mesh, texture, tint, alpha_cutoff, transform, palette }>)` (draw `i` becomes
+  skinned instance `i`), `set_bone_palette(instance, &[Mat4])`, `set_skinned_transform(instance, Mat4)` and
+  `skinned_count()`. A palette whose length is not the mesh's bone count, or with a non-finite matrix, is refused.
+  Skinned meshes and instances are dropped with the world. They are drawn after the static batches by a second
+  pipeline of the world shader (vertex entry `vs_skinned`, the same fragment stage: lighting, fog, alpha cutoff; no
+  lightmap); each instance owns a uniform buffer of `MAX_BONES` skin matrices, multiplied on the CPU when its palette
+  is set.
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
