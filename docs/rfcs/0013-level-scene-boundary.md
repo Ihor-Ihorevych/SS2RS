@@ -293,8 +293,8 @@ renderer can draw the original's bloom:
   high_pass: f32, ramp: f32 }`: one active bloom for one frame.
 - `LevelScene::blooms_at(eye: Vec3) -> Vec<Bloom>`: every volume whose box holds the eye, with its edge fade
   (`1 - clamp(distance(eye, box inset by fade_margin) / fade_margin, 0, 1)`, as for haze) above 0, in list order.
-  The original runs each one's whole chain in turn on the frame, in its per-view sort order (open, T01-422): list
-  order is our provisional order.
+  The original runs each one's whole chain in turn on the frame; every bloom command has the same sort key, so they
+  run in the level's own object order (T01-422), which list order is.
 - `Renderer::set_blooms(&[Bloom])`, called by the app each frame. After the world pass and before the 2D overlay,
   the renderer runs per bloom: `intensity = clamp(fade * strength * BLOOM_BIAS, 0, 2)` (`BLOOM_BIAS` = 1.0, the
   video option's value, provisional), skipped below a small floor or on a target smaller than 32x32; then the
