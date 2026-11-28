@@ -89,7 +89,7 @@ pub struct SkyData {
     /// How the cube is turned in the world (the sky entity's placement rotation, applied in full; its position is
     /// never used: the cube is centred on the viewer). `docs/re/environment.md`, T01-409.
     pub rotation: Quat,
-    /// The cube's edge length in world units (64 in most levels).
+    /// The cube's half-extent (centre to face) in world units: 64 in most levels (`docs/re/environment.md`).
     pub size: f32,
     /// The viewer's height inside the cube, relative to its centre, in the same units as `size` (the sign is the
     /// spec's open question: positive puts the viewer above the centre, so the horizon drops).

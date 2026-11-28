@@ -673,7 +673,7 @@ fn a_viewer_high_in_the_cube_sees_the_ceiling_sooner() {
         return;
     };
     // Looking 20 degrees up from facing -Z: from the centre the ray meets the -Z face; from 80 % of the way to the
-    // ceiling (viewer height 0.4 x size 64 = 25.6) it meets the ceiling first.
+    // ceiling (viewer height 0.8 x half-extent 64 = 51.2) it meets the ceiling first.
     let up = Camera {
         rotation: Quat::from_rotation_x(20f32.to_radians()),
         ..camera()
@@ -685,7 +685,7 @@ fn a_viewer_high_in_the_cube_sees_the_ceiling_sooner() {
         "{:?}",
         px(&img, 32, 32)
     );
-    placed_test_sky(&mut r, Quat::IDENTITY, 25.6);
+    placed_test_sky(&mut r, Quat::IDENTITY, 51.2);
     let img = r.render_world_to_image(&up, None, SKY).unwrap();
     assert!(
         close(px(&img, 32, 32), test_sky_colour(CubeFace::PosY), 3),
