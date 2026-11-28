@@ -2,7 +2,7 @@
 //! [`ss2_ui::data_wizard::DataWizard`] with `ss2_vfs` (discovery, the install check, the remembered choice).
 //!
 //! `main` asks [`startup`] whether the wizard is needed (T10-019b); the window's wizard scene (`crate::wizard_scene`) then has every
-//! command answered by [`Host::answer`] on a worker thread and applies the [`Answer`] on the main thread. [`Host::run`] does both at
+//! command answered by [`Host::answer`] on a worker thread and applies the [`Answer`] on the main thread. `Host::run` (tests only) does both at
 //! once, which is how the whole loop is tested without a window.
 
 use std::path::{Path, PathBuf};
