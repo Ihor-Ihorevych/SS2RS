@@ -1447,6 +1447,104 @@ fn a_lit_placement_gets_its_lightmap_and_the_model_its_lightmap_uvs() {
     );
 }
 
+/// A 4 x 4 BGR lightmap, grey but where `lit(x, y)`.
+fn grey_lightmap(lit: impl Fn(u32, u32) -> bool) -> Texture {
+    let data = (0..16)
+        .flat_map(|i| {
+            let c = if lit(i % 4, i / 4) { 200 } else { 127 };
+            [c, c, c]
+        })
+        .collect();
+    tex(PixelFormat::Bgr8, 4, 4, data)
+}
+
+#[test]
+fn placements_of_a_model_with_tied_streams_choose_by_their_own_lightmap() {
+    // The lit world with its embedded model (object 15) made Box.mdl's quad plus a second UV
+    // stream (id 99) that unwraps it onto the top-left quarter: two candidates, both 0 %.
+    let mut world = World::from_bytes(&world_file_lit(0, &zlib(&lightmap_pixels()))).unwrap();
+    let mut model = Model::from_bytes(&model_file()).unwrap();
+    let MeshSource::Embedded(mesh) = &mut model.meshes[0] else {
+        panic!("Box.mdl's mesh is embedded");
+    };
+    for surface in &mut mesh.lods[0].surfaces {
+        let quarter = surface.uv_sets[0].iter().map(|[u, v]| [u / 2.0, v / 2.0]);
+        surface.uv_sets.push(quarter.collect());
+        surface.uv_map_ids.push(99);
+    }
+    world.embedded_models[0].model = Ok(model);
+    // Four lit placements of it: lit only in the quarter (the quarter stream is fully lit, the
+    // whole one a quarter), lit everywhere but there (the whole stream wins), lit everywhere
+    // (a tie: the stage-3 stream) and twice the first (one variant only).
+    let lit = world
+        .static_models
+        .iter()
+        .find(|m| m.lightmap.is_some())
+        .unwrap()
+        .clone();
+    let in_quarter = |x: u32, y: u32| x < 2 && y < 2;
+    let lightmaps = [
+        grey_lightmap(in_quarter),
+        grey_lightmap(|x, y| !in_quarter(x, y)),
+        grey_lightmap(|_, _| true),
+        grey_lightmap(in_quarter),
+    ];
+    world.static_models = lightmaps
+        .into_iter()
+        .map(|t| {
+            let mut m = lit.clone();
+            m.model = ModelRef::Embedded(15);
+            m.lightmap.as_mut().unwrap().texture = Ok(t);
+            m
+        })
+        .collect();
+    let (scene, report) = scene_of_world(
+        &CountingVfs::new(&all_files()),
+        &VfsPath::new(WLD).unwrap(),
+        &world,
+        &OPTIONS,
+        &mut |_| {},
+    );
+    scene.validate().unwrap();
+    assert!(
+        scene.skipped.iter().all(|l| !l.contains("lightmap")),
+        "{:?}",
+        scene.skipped
+    );
+    // The model and one variant: the same but for the lightmap UVs.
+    assert_eq!(scene.models.len(), 2, "{:?}", scene.skipped);
+    let [base, variant] = [&scene.models[0], &scene.models[1]];
+    assert_eq!(base.name, variant.name);
+    assert_eq!(base.collision, variant.collision);
+    let lightmap_uvs = |m: &ModelData| m.parts[0].mesh.lightmap_uvs.clone().unwrap();
+    let whole: Vec<[f32; 2]> = base.parts[0].mesh.vertices.iter().map(|v| v.uv).collect();
+    let quarter: Vec<[f32; 2]> = whole.iter().map(|[u, v]| [u / 2.0, v / 2.0]).collect();
+    // The quad's stream 0 is the material's (stage 3 puts the unused id 99 first), so the
+    // model as built carries the quarter.
+    assert_eq!(lightmap_uvs(base), quarter);
+    assert_eq!(lightmap_uvs(variant), whole);
+    let mut v = variant.clone();
+    v.parts[0].mesh.lightmap_uvs = base.parts[0].mesh.lightmap_uvs.clone();
+    assert_eq!(&v, base);
+    let models: Vec<u32> = scene.instances.iter().map(|i| i.model).collect();
+    assert_eq!(models, [0, 1, 0, 0]);
+    assert!(scene.instances.iter().all(|i| i.lightmap.is_some()));
+    assert_eq!(
+        report,
+        LightmapReport {
+            lit_placements: 4,
+            lightmapped: 4,
+            lit_models: 1,
+            several: 1,
+            several_tied: 1,
+            several_by_lit_fraction: 3,
+            several_by_order: 1,
+            variant_models: 1,
+            ..LightmapReport::default()
+        }
+    );
+}
+
 #[test]
 fn a_lightmap_that_cannot_be_read_leaves_the_placement_unlit_with_a_line() {
     let vfs = CountingVfs::new(&lit_files(b"not zlib"));

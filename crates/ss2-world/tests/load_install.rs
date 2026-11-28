@@ -457,9 +457,14 @@ fn every_embedded_model_loads() {
         let embedded: Vec<usize> = (0..scene.models.len())
             .filter(|&i| scene.models[i].name.contains(".wld#"))
             .collect();
-        built += embedded.len();
-        colliding += embedded
+        // Each model once: a lightmap variant (T07-045) has its model's name.
+        let distinct: BTreeMap<&str, usize> = embedded
             .iter()
+            .map(|&i| (scene.models[i].name.as_str(), i))
+            .collect();
+        built += distinct.len();
+        colliding += distinct
+            .values()
             .filter(|&&i| {
                 scene.models[i]
                     .collision
@@ -672,17 +677,101 @@ fn dm_stadium_is_lightmapped() {
         .count();
     assert!(lit_fences > 0);
     assert_eq!(report.lit_placements, 133);
-    // Every lit placement draws its lightmap but the one of the model with several candidate
-    // streams (left unlit until T01-420 stage 2).
+    // Every lit placement draws its lightmap, the one of the model with several candidate
+    // streams too (T07-045).
     assert_eq!(
-        (
-            report.lightmapped,
-            report.unlit_no_uvs,
-            report.several_left_unlit
-        ),
-        (132, 1, 1),
+        (report.lightmapped, report.unlit_no_uvs, report.several),
+        (133, 0, 1),
         "{report:?}"
     );
+}
+
+/// The UV map id of the stream of `mesh_path`'s first PC level of detail that `model` uses as
+/// its lightmap UVs (compared as sorted coordinates, all surfaces together).
+fn lightmap_uv_id(vfs: &dyn Vfs, model: &ss2_world::scene::ModelData) -> Option<u32> {
+    use ss2_format_mdl::{MeshSource, Model};
+    let path = VfsPath::new(&model.name).ok()?;
+    let mdl = Model::from_bytes(&vfs.read(&path).ok()?).ok()?;
+    let mesh = match mdl.mesh() {
+        MeshSource::Embedded(m) => m.clone(),
+        MeshSource::External(raw) => {
+            let bytes = vfs.read(&VfsPath::new(raw).ok()?).ok()?;
+            ss2_format_bmf::Mesh::from_bytes(&bytes).ok()?
+        }
+        MeshSource::None => return None,
+    };
+    let lod = mesh.lods.iter().find(|l| l.is_for_pc())?;
+    let sorted = |uvs: Vec<[f32; 2]>| {
+        let mut bits: Vec<[u32; 2]> = uvs.iter().map(|u| u.map(f32::to_bits)).collect();
+        bits.sort_unstable();
+        bits
+    };
+    let used = sorted(
+        model
+            .parts
+            .iter()
+            .flat_map(|p| p.mesh.lightmap_uvs.clone().unwrap_or_default())
+            .collect(),
+    );
+    let drawn: Vec<_> = lod
+        .surfaces
+        .iter()
+        .filter(|s| s.indices.len() >= 3)
+        .collect();
+    drawn
+        .first()?
+        .uv_map_ids
+        .iter()
+        .enumerate()
+        .find_map(|(k, &id)| {
+            let stream = drawn
+                .iter()
+                .flat_map(|s| s.uv_sets.get(k).cloned().unwrap_or_default())
+                .collect();
+            (sorted(stream) == used).then_some(id)
+        })
+}
+
+/// T01-420's test vectors of several candidates tied on overlap, decided by each placement's
+/// own lightmap (stage 2): `platform_03` takes UV id 5 (slot 2) in `1_7_city_metropolis`, the two
+/// `1_4_approachingcity` terrain pieces UV id 3 (slot 0).
+#[test]
+fn tied_streams_go_by_each_placements_own_lightmap() {
+    let dir = ss2_testkit::require_game_data!();
+    let vfs = ss2_vfs::mount_install(&dir).unwrap();
+    let levels = discover_levels(&vfs).unwrap();
+    for (id, model, expected) in [
+        (
+            "1_7_city_metropolis",
+            "/architecture/platform_03/platform.mdl",
+            5,
+        ),
+        ("1_4_approachingcity", "/terrain_04/terrain.mdl", 3),
+        (
+            "1_4_approachingcity",
+            "/terrain_04_b/terrain_part_02.mdl",
+            3,
+        ),
+    ] {
+        let info = level(&levels, id);
+        let (scene, report) =
+            load_level_with_report(&vfs, &info.wld, &LoadOptions::default(), &mut |_| {}).unwrap();
+        scene.validate().unwrap();
+        let ids: Vec<Option<u32>> = scene
+            .instances
+            .iter()
+            .filter(|i| i.lightmap.is_some())
+            .map(|i| &scene.models[i.model as usize])
+            .filter(|m| m.name.to_ascii_lowercase().ends_with(model))
+            .map(|m| lightmap_uv_id(&vfs, m))
+            .collect();
+        eprintln!("{id} {model}: lightmap UV ids {ids:?}; {report:?}");
+        assert!(!ids.is_empty(), "{id}: no lit {model}");
+        assert!(
+            ids.iter().all(|i| *i == Some(expected)),
+            "{id} {model}: {ids:?}"
+        );
+    }
 }
 
 /// With `SS2_LOAD_ALL=1` (release build): every level loads with its lightmaps; prints, per
@@ -722,8 +811,8 @@ fn every_level_is_lightmapped() {
         lit_instances += lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
-             models {:>3}: one {:?}, several {} unlit, near miss {} ({} not slot 0), \
-             none in range {}",
+             models {:>3}: one {:?}, several {} ({} tied, {} variants; placements by overlap \
+             {}, by lit fraction {}, by order {}), near miss {} ({} not slot 0), none in range {}",
             info.id,
             r.lightmapped,
             r.lit_placements,
@@ -732,7 +821,12 @@ fn every_level_is_lightmapped() {
             r.dropped,
             r.lit_models,
             r.one_candidate,
-            r.several_left_unlit,
+            r.several,
+            r.several_tied,
+            r.variant_models,
+            r.several_by_overlap,
+            r.several_by_lit_fraction,
+            r.several_by_order,
             r.near_miss,
             r.near_miss_not_slot_zero,
             r.none_in_range
@@ -743,7 +837,12 @@ fn every_level_is_lightmapped() {
         all.unlit_texture += r.unlit_texture;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
-        all.several_left_unlit += r.several_left_unlit;
+        all.several += r.several;
+        all.several_tied += r.several_tied;
+        all.variant_models += r.variant_models;
+        all.several_by_overlap += r.several_by_overlap;
+        all.several_by_lit_fraction += r.several_by_lit_fraction;
+        all.several_by_order += r.several_by_order;
         all.near_miss += r.near_miss;
         all.near_miss_not_slot_zero += r.near_miss_not_slot_zero;
         all.none_in_range += r.none_in_range;
@@ -756,10 +855,10 @@ fn every_level_is_lightmapped() {
     assert_eq!(lit_instances, all.lightmapped);
     assert_eq!(all.unlit_texture, 0, "{all:?}");
     // As measured: the 18,195 lit static models of `ss2-format-wld` (58 levels). Placements of
-    // models with several candidate streams (until T01-420 stage 2) and of models without any UV
-    // stream in [0, 1] (a departure from the spec's slot-0 fallback) are drawn unlit, and one
-    // placement of `dm_cockaleekie` is not in the scene. Before
-    // T07-044, 2,198 were drawn unlit for lack of a single candidate stream.
+    // models without any UV stream in [0, 1] (a departure from the spec's slot-0 fallback) are
+    // drawn unlit, and one placement of `dm_cockaleekie` is not in the scene. Before T07-044,
+    // 2,198 were drawn unlit for lack of a single candidate stream; before T07-045, 1,002 (the
+    // 902 placements of models with several candidate streams too).
     assert_eq!(
         (
             all.lit_placements,
@@ -767,11 +866,11 @@ fn every_level_is_lightmapped() {
             all.unlit_no_uvs,
             all.dropped
         ),
-        (18_195, 17_192, 1_002, 1)
+        (18_195, 18_094, 100, 1)
     );
-    // The models, by the rule that applied: one candidate (by its slot); several (left unlit);
-    // no candidate (least overlap in [0, 1], and how often that is not slot 0); no stream in
-    // [0, 1] (left unlit).
+    // The models, by the rule that applied: one candidate (by its slot); several; no candidate
+    // (least overlap in [0, 1], and how often that is not slot 0); no stream in [0, 1] (left
+    // unlit).
     assert_eq!(
         all.one_candidate,
         BTreeMap::from([(0, 2_021), (1, 195), (2, 36), (3, 2), (4, 1)])
@@ -779,11 +878,24 @@ fn every_level_is_lightmapped() {
     assert_eq!(
         (
             all.lit_models,
-            all.several_left_unlit,
+            all.several,
             all.near_miss,
             all.near_miss_not_slot_zero,
             all.none_in_range
         ),
         (2_645, 209, 156, 28, 25)
+    );
+    // Of the several-candidate models, those tied on overlap (each placement chooses); their
+    // lightmapped placements by the stage that decided: overlap (stage 1), the placement's own
+    // lit fraction (stage 2), the stage-3 order; and the model variants that took.
+    assert_eq!(
+        (
+            all.several_tied,
+            all.several_by_overlap,
+            all.several_by_lit_fraction,
+            all.several_by_order,
+            all.variant_models
+        ),
+        (159, 186, 284, 432, 29)
     );
 }
