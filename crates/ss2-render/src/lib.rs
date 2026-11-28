@@ -2,6 +2,7 @@
 //! render-to-texture; `docs/UI_RENDERER.md`).
 
 mod batch;
+mod bloom;
 mod context;
 pub mod golden;
 pub mod gpu;
