@@ -247,6 +247,26 @@ relative to its centre, in the units of `size`; the sign is the open question of
 renderer keeps the cube centred on the camera, turned by `rotation`, and shifted by `viewer_height` scaled to its own
 draw size (T04-041).
 
+### Amendment 4: distance haze (T00-038)
+
+A level's haze volumes (`docs/re/environment.md`, "Haze", T01-044/T01-070) cross the boundary so the renderer can
+draw the original's distance fog:
+
+- `ss2_render_api::Fog { colour: [f32; 3], near: f32, far: f32, strength: f32 }`: one linear fog for a frame. A
+  fragment at view distance `d` is mixed towards `colour` by `strength * clamp((d - near) / (far - near), 0, 1)`
+  (the original's screen fog is plain linear fog, `scale = 1/(far - near)`, `bias = -far * scale`).
+- `ss2_world::HazeVolume { min: Vec3, max: Vec3, rotation: Quat, colour: [f32; 4], fade_margin: f32, near: f32,
+  far: f32 }` and `LevelScene::hazes: Vec<HazeVolume>` in the file's list order. The box is `min..max` in the
+  volume's own frame, turned by `rotation` about the world origin (identity unless the haze is attached to a parent
+  entity); `colour` is linear RGBA (the alpha is carried, its use is open); `fade_margin` is `.5` (at least 0.001),
+  `near`/`far` are `.6`/`.7` (`far >= near`, as the original clamps).
+- `LevelScene::fog_at(eye: Vec3) -> Option<Fog>`: each volume's strength is
+  `fade = 1 - clamp(distance(eye, box inset by fade_margin) / fade_margin, 0, 1)`; the volume with the highest
+  `fade` wins (ties: the later in list order), `None` when every `fade` is 0. How the original combines several
+  hazes is open (T01-412): one winner is our provisional rule.
+- `Renderer::set_fog(Option<Fog>)`, called by the app each frame with `fog_at(camera eye)`. The sky is not fogged
+  (open; revisit with T01-412).
+
 ## Alternatives considered
 
 - **Feed the RFC 0002 `RenderWorld` contract directly.** It refers to models by `ModelId` through a resource
