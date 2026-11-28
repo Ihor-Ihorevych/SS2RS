@@ -17,7 +17,7 @@
 use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_render_api::scene_data::{
-    AlphaMode, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
+    AlphaMode, Fog, MaterialData, MeshData, MeshVertex, TexelFormat, TextureData,
 };
 pub use ss2_render_api::scene_data::{CubeFace, FaceBasis};
 use ss2_render_api::{Aabb, Transform};
@@ -126,6 +126,72 @@ pub struct LevelScene {
     pub skipped: Vec<String>,
     /// The sky, if the level has one.
     pub sky: Option<SkyData>,
+    /// The haze volumes, in the file's list order (RFC 0013 amendment 4); see [`LevelScene::fog_at`].
+    pub hazes: Vec<HazeVolume>,
+}
+
+/// One haze volume (`docs/re/environment.md`, "Haze"): a box with a colour and a linear fog range, fading in over
+/// `fade_margin` as the eye goes in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HazeVolume {
+    /// The box's low corner in the volume's own frame.
+    pub min: Vec3,
+    /// The box's high corner in the volume's own frame.
+    pub max: Vec3,
+    /// How the volume's frame is turned about the world origin (identity unless the haze hangs on a parent).
+    pub rotation: Quat,
+    /// Linear RGBA; the alpha is carried, its use is open.
+    pub colour: [f32; 4],
+    /// The edge fade distance (`.5`), at least [`HazeVolume::MIN_FADE_MARGIN`].
+    pub fade_margin: f32,
+    /// Where the fog starts (`.6`).
+    pub near: f32,
+    /// Where the fog is full (`.7`), at least `near`.
+    pub far: f32,
+}
+
+impl HazeVolume {
+    /// The original clamps the edge fade to at least this.
+    pub const MIN_FADE_MARGIN: f32 = 0.001;
+
+    /// How strongly the volume applies with the eye at `eye`: 1 inside the box shrunk by `fade_margin` on every face,
+    /// falling linearly to 0 at the box's own faces and 0 outside (the original's edge fade).
+    pub fn fade(&self, eye: Vec3) -> f32 {
+        let local = self.rotation.inverse() * eye;
+        let margin = self.fade_margin.max(Self::MIN_FADE_MARGIN);
+        let centre = (self.min + self.max) * 0.5;
+        // Shrink by the margin, but never past the centre.
+        let lo = (self.min + Vec3::splat(margin)).min(centre);
+        let hi = (self.max - Vec3::splat(margin)).max(centre);
+        let outside = (lo - local).max(local - hi).max(Vec3::ZERO);
+        1.0 - (outside.length() / margin).clamp(0.0, 1.0)
+    }
+}
+
+/// Bad numbers in a haze, if any.
+fn haze_problem(h: &HazeVolume) -> Option<String> {
+    let finite = h.min.is_finite()
+        && h.max.is_finite()
+        && h.colour.iter().all(|c| c.is_finite())
+        && h.fade_margin.is_finite()
+        && h.near.is_finite()
+        && h.far.is_finite();
+    if !finite {
+        return Some("is not finite".into());
+    }
+    if h.min.cmpgt(h.max).any() {
+        return Some(format!("box {} .. {} is inside out", h.min, h.max));
+    }
+    if !h.rotation.is_finite() || (h.rotation.length_squared() - 1.0).abs() > 1e-3 {
+        return Some(format!("rotation {:?}", h.rotation));
+    }
+    if h.fade_margin < HazeVolume::MIN_FADE_MARGIN {
+        return Some(format!("fade margin {}", h.fade_margin));
+    }
+    if h.far < h.near {
+        return Some(format!("far {} before near {}", h.far, h.near));
+    }
+    None
 }
 
 /// What a level load is busy with.
@@ -258,7 +324,31 @@ impl LevelScene {
         {
             return bad(format!("spawn {i} is not finite"));
         }
+        for (i, h) in self.hazes.iter().enumerate() {
+            if let Some(problem) = haze_problem(h) {
+                return bad(format!("haze {i} {problem}"));
+            }
+        }
         Ok(())
+    }
+
+    /// The fog with the eye at `eye` (RFC 0013 amendment 4): the haze volume with the strongest
+    /// [`HazeVolume::fade`] (on a tie, the later one in list order) as a linear [`Fog`]; `None` when no volume
+    /// reaches the eye. How the original combines several hazes is open (T01-412): one winner is provisional.
+    pub fn fog_at(&self, eye: Vec3) -> Option<Fog> {
+        let mut best: Option<(f32, &HazeVolume)> = None;
+        for h in &self.hazes {
+            let fade = h.fade(eye);
+            if fade > 0.0 && best.is_none_or(|(b, _)| fade >= b) {
+                best = Some((fade, h));
+            }
+        }
+        best.map(|(strength, h)| Fog {
+            colour: [h.colour[0], h.colour[1], h.colour[2]],
+            near: h.near,
+            far: h.far.max(h.near),
+            strength: strength.clamp(0.0, 1.0),
+        })
     }
 
     /// The world-space box around every instance; `None` without instances or meshes.
@@ -382,9 +472,22 @@ impl LevelScene {
                 size: SkyData::UNPLACED_SIZE,
                 viewer_height: 0.0,
             }),
+            hazes: vec![TEST_HAZE],
         }
     }
 }
+
+/// [`LevelScene::test_room`]'s haze: the far (-Z) half of the room, fading in over the metre before its south face at
+/// z = 0, a blue-grey fog from 2 m to 15 m.
+pub const TEST_HAZE: HazeVolume = HazeVolume {
+    min: Vec3::new(-10.0, -1.0, -10.0),
+    max: Vec3::new(10.0, 4.0, 0.0),
+    rotation: Quat::IDENTITY,
+    colour: [0.3, 0.35, 0.4, 1.0],
+    fade_margin: 1.0,
+    near: 2.0,
+    far: 15.0,
+};
 
 /// Where [`LevelScene::test_room`] keeps the floor's lightmap in its textures.
 pub const TEST_LIGHTMAP_TEXTURE: u32 = 7;
@@ -719,5 +822,92 @@ mod tests {
             .push(500)));
         assert!(check(&|s| s.gravity.y = f32::NAN));
         assert!(check(&|s| s.spawns[0].yaw = f32::NAN));
+    }
+}
+
+#[cfg(test)]
+mod haze_tests {
+    use super::*;
+
+    #[test]
+    fn the_fade_is_full_inside_falls_over_the_margin_and_is_zero_outside() {
+        let h = TEST_HAZE;
+        assert_eq!(h.fade(Vec3::new(0.0, 1.0, -5.0)), 1.0);
+        assert_eq!(h.fade(Vec3::new(0.0, 1.0, -1.0)), 1.0, "on the inset face");
+        assert!((h.fade(Vec3::new(0.0, 1.0, -0.5)) - 0.5).abs() < 1e-5);
+        assert_eq!(
+            h.fade(Vec3::new(0.0, 1.0, 0.0)),
+            0.0,
+            "on the box's own face"
+        );
+        assert_eq!(h.fade(Vec3::new(0.0, 1.0, 6.0)), 0.0);
+        // A turned volume: a quarter turn about +Y puts the box's -Z half on the -X side.
+        let turned = HazeVolume {
+            rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+            ..h
+        };
+        assert_eq!(turned.fade(Vec3::new(-5.0, 1.0, 0.0)), 1.0);
+        assert_eq!(turned.fade(Vec3::new(5.0, 1.0, 0.0)), 0.0);
+        // A box thinner than twice the margin still has a full middle.
+        let thin = HazeVolume {
+            min: Vec3::new(-0.5, -0.5, -0.5),
+            max: Vec3::new(0.5, 0.5, 0.5),
+            ..h
+        };
+        assert_eq!(thin.fade(Vec3::ZERO), 1.0);
+    }
+
+    #[test]
+    fn the_test_room_fogs_its_far_half_and_the_strongest_haze_wins() {
+        let mut room = LevelScene::test_room();
+        room.validate().unwrap();
+        assert_eq!(
+            room.fog_at(room.start().position + Vec3::Y),
+            None,
+            "the spawn is outside"
+        );
+        let fog = room.fog_at(Vec3::new(0.0, 1.0, -5.0)).unwrap();
+        assert_eq!(
+            (fog.colour, fog.near, fog.far, fog.strength),
+            ([0.3, 0.35, 0.4], 2.0, 15.0, 1.0)
+        );
+        fog.validate().unwrap();
+        // A second, red haze over the whole room: deep in the far half both are full, the later one wins; near the
+        // south edge of the first only the second is full.
+        room.hazes.push(HazeVolume {
+            min: Vec3::new(-20.0, -5.0, -20.0),
+            max: Vec3::new(20.0, 10.0, 20.0),
+            colour: [1.0, 0.0, 0.0, 1.0],
+            ..TEST_HAZE
+        });
+        assert_eq!(
+            room.fog_at(Vec3::new(0.0, 1.0, -5.0)).unwrap().colour,
+            [1.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            room.fog_at(Vec3::new(0.0, 1.0, -0.5)).unwrap().colour,
+            [1.0, 0.0, 0.0]
+        );
+        room.hazes.reverse();
+        assert_eq!(
+            room.fog_at(Vec3::new(0.0, 1.0, -5.0)).unwrap().colour,
+            [0.3, 0.35, 0.4]
+        );
+    }
+
+    #[test]
+    fn bad_hazes_are_refused() {
+        let check = |f: &dyn Fn(&mut HazeVolume)| {
+            let mut room = LevelScene::test_room();
+            f(&mut room.hazes[0]);
+            room.validate().is_err()
+        };
+        assert!(!check(&|_| {}));
+        assert!(check(&|h| h.min.x = 50.0));
+        assert!(check(&|h| h.max.y = f32::NAN));
+        assert!(check(&|h| h.colour[3] = f32::INFINITY));
+        assert!(check(&|h| h.rotation = Quat::from_xyzw(0.0, 0.0, 0.0, 2.0)));
+        assert!(check(&|h| h.fade_margin = 0.0));
+        assert!(check(&|h| h.far = 1.0));
     }
 }
