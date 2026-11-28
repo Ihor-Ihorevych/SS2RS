@@ -7,7 +7,7 @@ registered.
 ## `TickLoop`: real time in, ticks out
 
 ```rust
-let mut sim = Simulation::new(TickConfig { tick_hz: 30, ..Default::default() }, world)?;
+let mut sim = Simulation::new(TickConfig::default(), world)?;
 sim.schedule_mut().add(Phase::Move, "walk", 0, |world, ctx| { /* ctx.tick, ctx.dt_seconds() */ })?;
 
 // every frame, with the real time since the last frame:
@@ -23,12 +23,14 @@ draw(sim.world(), frame.alpha);             // alpha in [0, 1): how far into the
   one tick while paused (requests add up; it is ignored when running, and resuming forgets an unused request).
 - **Time scale** in thousandths (`set_time_scale_permille(500)` is half speed, 2000 double, 0 stops time without pausing), limited to
   8000. A change applies from then on and keeps the leftover time. In a network game only the server may change it.
-- **No spiral of death.** A frame longer than `max_frame_micros` (default 250 ms: a breakpoint, a window drag) counts as that long, and one
+- **No spiral of death.** A frame longer than `max_frame_micros` (default 100 ms, as the original drops time beyond 100 ms: a breakpoint, a window drag) counts as that long, and one
   call returns at most `max_ticks_per_frame` (default 8) ticks. What is given up is reported in `FrameTicks::dropped_ticks`, and the next
   frame is normal, not paying it back.
 - `reset_to_tick(n)` jumps the counter (loading a save, joining a game in progress) and forgets the leftover.
-- `tick_hz` is 1 to 1000. **The default 30 is a placeholder**: the original's rate comes from the main-loop spec (roadmap T01-022, not
-  yet written). Nothing else in the loop depends on the value.
+- `tick_hz` is 1 to 1000. **The default is 60** (`DEFAULT_TICK_HZ`, the owner's decision T01-089). The original has no fixed tick
+  (`docs/re/main-loop.md`: a variable step of 1 to 100 ms, physics sub-steps of at most 10 ms, time beyond 100 ms dropped); a fixed
+  60 Hz keeps co-op and replays deterministic. Physics runs `PHYSICS_SUBSTEPS_PER_TICK` = 2 sub-steps per tick, 120 Hz, under the
+  original's 10 ms cap (the walker's 1/120 s step). Nothing else in the loop depends on the value.
 
 ## `Schedule`: the order of systems
 
@@ -53,7 +55,7 @@ last two first **survived** and the step test was extended for them.
 
 ## Not covered
 
-- **The tick rate of the original** (T01-022) and the **main-loop timers and pause semantics** it will describe; the default is a placeholder.
+- **The main-loop timers and pause semantics** of the original (`main-loop.md`) beyond the tick rate, which is decided (60 Hz, T01-089).
 - **Parallel systems.** Systems run one after another. A system graph with declared reads and writes is a later optimisation, and it
   must keep this deterministic order observable (RFC 0005 on the ECS decides what a "world" is).
 - **Server and client halves** (`ServerSim`, `ClientSim`, loopback): T08-004. **Replication** of what the `Replicate` phase builds: T08-007.
