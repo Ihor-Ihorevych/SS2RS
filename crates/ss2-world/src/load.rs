@@ -56,15 +56,18 @@
 //! are chosen from the mesh data by the spec's rule (reader invariant 3, T01-407): of the UV
 //! streams of the drawn level of detail, the one whose coordinates all lie in [0, 1] and whose
 //! triangles, over all surfaces together, do not overlap (at most 2 % of the rasterized area
-//! covered twice). With several such streams the lowest-indexed one is taken, with none the
-//! mesh's slot 0 (the T01-414 tie-breaks); every part of the model gets
-//! [`MeshData::lightmap_uvs`] from the chosen stream. Only a model where some drawn surface has
-//! no UV stream at all gets none: its lit placements stay unlit and one skipped line says why.
-//! This is done only for models that some lit placement uses. A placement then gets
-//! [`Instance::lightmap`]: its texture, converted by the same texture path as the others (the
-//! size limit, BC kept, RGBA8 from BGR/BGRA, appended after the file textures); a lightmap
-//! that cannot be read or converted leaves the placement unlit with a skipped line. Of several oven modifiers only the first is used (the spec does
-//! not say how they combine). The UVs are kept as authored, like the base UVs.
+//! covered twice). The spec's data also says the lightmap stream is usually one the surface's
+//! own material does not use (T01-407), so the other cases prefer such a stream: of several
+//! candidates the lowest-indexed one no surface's material uses (any UV map id of any config),
+//! else the lowest-indexed candidate; with none the lowest-indexed stream no material uses, else
+//! slot 0 (the T01-414 fallbacks). Every part of the model gets [`MeshData::lightmap_uvs`] from
+//! the chosen stream. Only a model where some drawn surface has no UV stream at all gets none:
+//! its lit placements stay unlit and one skipped line says why. This is done only for models
+//! that some lit placement uses. A placement then gets [`Instance::lightmap`]: its texture,
+//! converted by the same texture path as the others (the size limit, BC kept, RGBA8 from
+//! BGR/BGRA, appended after the file textures); a lightmap that cannot be read or converted
+//! leaves the placement unlit with a skipped line. Of several oven modifiers only the first is
+//! used (the spec does not say how they combine). The UVs are kept as authored, like the base UVs.
 //! [`load_level_with_report`] also returns how often each case happened ([`LightmapReport`]).
 //!
 //! ## Sky
@@ -157,7 +160,7 @@ use ss2_core::math::{Quat, Vec3};
 use ss2_core::{Error, Result};
 use ss2_format_bmf::{CollisionMesh, Lod, MaterialRef, Mesh, Surface};
 use ss2_format_mdl::{MeshSource, Model};
-use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig};
+use ss2_format_mtr::{Material, MaterialFile, Param, ShaderConfig, TextureRef};
 use ss2_format_tex::{PixelFormat, Texture, WRAP_CLAMP};
 use ss2_format_wld::{Haze, Marker, ModelRef, Sky, SkyFace, World};
 use ss2_render_api::Transform;
@@ -212,12 +215,25 @@ pub struct LightmapReport {
     /// Of those, models with exactly one candidate stream, by the stream's position in the
     /// surfaces' UV streams (slot order).
     pub one_candidate: BTreeMap<usize, usize>,
-    /// Lit models with several candidate streams, given the lowest-indexed one.
-    pub several_candidates: usize,
-    /// Lit models without any candidate stream, given slot 0.
+    /// Lit models with several candidate streams, given the lowest-indexed one their material
+    /// does not use.
+    pub several_unused: usize,
+    /// Lit models with several candidate streams, all used by their material, given the
+    /// lowest-indexed one.
+    pub several_lowest: usize,
+    /// Of the models with several candidates, those whose stream is not the lowest-indexed
+    /// candidate (the material uses that one).
+    pub several_moved: usize,
+    /// Lit models without any candidate stream, given the lowest-indexed stream their material
+    /// does not use.
+    pub none_unused: usize,
+    /// Lit models without any candidate stream whose material uses every stream, given slot 0.
     pub slot_zero: usize,
-    /// Lit models without any candidate stream and without slot 0 on some drawn surface: no
-    /// lightmap UVs.
+    /// Of the models without a candidate, those whose stream is not slot 0 (the material uses
+    /// slot 0).
+    pub none_moved: usize,
+    /// Lit models without any candidate stream where some drawn surface has no stream at all:
+    /// no lightmap UVs.
     pub no_stream: usize,
 }
 
@@ -737,18 +753,28 @@ impl Loader<'_> {
             .iter()
             .find(|l| l.is_for_pc())
             .ok_or("no level of detail is for the PC")?;
-        let lightmap_choice = (lit > 0).then(|| lightmap::choose(&lod.surfaces));
+        let materials: Vec<Option<Material>> = lod
+            .surfaces
+            .iter()
+            .map(|surface| match &surface.material {
+                MaterialRef::None => None,
+                MaterialRef::Embedded(id) => embedded(*id).cloned(),
+                MaterialRef::External(raw) => self.mtr(raw, name),
+            })
+            .collect();
+        let lightmap_choice = (lit > 0).then(|| {
+            let uv_ids: Vec<Vec<u32>> = materials
+                .iter()
+                .map(|m| m.as_ref().map(material_uv_ids).unwrap_or_default())
+                .collect();
+            lightmap::choose(&lod.surfaces, &uv_ids)
+        });
         let lightmap_stream = lightmap_choice
             .as_ref()
             .and_then(lightmap::StreamChoice::stream);
         let mut parts: Vec<ModelPart> = Vec::new();
         let mut part_of: BTreeMap<u32, usize> = BTreeMap::new();
-        for surface in &lod.surfaces {
-            let material = match &surface.material {
-                MaterialRef::None => None,
-                MaterialRef::Embedded(id) => embedded(*id).cloned(),
-                MaterialRef::External(raw) => self.mtr(raw, name),
-            };
+        for (surface, material) in lod.surfaces.iter().zip(&materials) {
             let (material, uv_map) = self.material(material.as_ref());
             let i = *part_of.entry(material).or_insert_with(|| {
                 parts.push(ModelPart {
@@ -809,8 +835,26 @@ impl Loader<'_> {
         report.lit_models += 1;
         match choice {
             lightmap::StreamChoice::One(k) => *report.one_candidate.entry(*k).or_default() += 1,
-            lightmap::StreamChoice::Lowest(_) => report.several_candidates += 1,
-            lightmap::StreamChoice::SlotZero => report.slot_zero += 1,
+            lightmap::StreamChoice::Several {
+                candidates,
+                stream,
+                unused,
+            } => {
+                *if *unused {
+                    &mut report.several_unused
+                } else {
+                    &mut report.several_lowest
+                } += 1;
+                report.several_moved += usize::from(candidates.first() != Some(stream));
+            }
+            lightmap::StreamChoice::NoCandidate { stream, unused } => {
+                *if *unused {
+                    &mut report.none_unused
+                } else {
+                    &mut report.slot_zero
+                } += 1;
+                report.none_moved += usize::from(*stream != 0);
+            }
             lightmap::StreamChoice::Nothing => {
                 report.no_stream += 1;
                 let placements = if lit == 1 { "placement" } else { "placements" };
@@ -967,6 +1011,27 @@ fn alpha_of(config: &ShaderConfig) -> AlphaMode {
         return AlphaMode::Mask { cutoff };
     }
     AlphaMode::Opaque
+}
+
+/// Every UV map id `material` uses: of all its configs, the UV map of each texture group whose
+/// texture is not empty (`mtr.md`: the UV map id is the member after its texture, "UV map ids").
+fn material_uv_ids(material: &Material) -> Vec<u32> {
+    material
+        .configs
+        .iter()
+        .flat_map(|c| {
+            c.params.iter().filter_map(|(member, p)| match p {
+                Param::UvMap(id)
+                    if member.checked_sub(1).and_then(|t| c.param(t)).is_some_and(
+                        |t| matches!(t, Param::Texture(r) if *r != TextureRef::None),
+                    ) =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+        })
+        .collect()
 }
 
 /// Append one surface's triangles to `mesh`, taking the UV stream with map id `uv_map` (else the

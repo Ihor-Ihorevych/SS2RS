@@ -8,10 +8,19 @@
 //! coordinates are inside [0, 1] (within [`RANGE_EPS`]) and at most [`MAX_OVERLAP`] of the
 //! rasterized area of all its triangles (all surfaces together, since they share one lightmap)
 //! is covered twice or more. Streams are identified by their position in each surface's
-//! [`Surface::uv_sets`] (slot order, `bmf.md` member 12/14). Exactly one candidate is the
-//! lightmap's stream; of several the lowest-indexed one is taken; with none the mesh's slot 0
-//! is taken regardless of its range or overlap. Only a mesh where some surface with triangles
-//! has no stream at all (no slot 0) is left without one.
+//! [`Surface::uv_sets`] (slot order, `bmf.md` member 12/14).
+//!
+//! Exactly one candidate is the lightmap's stream. For the other cases the spec's data says the
+//! lightmap stream is usually one the surface's own material does not use for any of its texture
+//! groups (T01-407: 83 % of the single-candidate instances), so a stream is **material-unused**
+//! when, on no surface with triangles, the material's UV map ids (every `CShaderArgValUVMap` of
+//! every config, `mtr.md`) include the id that surface declares at that position. Then:
+//! - several candidates: the lowest-indexed material-unused candidate, else the lowest-indexed
+//!   candidate (T01-414's rule);
+//! - no candidate: of the streams every surface with triangles has, the lowest-indexed
+//!   material-unused one, else slot 0 (T01-414's rule), regardless of range or overlap.
+//!
+//! Only a mesh where some surface with triangles has no stream at all is left without one.
 
 use ss2_format_bmf::Surface;
 
@@ -28,11 +37,17 @@ const GRID: usize = 256;
 pub(crate) enum StreamChoice {
     /// Exactly one candidate: the stream at this position.
     One(usize),
-    /// Several streams qualify (their positions, ascending): the first is taken.
-    Lowest(Vec<usize>),
-    /// No stream qualifies: slot 0 is taken.
-    SlotZero,
-    /// No stream qualifies and some surface with triangles has no slot 0: nothing is taken.
+    /// Several streams qualify (`candidates`, ascending); `stream` is taken: the lowest
+    /// material-unused one when `unused`, else the lowest one.
+    Several {
+        candidates: Vec<usize>,
+        stream: usize,
+        unused: bool,
+    },
+    /// No stream qualifies; `stream` is taken: the lowest material-unused one when `unused`,
+    /// else slot 0.
+    NoCandidate { stream: usize, unused: bool },
+    /// No stream qualifies and some surface with triangles has no stream: nothing is taken.
     Nothing,
 }
 
@@ -41,25 +56,62 @@ impl StreamChoice {
     pub(crate) fn stream(&self) -> Option<usize> {
         match self {
             Self::One(k) => Some(*k),
-            Self::Lowest(ks) => ks.first().copied(),
-            Self::SlotZero => Some(0),
+            Self::Several { stream, .. } | Self::NoCandidate { stream, .. } => Some(*stream),
             Self::Nothing => None,
         }
     }
 }
 
-/// Choose the lightmap stream of the surfaces of one level of detail.
-pub(crate) fn choose(surfaces: &[Surface]) -> StreamChoice {
-    let drawn = || surfaces.iter().filter(|s| s.indices.len() >= 3);
-    let streams = drawn().map(|s| s.uv_sets.len()).max().unwrap_or(0);
+/// Choose the lightmap stream of the surfaces of one level of detail. `material_uv_ids[i]` holds
+/// the UV map ids that surface `i`'s material uses (empty without a material); a surface past
+/// its end counts as using none.
+pub(crate) fn choose(surfaces: &[Surface], material_uv_ids: &[Vec<u32>]) -> StreamChoice {
+    let drawn = || {
+        surfaces
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.indices.len() >= 3)
+    };
+    let streams = drawn().map(|(_, s)| s.uv_sets.len()).max().unwrap_or(0);
+    let unused = |k: usize| {
+        drawn().all(|(i, s)| {
+            let used = material_uv_ids.get(i).map_or(&[][..], Vec::as_slice);
+            s.uv_map_ids.get(k).is_none_or(|id| !used.contains(id))
+        })
+    };
     let candidates: Vec<usize> = (0..streams)
         .filter(|&k| is_candidate(surfaces, k))
         .collect();
     match candidates.as_slice() {
-        [] if streams > 0 && drawn().all(|s| !s.uv_sets.is_empty()) => StreamChoice::SlotZero,
-        [] => StreamChoice::Nothing,
+        [] => {
+            // Only a stream every surface with triangles has.
+            let common = drawn().map(|(_, s)| s.uv_sets.len()).min().unwrap_or(0);
+            if common == 0 {
+                return StreamChoice::Nothing;
+            }
+            match (0..common).find(|&k| unused(k)) {
+                Some(stream) => StreamChoice::NoCandidate {
+                    stream,
+                    unused: true,
+                },
+                None => StreamChoice::NoCandidate {
+                    stream: 0,
+                    unused: false,
+                },
+            }
+        }
         [k] => StreamChoice::One(*k),
-        _ => StreamChoice::Lowest(candidates),
+        _ => {
+            let (stream, unused) = match candidates.iter().find(|&&k| unused(k)) {
+                Some(&k) => (k, true),
+                None => (candidates[0], false),
+            };
+            StreamChoice::Several {
+                candidates,
+                stream,
+                unused,
+            }
+        }
     }
 }
 
@@ -190,6 +242,11 @@ mod tests {
         (0..quads).flat_map(f).collect()
     }
 
+    /// Choose with no material: every stream is material-unused.
+    fn pick(surfaces: &[Surface]) -> StreamChoice {
+        choose(surfaces, &[])
+    }
+
     #[test]
     fn the_unwrap_is_chosen_over_a_tiling_stream() {
         // Slot 0 tiles (outside [0, 1]), slot 1 is the unwrap.
@@ -197,7 +254,7 @@ mod tests {
             4,
             vec![stream(4, |_| tile(3.0)), stream(4, |q| strip(q, 4))],
         );
-        assert_eq!(choose(&[s]), StreamChoice::One(1));
+        assert_eq!(pick(&[s]), StreamChoice::One(1));
     }
 
     #[test]
@@ -207,7 +264,7 @@ mod tests {
             4,
             vec![stream(4, |_| tile(1.0)), stream(4, |q| strip(q, 4))],
         );
-        assert_eq!(choose(&[s]), StreamChoice::One(1));
+        assert_eq!(pick(&[s]), StreamChoice::One(1));
     }
 
     #[test]
@@ -218,20 +275,13 @@ mod tests {
         let right = |q| strip(q + 2, 4);
         let a = surface(2, vec![stream(2, left), stream(2, left)]);
         let b = surface(2, vec![stream(2, left), stream(2, right)]);
-        assert_eq!(choose(&[a, b]), StreamChoice::One(1));
+        assert_eq!(pick(&[a, b]), StreamChoice::One(1));
     }
 
     #[test]
-    fn several_candidates_take_the_lowest_indexed_one() {
-        let twice = surface(
-            2,
-            vec![stream(2, |q| strip(q, 2)), stream(2, |q| strip(q, 4))],
-        );
-        let choice = choose(&[twice]);
-        assert_eq!(choice, StreamChoice::Lowest(vec![0, 1]));
-        assert_eq!(choice.stream(), Some(0));
-        // Slot 0 tiles; slots 1 and 2 are both unwraps: slot 1 wins.
-        let later = surface(
+    fn several_candidates_prefer_the_lowest_material_unused_one() {
+        // Slot 0 tiles; slots 1 and 2 (UV ids 4 and 5) are both unwraps.
+        let s = surface(
             2,
             vec![
                 stream(2, |_| tile(3.0)),
@@ -239,39 +289,93 @@ mod tests {
                 stream(2, |q| strip(q, 4)),
             ],
         );
-        let choice = choose(&[later]);
-        assert_eq!(choice, StreamChoice::Lowest(vec![1, 2]));
+        let s = std::slice::from_ref(&s);
+        let several = |stream, unused| StreamChoice::Several {
+            candidates: vec![1, 2],
+            stream,
+            unused,
+        };
+        // No material: the lowest candidate, which is unused.
+        assert_eq!(pick(s), several(1, true));
+        // The material uses ids 3 and 4 (slots 0 and 1): slot 2.
+        let choice = choose(s, &[vec![3, 4]]);
+        assert_eq!(choice, several(2, true));
+        assert_eq!(choice.stream(), Some(2));
+        // It uses both candidates: the lowest one.
+        let choice = choose(s, &[vec![5, 4]]);
+        assert_eq!(choice, several(1, false));
         assert_eq!(choice.stream(), Some(1));
     }
 
     #[test]
-    fn no_candidate_falls_back_to_slot_zero() {
+    fn an_id_used_on_any_surface_makes_the_stream_used() {
+        let a = surface(
+            1,
+            vec![stream(1, |q| strip(q, 4)), stream(1, |q| strip(q, 4))],
+        );
+        let b = surface(
+            1,
+            vec![
+                stream(1, |q| strip(q + 1, 4)),
+                stream(1, |q| strip(q + 1, 4)),
+            ],
+        );
+        // Surface 1's material uses id 3 (slot 0), surface 0 has none.
+        assert_eq!(choose(&[a, b], &[vec![], vec![3]]).stream(), Some(1));
+    }
+
+    #[test]
+    fn no_candidate_prefers_the_lowest_material_unused_stream_then_slot_zero() {
         // Slot 0 tiles outside [0, 1], slot 1 is stacked inside it: neither qualifies.
-        let tiling = surface(2, vec![stream(2, |_| tile(2.0)), stream(2, |_| tile(1.0))]);
-        let choice = choose(&[tiling]);
-        assert_eq!(choice, StreamChoice::SlotZero);
+        let s = surface(2, vec![stream(2, |_| tile(2.0)), stream(2, |_| tile(1.0))]);
+        let s = std::slice::from_ref(&s);
+        let none = |stream, unused| StreamChoice::NoCandidate { stream, unused };
+        assert_eq!(pick(s), none(0, true));
+        // The material uses id 3 (slot 0): slot 1.
+        let choice = choose(s, &[vec![3]]);
+        assert_eq!(choice, none(1, true));
+        assert_eq!(choice.stream(), Some(1));
+        // It uses both: slot 0.
+        let choice = choose(s, &[vec![4, 3]]);
+        assert_eq!(choice, none(0, false));
         assert_eq!(choice.stream(), Some(0));
     }
 
     #[test]
-    fn without_a_slot_zero_nothing_is_chosen() {
-        assert_eq!(choose(&[]), StreamChoice::Nothing);
-        assert_eq!(choose(&[surface(2, vec![])]), StreamChoice::Nothing);
-        // One surface has streams (none qualifies), the other none at all.
+    fn no_candidate_only_takes_a_stream_every_surface_has() {
+        // Surface 1 has only slot 0, which surface 0's material uses (id 3); slot 1 is missing
+        // from surface 1, so slot 0 is taken although it is used.
+        let a = surface(2, vec![stream(2, |_| tile(2.0)), stream(2, |_| tile(2.0))]);
+        let b = surface(2, vec![stream(2, |_| tile(2.0))]);
+        assert_eq!(
+            choose(&[a, b], &[vec![3]]),
+            StreamChoice::NoCandidate {
+                stream: 0,
+                unused: false
+            }
+        );
+    }
+
+    #[test]
+    fn without_a_stream_on_every_surface_nothing_is_chosen() {
+        assert_eq!(pick(&[]), StreamChoice::Nothing);
+        assert_eq!(pick(&[surface(2, vec![])]), StreamChoice::Nothing);
+        // One surface has a stream (it does not qualify), the other none at all.
         let tiling = surface(2, vec![stream(2, |_| tile(2.0))]);
         let bare = surface(1, vec![]);
-        let choice = choose(&[tiling, bare]);
+        let choice = pick(&[tiling, bare]);
         assert_eq!(choice, StreamChoice::Nothing);
         assert_eq!(choice.stream(), None);
     }
 
     #[test]
-    fn a_single_candidate_is_still_taken_as_it_is() {
+    fn a_single_candidate_is_taken_even_when_the_material_uses_it() {
         let s = surface(
             4,
             vec![stream(4, |_| tile(3.0)), stream(4, |q| strip(q, 4))],
         );
-        let choice = choose(&[s]);
+        // Id 4 is slot 1, the one candidate.
+        let choice = choose(&[s], &[vec![4]]);
         assert_eq!(choice, StreamChoice::One(1));
         assert_eq!(choice.stream(), Some(1));
     }
@@ -283,10 +387,16 @@ mod tests {
             vec![stream(1, |q| strip(q, 2)), stream(1, |q| strip(q, 2))],
         );
         let b = surface(1, vec![stream(1, |q| strip(q + 1, 2))]);
-        assert_eq!(choose(&[a, b]), StreamChoice::One(0));
+        assert_eq!(pick(&[a, b]), StreamChoice::One(0));
         let mut nan = stream(2, |q| strip(q, 2));
         nan[1] = [f32::NAN, 0.0];
-        assert_eq!(choose(&[surface(2, vec![nan])]), StreamChoice::SlotZero);
+        assert_eq!(
+            pick(&[surface(2, vec![nan])]),
+            StreamChoice::NoCandidate {
+                stream: 0,
+                unused: true
+            }
+        );
     }
 
     #[test]
@@ -300,13 +410,13 @@ mod tests {
         });
         let s = surface(n * n, vec![grid]);
         assert_eq!(overlap(std::slice::from_ref(&s), 0), 0.0);
-        assert_eq!(choose(&[s]), StreamChoice::One(0));
+        assert_eq!(pick(&[s]), StreamChoice::One(0));
     }
 
     #[test]
     fn coordinates_a_hair_outside_the_square_still_count() {
         let mut s = stream(2, |q| strip(q, 2));
         s[0] = [-0.0005, 1.0005];
-        assert_eq!(choose(&[surface(2, vec![s])]), StreamChoice::One(0));
+        assert_eq!(pick(&[surface(2, vec![s])]), StreamChoice::One(0));
     }
 }

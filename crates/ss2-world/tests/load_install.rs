@@ -714,7 +714,7 @@ fn every_level_is_lightmapped() {
         lit_instances += lit;
         eprintln!(
             "{:<24} lit {:>4}/{:<4} placements ({:>3} no UVs, {} bad texture, {:>3} dropped); \
-             models {:>3}: one {:?}, several {}, slot 0 {}, no stream {}",
+             models {:>3}: one {:?}, several {}+{} ({} moved), none {}+{} ({} moved), no stream {}",
             info.id,
             r.lightmapped,
             r.lit_placements,
@@ -723,8 +723,12 @@ fn every_level_is_lightmapped() {
             r.dropped,
             r.lit_models,
             r.one_candidate,
-            r.several_candidates,
+            r.several_unused,
+            r.several_lowest,
+            r.several_moved,
+            r.none_unused,
             r.slot_zero,
+            r.none_moved,
             r.no_stream
         );
         all.lit_placements += r.lit_placements;
@@ -733,8 +737,12 @@ fn every_level_is_lightmapped() {
         all.unlit_texture += r.unlit_texture;
         all.dropped += r.dropped;
         all.lit_models += r.lit_models;
-        all.several_candidates += r.several_candidates;
+        all.several_unused += r.several_unused;
+        all.several_lowest += r.several_lowest;
+        all.several_moved += r.several_moved;
+        all.none_unused += r.none_unused;
         all.slot_zero += r.slot_zero;
+        all.none_moved += r.none_moved;
         all.no_stream += r.no_stream;
         for (k, n) in r.one_candidate {
             *all.one_candidate.entry(k).or_default() += n;
@@ -757,8 +765,10 @@ fn every_level_is_lightmapped() {
         ),
         (18_195, 18_194, 0, 1)
     );
-    // The models, by the rule that chose their stream: one candidate (by its slot), the lowest of
-    // several, slot 0 for none; no model is left without a stream.
+    // The models, by the rule that chose their stream: one candidate (by its slot); several
+    // (material-unused, else lowest); none (material-unused, else slot 0); no model is left
+    // without a stream. "Moved" counts the models whose stream differs from T01-414's plain
+    // lowest-index / slot-0 rule.
     assert_eq!(
         all.one_candidate,
         BTreeMap::from([(0, 2_021), (1, 195), (2, 36), (3, 2), (4, 1)])
@@ -766,10 +776,14 @@ fn every_level_is_lightmapped() {
     assert_eq!(
         (
             all.lit_models,
-            all.several_candidates,
+            all.several_unused,
+            all.several_lowest,
+            all.several_moved,
+            all.none_unused,
             all.slot_zero,
+            all.none_moved,
             all.no_stream
         ),
-        (2_645, 209, 181, 0)
+        (2_645, 171, 38, 17, 158, 23, 16, 0)
     );
 }
