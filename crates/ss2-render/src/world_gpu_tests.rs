@@ -764,3 +764,45 @@ fn fog_greys_out_the_far_surface_and_leaves_the_near_one_and_the_sky_alone() {
             .is_err()
     );
 }
+
+#[test]
+fn a_missing_floor_is_left_open_under_a_ceiling_and_tinted_without_one() {
+    let _gpu = gpu_test_guard();
+    let Some(mut r) = offscreen((32, 32)) else {
+        return;
+    };
+    let tint = [0.2, 0.4, 0.6, 1.0];
+    let ceiling = r
+        .create_texture(&TextureData::solid([255, 255, 255, 255]))
+        .unwrap();
+    let down = facing(CubeFace::NegY, Vec3::ZERO, 60.0);
+    let black = Color([0.0, 0.0, 0.0, 1.0]);
+    // Floor missing, ceiling present: looking straight down shows the clear colour (an open bottom).
+    let mut faces = [None; 6];
+    faces[CubeFace::PosY.index()] = Some(ceiling);
+    r.set_sky(Some(SkyBatch {
+        faces,
+        tint,
+        rotation: Quat::IDENTITY,
+        size: 64.0,
+        viewer_height: 0.0,
+    }))
+    .unwrap();
+    let img = r.render_world_to_image(&down, None, black).unwrap();
+    assert_eq!(px(&img, 16, 16), [0, 0, 0, 255], "open bottom");
+    // No ceiling either: the floor is drawn in the tint like every other face.
+    r.set_sky(Some(SkyBatch {
+        faces: [None; 6],
+        tint,
+        rotation: Quat::IDENTITY,
+        size: 64.0,
+        viewer_height: 0.0,
+    }))
+    .unwrap();
+    let img = r.render_world_to_image(&down, None, black).unwrap();
+    assert!(
+        close(px(&img, 16, 16), [51, 102, 153, 255], 2),
+        "{:?}",
+        px(&img, 16, 16)
+    );
+}

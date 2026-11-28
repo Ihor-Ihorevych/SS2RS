@@ -71,8 +71,8 @@ pub struct SkyBatch {
 const SKY_HALF_SIZE: f32 = 10.0;
 
 struct GpuSky {
-    /// One material per face, in [`CubeFace::ALL`] order.
-    faces: Vec<wgpu::BindGroup>,
+    /// One material per face, in [`CubeFace::ALL`] order; `None` is a face that is not drawn.
+    faces: Vec<Option<wgpu::BindGroup>>,
     rotation: Quat,
     /// The viewer's height inside the drawn cube (the level's offset scaled to [`SKY_HALF_SIZE`]).
     viewer_offset: f32,
@@ -658,14 +658,30 @@ impl WorldGpu {
                 sky.rotation, sky.size, sky.viewer_height
             )));
         }
+        // A face without a texture is drawn in the tint alone, except the floor, which is left open while the
+        // ceiling has a texture (`docs/re/environment.md`, "Faces with no texture", T01-413).
+        let open_floor = sky.faces[CubeFace::NegY.index()].is_none()
+            && sky.faces[CubeFace::PosY.index()].is_some();
         let mut faces = Vec::with_capacity(6);
-        for face in sky.faces {
+        for (face, texture) in CubeFace::ALL.into_iter().zip(sky.faces) {
+            if face == CubeFace::NegY && open_floor {
+                faces.push(None);
+                continue;
+            }
             // Clamped, so a face's edge does not pick up the opposite edge.
-            let view = match face {
+            let view = match texture {
                 Some(t) => &self.texture(t)?.view,
                 None => &self.white,
             };
-            faces.push(self.material(device, view, &self.samplers[0], sky.tint, 0.0, true, None));
+            faces.push(Some(self.material(
+                device,
+                view,
+                &self.samplers[0],
+                sky.tint,
+                0.0,
+                true,
+                None,
+            )));
         }
         self.sky = Some(GpuSky {
             faces,
@@ -775,6 +791,9 @@ impl WorldGpu {
             pass.set_vertex_buffer(2, self.sky_mesh.lightmap_uvs.slice(..));
             pass.set_index_buffer(self.sky_mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             for (i, material) in (0u32..).zip(&sky.faces) {
+                let Some(material) = material else {
+                    continue;
+                };
                 pass.set_bind_group(1, material, &[]);
                 pass.draw_indexed(i * 6..i * 6 + 6, 0, 0..1);
             }
