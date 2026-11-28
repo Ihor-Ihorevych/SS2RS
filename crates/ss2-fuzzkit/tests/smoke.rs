@@ -210,7 +210,18 @@ fn the_format_seeds_are_valid_files() {
             .and_then(|c| c.decode_objects())
             .map(drop),
     );
-    for name in ["bgr_8x4", "bgra_4x4", "dxt1_4x4", "cube_4x4"] {
+    for name in [
+        "bgr_8x4",
+        "bgra_4x4",
+        "dxt1_4x4",
+        "cube_4x4",
+        "legacy5_v4_bgra",
+        "legacy5_palette",
+        "legacy6_dxt5",
+        "legacy7_bgra_chain",
+        "legacy9_cube",
+        "legacy9_raw",
+    ] {
         ok(
             name,
             ss2_format_tex::Texture::from_bytes(&seed("format_tex", name)).map(drop),
